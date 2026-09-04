@@ -42,30 +42,55 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 直連 Google 官方 REST API (自動列出精確報錯原因)
-def call_gemini_with_retry(prompt):
+# 強制使用 v1 正式端點與目前標準 Flash 模型
+def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未找到 GEMINI_API_KEY，請確認設定。")
         
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY.strip()}"
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
+    api_key_clean = GEMINI_API_KEY.strip()
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash"]
     
-    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key_clean}"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}]
+        }
+        
+        for attempt in range(max_retries):
+            try:
+                resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                res_data = resp.json()
+                
+                if resp.status_code == 200:
+                    candidates = res_data.get("candidates", [])
+                    if candidates and len(candidates) > 0:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts and len(parts) > 0:
+                            return parts[0].get("text", "")
+                elif resp.status_code == 429:
+                    if attempt < max_retries - 1:
+                        time.sleep(3 * (attempt + 1))
+                        continue
+                elif resp.status_code == 404:
+                    break  # 目前模型回傳 404 時切換至下一模型
+            except Exception as e:
+                if attempt == max_retries - 1 and model_name == models_to_try[-1]:
+                    raise e
+                    
+    # 若 v1 端點回傳 404，退回使用 v1beta 的 gemini-2.5-flash 嘗試
+    fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key_clean}"
+    resp = requests.post(fallback_url, headers=headers, json=payload, timeout=30)
     res_data = resp.json()
-    
     if resp.status_code == 200:
         candidates = res_data.get("candidates", [])
         if candidates and len(candidates) > 0:
             parts = candidates[0].get("content", {}).get("parts", [])
             if parts and len(parts) > 0:
                 return parts[0].get("text", "")
-        raise ValueError("Google API 回傳成功，但未包含內容 (candidates 為空)。")
-    else:
-        err_msg = res_data.get("error", {}).get("message", resp.text)
-        raise ValueError(f"API 請求失敗 ({resp.status_code}): {err_msg}")
+                
+    err_msg = res_data.get("error", {}).get("message", resp.text)
+    raise ValueError(f"API 請求失敗 ({resp.status_code}): {err_msg}")
 
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
