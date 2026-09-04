@@ -29,14 +29,11 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 金鑰與 Client 初始化 (指定 v1 正式版 API)
+# 金鑰讀取設定
 FINMIND_TOKEN = st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
-client = genai.Client(
-    api_key=GEMINI_API_KEY,
-    http_options=types.HttpOptions(api_version='v1')
-)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # 初始化 Session State
 if "daily_picks" not in st.session_state:
@@ -49,15 +46,20 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# Gemini API 調用 (自動備用模型退回機制)
-def call_gemini_with_retry(prompt, max_retries=3):
+# 通用 Gemini 調用函式 (含自動退回機制)
+def call_gemini_with_retry(prompt, is_json=False, max_retries=3):
     models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json" if is_json else "text/plain"
+    )
+    
     for model_name in models_to_try:
         for attempt in range(max_retries):
             try:
                 response = client.models.generate_content(
                     model=model_name,
                     contents=prompt,
+                    config=config
                 )
                 if response and response.text:
                     return response.text
@@ -173,17 +175,13 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
         "限制：" + price_limit_str + "。\n"
         "大盤：" + str(macro_data) + "\n"
         "強勢族群：" + str(sector_data) + "\n"
-        "請挑選3檔符合強勢族群的台股個股，並嚴格只回傳 JSON 陣列，格式如：\n"
-        '[{"上漲率預估":"75%","族群":"半導體","股名":"台積電","股號":"2330"}]\n'
-        "不要包含任何Markdown標記。"
+        "請挑選 3 檔符合強勢族群的台股個股，並回傳 JSON 陣列，欄位需包含：上漲率預估、族群、股名、股號。"
     )
-    res_raw = call_gemini_with_retry(prompt_select)
+    res_raw = call_gemini_with_retry(prompt_select, is_json=True)
     if not res_raw:
         raise ValueError("AI 服務回應空值，請稍後重試。")
     
-    json_match = re.search(r'\[.*\]', res_raw, re.DOTALL)
-    clean_json = json_match.group(0) if json_match else res_raw.strip()
-    picks = json.loads(clean_json)
+    picks = json.loads(res_raw)
     
     final_results = []
     for item in picks:
@@ -219,7 +217,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
         "4. 進退場價位規劃與部位建議\n"
         "5. 未來1週上漲機率估算"
     )
-    return call_gemini_with_retry(prompt)
+    return call_gemini_with_retry(prompt, is_json=False)
 
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
