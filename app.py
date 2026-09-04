@@ -42,41 +42,30 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 直連 Gemini REST API 防護函式 (免去 SDK 版本的相容問題)
-def call_gemini_with_retry(prompt, max_retries=3):
+# 直連 Google 官方 REST API (自動列出精確報錯原因)
+def call_gemini_with_retry(prompt):
     if not GEMINI_API_KEY:
-        raise ValueError("尚未設定 GEMINI_API_KEY，請至 Streamlit Secrets 配置。")
+        raise ValueError("Streamlit Secrets 中未找到 GEMINI_API_KEY，請確認設定。")
         
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY.strip()}"
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
     
-    for model_name in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}]
-        }
-        
-        for attempt in range(max_retries):
-            try:
-                resp = requests.post(url, headers=headers, json=payload, timeout=30)
-                res_data = resp.json()
-                
-                if resp.status_code == 200:
-                    candidates = res_data.get("candidates", [])
-                    if candidates and len(candidates) > 0:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts and len(parts) > 0:
-                            return parts[0].get("text", "")
-                elif resp.status_code == 429:
-                    if attempt < max_retries - 1:
-                        time.sleep(3 * (attempt + 1))
-                        continue
-                elif resp.status_code == 404:
-                    break  # 切換至下一個備用模型
-            except Exception as e:
-                if attempt == max_retries - 1 and model_name == models_to_try[-1]:
-                    raise e
-    return ""
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    res_data = resp.json()
+    
+    if resp.status_code == 200:
+        candidates = res_data.get("candidates", [])
+        if candidates and len(candidates) > 0:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if parts and len(parts) > 0:
+                return parts[0].get("text", "")
+        raise ValueError("Google API 回傳成功，但未包含內容 (candidates 為空)。")
+    else:
+        err_msg = res_data.get("error", {}).get("message", resp.text)
+        raise ValueError(f"API 請求失敗 ({resp.status_code}): {err_msg}")
 
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
@@ -183,8 +172,6 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
         "不要包含任何Markdown標記。"
     )
     res_raw = call_gemini_with_retry(prompt_select)
-    if not res_raw:
-        raise ValueError("AI 回應為空，請確認 GEMINI_API_KEY 是否有效。")
     
     json_match = re.search(r'\[.*\]', res_raw, re.DOTALL)
     clean_json = json_match.group(0) if json_match else res_raw.strip()
