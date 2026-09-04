@@ -11,7 +11,7 @@ from google import genai
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：響應式裝置偵測 (自動調整字型大小、直橫向佈局與漲跌顏色)
+# 自訂 CSS：響應式裝置偵測
 st.markdown("""
 <style>
 /* 1. 台股漲跌顏色習慣 (上漲紅色、下跌綠色) */
@@ -28,7 +28,7 @@ h1 { font-size: 2.2rem !important; }
 h2 { font-size: 1.8rem !important; }
 h3 { font-size: 1.4rem !important; }
 
-/* 3. 平板 / 手機橫向 (螢幕寬度小於 992px) */
+/* 3. 平板 / 手機橫向 */
 @media (max-width: 992px) {
     html, body, [class*="css"] {
         font-size: 15px;
@@ -38,7 +38,7 @@ h3 { font-size: 1.4rem !important; }
     h3 { font-size: 1.2rem !important; }
 }
 
-/* 4. 手機直向自動最佳化 (螢幕寬度小於 768px) */
+/* 4. 手機直向自動最佳化 */
 @media (max-width: 768px) {
     html, body, [class*="css"] {
         font-size: 13.5px !important;
@@ -47,19 +47,16 @@ h3 { font-size: 1.4rem !important; }
     h2 { font-size: 1.2rem !important; }
     h3 { font-size: 1.05rem !important; }
     
-    /* 縮小卡片邊距，提高手機可視空間 */
     .stMainBlockContainer {
         padding-left: 0.8rem !important;
         padding-right: 0.8rem !important;
         padding-top: 1rem !important;
     }
     
-    /* 側邊欄與表格縮放調整 */
     [data-testid="stSidebar"] {
         width: 100% !important;
     }
     
-    /* 數值指標卡片手機自動適應 */
     [data-testid="stMetric"] {
         background-color: rgba(255, 255, 255, 0.03);
         padding: 8px !important;
@@ -88,8 +85,8 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 帶有自動重試與避讓機率的 Gemini 調用函式
-def call_gemini_with_retry(prompt, model_name='gemini-1.5-flash', max_retries=3):
+# 帶有自動重試與避難機率的 Gemini 調用函式
+def call_gemini_with_retry(prompt, model_name='gemini-2.5-flash', max_retries=3):
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
@@ -100,7 +97,7 @@ def call_gemini_with_retry(prompt, model_name='gemini-1.5-flash', max_retries=3)
         except Exception as e:
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                 if attempt < max_retries - 1:
-                    time.sleep(4 * (attempt + 1))  # 遭遇 429 逐步等待 4s, 8s 重試
+                    time.sleep(4 * (attempt + 1))
                     continue
             raise e
 
@@ -214,121 +211,5 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     ]
     不要加入 Markdown 標記或額外文字。
     """
-    res_raw = call_gemini_with_retry(prompt_select, model_name='gemini-1.5-flash')
-    res_text = res_raw.strip().replace("```json", "").replace("```", "").strip()
-    picks = json.loads(res_text)
-    
-    final_results = []
-    for item in picks:
-        stock_id = item.get("股號")
-        real_p = get_realtime_tw_price(stock_id)
-        
-        if real_p:
-            buy_p = round(real_p * 0.985, 2)
-            sell_p = round(real_p * 1.08, 2)
-            item["當前實價"] = f"{real_p:.2f}"
-            item["建議進場"] = f"{buy_p:.2f}"
-            item["建議退場"] = f"{sell_p:.2f}"
-        else:
-            item["當前實價"] = "查無即時價"
-            item["建議進場"] = "---"
-            item["建議退場"] = "---"
-            
-        final_results.append(item)
-        
-    return final_results
-
-# 功能二：個股 Top-Down 詳細報告
-def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capital, target_date_str):
-    capital_str = f"{capital:,} 元" if capital > 0 else "未限定金額"
-    real_price = get_realtime_tw_price(stock_id)
-    price_info_str = f"當前真實市場成交價：{real_price} 元" if real_price else "即時股價：需參考市場現價"
-    
-    prompt = f"""
-    你是一位華爾街頂尖 Top-Down 分析師。基準日期：{target_date_str}。
-    個股：{stock_id}，{price_info_str}，預計進場金額：{capital_str}。
-    全球宏觀：{macro_data}
-    台股族群：{sector_data}
-    籌碼資料：{chip_data.to_string() if not chip_data.empty else "無數據"}
-    
-    請輸出繁體中文詳細報告：
-    1. **全球宏觀與科技大勢總結**
-    2. **台股主流產業與資金流向研判**
-    3. **個股 ({stock_id}) 籌碼與連動分析**
-    4. **進退場價位規劃與部位建議**（務必基於「{price_info_str}」來建議精確的進場價、止盈價、停損價、建議買進張數/零股）
-    5. **未來 1 週上漲機率估算**
-    """
-    return call_gemini_with_retry(prompt, model_name='gemini-1.5-flash')
-
-# ================= 畫面 UI 邏輯 =================
-st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
-
-selected_date = st.sidebar.date_input("市場看板基準日期", value=datetime.today())
-target_date_str = selected_date.strftime("%Y-%m-%d")
-
-macro_data = get_macro_data(target_date_str)
-sector_data = get_taiwan_sector_performance(target_date_str)
-
-# ----------------- 側邊欄：功能一 -----------------
-st.sidebar.markdown("### 🎯 當日 AI 精選股票預測")
-price_limit = st.sidebar.number_input("設定股價金額上限 (新台幣元)", min_value=0, value=200, step=10, help="0 為不設定上限")
-
-btn_generate_daily = st.sidebar.button("🚀 產生當日 AI 精選股票", type="secondary", use_container_width=True)
-
-if btn_generate_daily:
-    with st.spinner("🤖 AI 正在掃描族群，並同步驗證 Yahoo 即時股價中..."):
-        try:
-            picks_data = generate_daily_picks(macro_data, sector_data, price_limit, target_date_str)
-            st.session_state.daily_picks = pd.DataFrame(picks_data)
-            st.sidebar.success("即時驗證更新成功！")
-        except Exception as e:
-            st.sidebar.error(f"生成失敗，請稍候再試一次: {e}")
-
-st.sidebar.dataframe(st.session_state.daily_picks, hide_index=True, use_container_width=True)
-st.sidebar.divider()
-
-# ----------------- 側邊欄：功能二 -----------------
-st.sidebar.markdown("### ⚙️ 個股詳細分析與資金設定")
-stock_id = st.sidebar.text_input("輸入台股代碼", value="2330")
-capital = st.sidebar.number_input("預計進場金額 (新台幣元)", min_value=0, value=100000, step=10000)
-
-btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
-
-# ----------------- 主頁面展示 -----------------
-st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
-
-cols = st.columns([1, 1, 1, 1])
-idx = 0
-for name, info in macro_data.items():
-    with cols[idx % 4]:
-        st.metric(label=name, value=info["val"], delta=info["change"])
-    idx += 1
-
-st.divider()
-
-col_left, col_right = st.columns([1, 1])
-
-with col_left:
-    st.subheader(f"📊 台股強弱勢族群 ({target_date_str})")
-    if isinstance(sector_data, dict):
-        st.write("**領漲強勢產業：**", sector_data.get("領漲強勢產業"))
-        st.write("**領跌弱勢產業：**", sector_data.get("領跌弱勢產業"))
-
-with col_right:
-    st.subheader(f"🔍 個股 ({stock_id}) 三大法人籌碼")
-    chip_df = get_stock_chip(stock_id, target_date_str)
-    if not chip_df.empty:
-        st.dataframe(chip_df, use_container_width=True)
-    else:
-        st.info("尚無籌碼資料或代碼錯誤")
-
-st.divider()
-
-if btn_analyze_stock:
-    with st.spinner(f"🤖 AI 正在抓取 {stock_id} 即時行情並進行詳細分析..."):
-        try:
-            report = ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_df, capital, target_date_str)
-            st.subheader(f"🤖 Gemini AI 個股詳細分析報告 ({stock_id})")
-            st.markdown(report)
-        except Exception as e:
-            st.error(f"分析生成失敗: {e}")
+    res_raw = call_gemini_with_retry(prompt_select, model_name='gemini-2.5-flash')
+    res_text = res_raw.strip().replace("```json", "").replace("
