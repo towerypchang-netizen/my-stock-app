@@ -32,12 +32,11 @@ st.markdown(
 FINMIND_TOKEN = st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
-# 初始化 Gemini Client
 client = None
 if GEMINI_API_KEY:
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-    except Exception as e:
+    except Exception:
         client = None
 
 # 初始化 Session State
@@ -51,31 +50,27 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# Gemini 調用防護函式
+# 通用 Gemini 調用函式 (固定使用支援最穩定的 gemini-1.5-flash)
 def call_gemini_with_retry(prompt, max_retries=3):
     if not client:
-        raise ValueError("尚未設定有效的 GEMINI_API_KEY，請至 Streamlit Cloud 的 Secrets 中填寫。")
+        raise ValueError("尚未設定有效的 GEMINI_API_KEY，請確認 Streamlit Cloud 的 Secrets 設定。")
         
-    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
-    for model_name in models_to_try:
-        for attempt in range(max_retries):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                )
-                if response and response.text:
-                    return response.text
-            except Exception as e:
-                err_msg = str(e)
-                if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
-                    if attempt < max_retries - 1:
-                        time.sleep(3 * (attempt + 1))
-                        continue
-                elif "404" in err_msg or "NOT_FOUND" in err_msg:
-                    break
-                if attempt == max_retries - 1 and model_name == models_to_try[-1]:
-                    raise e
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=prompt,
+            )
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            err_msg = str(e)
+            if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                if attempt < max_retries - 1:
+                    time.sleep(3 * (attempt + 1))
+                    continue
+            if attempt == max_retries - 1:
+                raise e
     return ""
 
 # 即時台股價格抓取
@@ -184,7 +179,7 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     )
     res_raw = call_gemini_with_retry(prompt_select)
     if not res_raw:
-        raise ValueError("AI 回應為空，請確認 API 金鑰權限或稍後重試。")
+        raise ValueError("AI 回應為空，請確認 API 金鑰或稍後重試。")
     
     json_match = re.search(r'\[.*\]', res_raw, re.DOTALL)
     clean_json = json_match.group(0) if json_match else res_raw.strip()
