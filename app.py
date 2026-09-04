@@ -88,6 +88,22 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
+# 帶有自動重試與避讓機率的 Gemini 調用函式
+def call_gemini_with_retry(prompt, model_name='gemini-1.5-flash', max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                if attempt < max_retries - 1:
+                    time.sleep(4 * (attempt + 1))  # 遭遇 429 逐步等待 4s, 8s 重試
+                    continue
+            raise e
+
 # 即時抓取台股真實股價函數
 def get_realtime_tw_price(stock_id):
     try:
@@ -180,7 +196,7 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 功能一：生成當日 3 檔精選股票 JSON (含真實股價校正)
+# 功能一：生成當日 3 檔精選股票 JSON (含真實股價校正與重試)
 def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     price_limit_str = f"單股價格低於 {price_limit} 元" if price_limit > 0 else "股價不限"
     
@@ -198,11 +214,8 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     ]
     不要加入 Markdown 標記或額外文字。
     """
-    response = client.models.generate_content(
-        model='gemini-3.5-flash',
-        contents=prompt_select,
-    )
-    res_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+    res_raw = call_gemini_with_retry(prompt_select, model_name='gemini-1.5-flash')
+    res_text = res_raw.strip().replace("```json", "").replace("```", "").strip()
     picks = json.loads(res_text)
     
     final_results = []
@@ -245,11 +258,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
     4. **進退場價位規劃與部位建議**（務必基於「{price_info_str}」來建議精確的進場價、止盈價、停損價、建議買進張數/零股）
     5. **未來 1 週上漲機率估算**
     """
-    response = client.models.generate_content(
-        model='gemini-3.5-flash',
-        contents=prompt,
-    )
-    return response.text
+    return call_gemini_with_retry(prompt, model_name='gemini-1.5-flash')
 
 # ================= 畫面 UI 邏輯 =================
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
@@ -273,7 +282,7 @@ if btn_generate_daily:
             st.session_state.daily_picks = pd.DataFrame(picks_data)
             st.sidebar.success("即時驗證更新成功！")
         except Exception as e:
-            st.sidebar.error(f"生成失敗，請再試一次: {e}")
+            st.sidebar.error(f"生成失敗，請稍候再試一次: {e}")
 
 st.sidebar.dataframe(st.session_state.daily_picks, hide_index=True, use_container_width=True)
 st.sidebar.divider()
@@ -288,7 +297,6 @@ btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="prima
 # ----------------- 主頁面展示 -----------------
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
 
-# 透過 Streamlit 的欄位配置，電腦自動 4 欄、手機會自動向下排列
 cols = st.columns([1, 1, 1, 1])
 idx = 0
 for name, info in macro_data.items():
