@@ -97,7 +97,8 @@ def call_gemini_with_retry(prompt, max_retries=3):
                     model=model_name,
                     contents=prompt,
                 )
-                return response.text
+                if response and response.text:
+                    return response.text
             except Exception as e:
                 err_msg = str(e)
                 if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
@@ -108,6 +109,7 @@ def call_gemini_with_retry(prompt, max_retries=3):
                     break
                 if attempt == max_retries - 1 and model_name == models_to_try[-1]:
                     raise e
+    return ""
 
 # 即時抓取台股真實股價函數
 def get_realtime_tw_price(stock_id):
@@ -220,6 +222,8 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     )
     
     res_raw = call_gemini_with_retry(prompt_select)
+    if not res_raw:
+        raise ValueError("AI 回傳空值，請稍後重試。")
     
     json_match = re.search(r'\[.*\]', res_raw, re.DOTALL)
     if json_match:
