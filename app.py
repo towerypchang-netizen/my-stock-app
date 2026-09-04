@@ -8,7 +8,6 @@ import yfinance as yf
 import requests
 import pandas as pd
 from google import genai
-from google.genai import types
 
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
@@ -29,11 +28,17 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 金鑰讀取設定
+# 金鑰安全讀取
 FINMIND_TOKEN = st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+# 初始化 Gemini Client
+client = None
+if GEMINI_API_KEY:
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception as e:
+        client = None
 
 # 初始化 Session State
 if "daily_picks" not in st.session_state:
@@ -46,31 +51,29 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 通用 Gemini 調用函式 (相容多模型自動退回與重試機制)
-def call_gemini_with_retry(prompt, is_json=False, max_retries=3):
-    models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json" if is_json else "text/plain"
-    )
-    
+# Gemini 調用防護函式
+def call_gemini_with_retry(prompt, max_retries=3):
+    if not client:
+        raise ValueError("尚未設定有效的 GEMINI_API_KEY，請至 Streamlit Cloud 的 Secrets 中填寫。")
+        
+    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
     for model_name in models_to_try:
         for attempt in range(max_retries):
             try:
                 response = client.models.generate_content(
                     model=model_name,
                     contents=prompt,
-                    config=config
                 )
                 if response and response.text:
                     return response.text
             except Exception as e:
                 err_msg = str(e)
-                if "404" in err_msg or "NOT_FOUND" in err_msg:
-                    break  # 目前模型回報 404 時，立刻跳出切換下一個備用模型
-                elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
                     if attempt < max_retries - 1:
                         time.sleep(3 * (attempt + 1))
                         continue
+                elif "404" in err_msg or "NOT_FOUND" in err_msg:
+                    break
                 if attempt == max_retries - 1 and model_name == models_to_try[-1]:
                     raise e
     return ""
@@ -175,13 +178,17 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
         "限制：" + price_limit_str + "。\n"
         "大盤：" + str(macro_data) + "\n"
         "強勢族群：" + str(sector_data) + "\n"
-        "請挑選 3 檔符合強勢族群的台股個股，並回傳 JSON 陣列，欄位需包含：上漲率預估、族群、股名、股號。"
+        "請挑選3檔符合強勢族群的台股個股，並嚴格只回傳 JSON 陣列，格式如：\n"
+        '[{"上漲率預估":"75%","族群":"半導體","股名":"台積電","股號":"2330"}]\n'
+        "不要包含任何Markdown標記。"
     )
-    res_raw = call_gemini_with_retry(prompt_select, is_json=True)
+    res_raw = call_gemini_with_retry(prompt_select)
     if not res_raw:
-        raise ValueError("AI 服務回應空值，請稍後重試。")
+        raise ValueError("AI 回應為空，請確認 API 金鑰權限或稍後重試。")
     
-    picks = json.loads(res_raw)
+    json_match = re.search(r'\[.*\]', res_raw, re.DOTALL)
+    clean_json = json_match.group(0) if json_match else res_raw.strip()
+    picks = json.loads(clean_json)
     
     final_results = []
     for item in picks:
@@ -217,7 +224,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
         "4. 進退場價位規劃與部位建議\n"
         "5. 未來1週上漲機率估算"
     )
-    return call_gemini_with_retry(prompt, is_json=False)
+    return call_gemini_with_retry(prompt)
 
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
