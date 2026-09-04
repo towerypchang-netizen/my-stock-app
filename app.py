@@ -7,7 +7,6 @@ import streamlit as st
 import yfinance as yf
 import requests
 import pandas as pd
-from google import genai
 
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
@@ -32,13 +31,6 @@ st.markdown(
 FINMIND_TOKEN = st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
-client = None
-if GEMINI_API_KEY:
-    try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-    except Exception:
-        client = None
-
 # 初始化 Session State
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
@@ -50,30 +42,38 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 帶有自動重試與模型相容修復的 Gemini 調用函式
+# 直連 Gemini REST API 防護函式 (免去 SDK 版本的相容問題)
 def call_gemini_with_retry(prompt, max_retries=3):
-    if not client:
-        raise ValueError("尚未設定有效的 GEMINI_API_KEY，請確認 Streamlit Cloud 的 Secrets 設定。")
+    if not GEMINI_API_KEY:
+        raise ValueError("尚未設定 GEMINI_API_KEY，請至 Streamlit Secrets 配置。")
         
-    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
     
     for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}]
+        }
+        
         for attempt in range(max_retries):
             try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                )
-                if response and response.text:
-                    return response.text
-            except Exception as e:
-                err_msg = str(e)
-                if "404" in err_msg or "NOT_FOUND" in err_msg:
-                    break  # 切換下一個備用模型
-                elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                res_data = resp.json()
+                
+                if resp.status_code == 200:
+                    candidates = res_data.get("candidates", [])
+                    if candidates and len(candidates) > 0:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts and len(parts) > 0:
+                            return parts[0].get("text", "")
+                elif resp.status_code == 429:
                     if attempt < max_retries - 1:
                         time.sleep(3 * (attempt + 1))
                         continue
+                elif resp.status_code == 404:
+                    break  # 切換至下一個備用模型
+            except Exception as e:
                 if attempt == max_retries - 1 and model_name == models_to_try[-1]:
                     raise e
     return ""
@@ -184,7 +184,7 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     )
     res_raw = call_gemini_with_retry(prompt_select)
     if not res_raw:
-        raise ValueError("AI 回應為空，請確認 API 金鑰或稍後重試。")
+        raise ValueError("AI 回應為空，請確認 GEMINI_API_KEY 是否有效。")
     
     json_match = re.search(r'\[.*\]', res_raw, re.DOTALL)
     clean_json = json_match.group(0) if json_match else res_raw.strip()
