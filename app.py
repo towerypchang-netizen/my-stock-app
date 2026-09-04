@@ -45,9 +45,9 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# Gemini API 調用與備用模型選擇
+# Gemini API 調用與模型自動回退 (先試 2.0-flash 再試 1.5-flash)
 def call_gemini_with_retry(prompt, max_retries=3):
-    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash']
     for model_name in models_to_try:
         for attempt in range(max_retries):
             try:
@@ -175,7 +175,7 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     )
     res_raw = call_gemini_with_retry(prompt_select)
     if not res_raw:
-        raise ValueError("AI 回傳空值，請稍後重試。")
+        raise ValueError("AI 服務忙碌中，請再次點擊按鈕執行。")
     
     json_match = re.search(r'\[.*\]', res_raw, re.DOTALL)
     clean_json = json_match.group(0) if json_match else res_raw.strip()
