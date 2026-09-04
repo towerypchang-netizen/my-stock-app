@@ -236,4 +236,47 @@ if st.sidebar.button("🚀 產生當日 AI 精選股票", use_container_width=Tr
         except Exception as e:
             st.sidebar.error(f"生成失敗: {e}")
 
-st.sidebar.dataframe(st.session_state.daily_picks, hide_index=True, use_container_width=True
+st.sidebar.dataframe(st.session_state.daily_picks, hide_index=True, use_container_width=True)
+st.sidebar.divider()
+
+st.sidebar.markdown("### ⚙️ 個股詳細分析與資金設定")
+stock_id = st.sidebar.text_input("輸入台股代碼", value="2330")
+capital = st.sidebar.number_input("預計進場金額 (新台幣元)", min_value=0, value=100000, step=10000)
+
+btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
+
+st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
+cols = st.columns([1, 1, 1, 1])
+idx = 0
+for name, info in macro_data.items():
+    with cols[idx % 4]:
+        st.metric(label=name, value=info["val"], delta=info["change"])
+    idx += 1
+
+st.divider()
+
+col_left, col_right = st.columns([1, 1])
+with col_left:
+    st.subheader(f"📊 台股強弱勢族群 ({target_date_str})")
+    if isinstance(sector_data, dict):
+        st.write("**領漲強勢產業：**", sector_data.get("領漲強勢產業"))
+        st.write("**領跌弱勢產業：**", sector_data.get("領跌弱勢產業"))
+
+with col_right:
+    st.subheader(f"🔍 個股 ({stock_id}) 三大法人籌碼")
+    chip_df = get_stock_chip(stock_id, target_date_str)
+    if not chip_df.empty:
+        st.dataframe(chip_df, use_container_width=True)
+    else:
+        st.info("尚無籌碼資料或代碼錯誤")
+
+st.divider()
+
+if btn_analyze_stock:
+    with st.spinner(f"🤖 AI 正在分析 {stock_id}..."):
+        try:
+            report = ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_df, capital, target_date_str)
+            st.subheader(f"🤖 Gemini AI 個股詳細分析報告 ({stock_id})")
+            st.markdown(report)
+        except Exception as e:
+            st.error(f"分析生成失敗: {e}")
