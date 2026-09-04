@@ -46,9 +46,9 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 通用 Gemini 調用函式 (含自動退回機制)
+# 通用 Gemini 調用函式 (相容多模型自動退回與重試機制)
 def call_gemini_with_retry(prompt, is_json=False, max_retries=3):
-    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
     config = types.GenerateContentConfig(
         response_mime_type="application/json" if is_json else "text/plain"
     )
@@ -65,12 +65,12 @@ def call_gemini_with_retry(prompt, is_json=False, max_retries=3):
                     return response.text
             except Exception as e:
                 err_msg = str(e)
-                if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                if "404" in err_msg or "NOT_FOUND" in err_msg:
+                    break  # 目前模型回報 404 時，立刻跳出切換下一個備用模型
+                elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
                     if attempt < max_retries - 1:
                         time.sleep(3 * (attempt + 1))
                         continue
-                elif "404" in err_msg or "NOT_FOUND" in err_msg:
-                    break
                 if attempt == max_retries - 1 and model_name == models_to_try[-1]:
                     raise e
     return ""
