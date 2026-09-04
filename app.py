@@ -42,13 +42,13 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 強制使用 v1 正式端點與目前標準 Flash 模型
+# 具備多模型自動切換 (gemini-3.6-flash -> gemini-1.5-flash) 的防護調用函式
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未找到 GEMINI_API_KEY，請確認設定。")
         
     api_key_clean = GEMINI_API_KEY.strip()
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash"]
+    models_to_try = ["gemini-3.6-flash", "gemini-1.5-flash"]
     
     for model_name in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key_clean}"
@@ -73,13 +73,13 @@ def call_gemini_with_retry(prompt, max_retries=3):
                         time.sleep(3 * (attempt + 1))
                         continue
                 elif resp.status_code == 404:
-                    break  # 目前模型回傳 404 時切換至下一模型
+                    break  # 切換至備用模型
             except Exception as e:
                 if attempt == max_retries - 1 and model_name == models_to_try[-1]:
                     raise e
                     
-    # 若 v1 端點回傳 404，退回使用 v1beta 的 gemini-2.5-flash 嘗試
-    fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key_clean}"
+    # 如果 v1 端點皆未獲取，嘗試 v1beta 端點
+    fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key_clean}"
     resp = requests.post(fallback_url, headers=headers, json=payload, timeout=30)
     res_data = resp.json()
     if resp.status_code == 200:
