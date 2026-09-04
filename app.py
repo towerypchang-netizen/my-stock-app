@@ -85,21 +85,28 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 帶有自動重試與避難機率的 Gemini 調用函式
-def call_gemini_with_retry(prompt, model_name='gemini-2.5-flash', max_retries=3):
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
-            return response.text
-        except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                if attempt < max_retries - 1:
-                    time.sleep(4 * (attempt + 1))
-                    continue
-            raise e
+# 多模型自動退回與重試機制 (依序嘗試 2.5-flash -> 2.0-flash)
+def call_gemini_with_retry(prompt, max_retries=3):
+    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    
+    for model_name in models_to_try:
+        for attempt in range(max_retries):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                return response.text
+            except Exception as e:
+                err_msg = str(e)
+                if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                    if attempt < max_retries - 1:
+                        time.sleep(3 * (attempt + 1))
+                        continue
+                elif "404" in err_msg or "NOT_FOUND" in err_msg:
+                    break # 切換到下一個備用模型
+                if attempt == max_retries - 1 and model_name == models_to_try[-1]:
+                    raise e
 
 # 即時抓取台股真實股價函數
 def get_realtime_tw_price(stock_id):
@@ -148,7 +155,7 @@ def get_macro_data(target_date_str):
 def get_taiwan_sector_performance(target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=10)
-    url = "https://api.finmindtrade.com/api/v4/data"
+    url = "[https://api.finmindtrade.com/api/v4/data](https://api.finmindtrade.com/api/v4/data)"
     parameter = {
         "dataset": "TaiwanStockMarketSectorIndex",
         "start_date": start_dt.strftime("%Y-%m-%d"),
@@ -177,39 +184,4 @@ def get_taiwan_sector_performance(target_date_str):
 
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
-    target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=14)
-    url = "https://api.finmindtrade.com/api/v4/data"
-    parameter = {
-        "dataset": "TaiwanStockInstitutionalInvestorsBuySell",
-        "data_id": stock_id,
-        "start_date": start_dt.strftime("%Y-%m-%d"),
-        "end_date": target_date_str,
-        "token": FINMIND_TOKEN,
-    }
-    resp = requests.get(url, params=parameter)
-    data = resp.json()
-    if data.get("msg") == "success" and len(data.get("data", [])) > 0:
-        return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
-    return pd.DataFrame()
-
-# 功能一：生成當日 3 檔精選股票 JSON (含真實股價校正與重試)
-def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
-    price_limit_str = f"單股價格低於 {price_limit} 元" if price_limit > 0 else "股價不限"
-    
-    prompt_select = f"""
-    你是一位專業台股選股分析師。基準日期：{target_date_str}。
-    條件限制：{price_limit_str}。
-    全球大盤：{macro_data}
-    台股強勢族群：{sector_data}
-    
-    請從台股市場挑選 3 檔最符合當前強勢族群與美股連動的優質個股，並嚴格只回傳 JSON 格式陣列，格式如下：
-    [
-        {{"上漲率預估": "75%", "族群": "半導體", "股名": "台積電", "股號": "2330"}},
-        {{"上漲率預估": "70%", "族群": "記憶體", "股名": "華邦電", "股號": "2344"}},
-        {{"上漲率預估": "68%", "族群": "組裝", "股名": "廣達", "股號": "2382"}}
-    ]
-    不要加入 Markdown 標記或額外文字。
-    """
-    res_raw = call_gemini_with_retry(prompt_select, model_name='gemini-2.5-flash')
-    res_text = res_raw.strip().replace("```json", "").replace("
+    target_dt = datetime.strptime(target_date
