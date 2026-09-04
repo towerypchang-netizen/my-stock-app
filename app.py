@@ -8,6 +8,7 @@ import yfinance as yf
 import requests
 import pandas as pd
 from google import genai
+from google.genai import types
 
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
@@ -28,11 +29,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 金鑰讀取設定
+# 金鑰與 Client 初始化 (指定 v1 正式版 API)
 FINMIND_TOKEN = st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(
+    api_key=GEMINI_API_KEY,
+    http_options=types.HttpOptions(api_version='v1')
+)
 
 # 初始化 Session State
 if "daily_picks" not in st.session_state:
@@ -45,7 +49,7 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# Gemini API 調用 (自動備用模型退回機制：gemini-2.5-flash -> gemini-2.0-flash)
+# Gemini API 調用 (自動備用模型退回機制)
 def call_gemini_with_retry(prompt, max_retries=3):
     models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
     for model_name in models_to_try:
@@ -64,7 +68,7 @@ def call_gemini_with_retry(prompt, max_retries=3):
                         time.sleep(3 * (attempt + 1))
                         continue
                 elif "404" in err_msg or "NOT_FOUND" in err_msg:
-                    break  # 切換到下一個備用模型
+                    break
                 if attempt == max_retries - 1 and model_name == models_to_try[-1]:
                     raise e
     return ""
