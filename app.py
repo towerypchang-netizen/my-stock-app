@@ -50,27 +50,32 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 通用 Gemini 調用函式 (固定使用支援最穩定的 gemini-1.5-flash)
+# 帶有自動重試與模型相容修復的 Gemini 調用函式
 def call_gemini_with_retry(prompt, max_retries=3):
     if not client:
         raise ValueError("尚未設定有效的 GEMINI_API_KEY，請確認 Streamlit Cloud 的 Secrets 設定。")
         
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model='gemini-1.5-flash',
-                contents=prompt,
-            )
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            err_msg = str(e)
-            if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
-                if attempt < max_retries - 1:
-                    time.sleep(3 * (attempt + 1))
-                    continue
-            if attempt == max_retries - 1:
-                raise e
+    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    
+    for model_name in models_to_try:
+        for attempt in range(max_retries):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                err_msg = str(e)
+                if "404" in err_msg or "NOT_FOUND" in err_msg:
+                    break  # 切換下一個備用模型
+                elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                    if attempt < max_retries - 1:
+                        time.sleep(3 * (attempt + 1))
+                        continue
+                if attempt == max_retries - 1 and model_name == models_to_try[-1]:
+                    raise e
     return ""
 
 # 即時台股價格抓取
