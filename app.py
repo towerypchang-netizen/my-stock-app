@@ -9,8 +9,10 @@ import requests
 import pandas as pd
 from google import genai
 
+# 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
+# 自訂 CSS：響應式裝置與顏色設定
 st.markdown(
     "<style>\n"
     "[data-testid=\"stMetricDelta\"] svg[data-testid=\"stMetricDeltaIcon-Up\"] { fill: #ff4d4f !important; }\n"
@@ -26,11 +28,13 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# 金鑰讀取設定
 FINMIND_TOKEN = st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
+# 初始化 Session State
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
         columns=["上漲率預估", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場"],
@@ -41,8 +45,9 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
+# Gemini API 調用 (自動備用模型退回機制：gemini-2.5-flash -> gemini-2.0-flash)
 def call_gemini_with_retry(prompt, max_retries=3):
-    models_to_try = ['gemini-1.5-flash']
+    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash']
     for model_name in models_to_try:
         for attempt in range(max_retries):
             try:
@@ -58,10 +63,13 @@ def call_gemini_with_retry(prompt, max_retries=3):
                     if attempt < max_retries - 1:
                         time.sleep(3 * (attempt + 1))
                         continue
-                if attempt == max_retries - 1:
+                elif "404" in err_msg or "NOT_FOUND" in err_msg:
+                    break  # 切換到下一個備用模型
+                if attempt == max_retries - 1 and model_name == models_to_try[-1]:
                     raise e
     return ""
 
+# 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
     try:
         ticker_symbol = stock_id + ".TW"
@@ -77,6 +85,7 @@ def get_realtime_tw_price(stock_id):
         pass
     return None
 
+# 全球數據抓取
 @st.cache_data(ttl=1800)
 def get_macro_data(target_date_str):
     macro_tickers = {
@@ -101,6 +110,7 @@ def get_macro_data(target_date_str):
             macro_summary[name] = {"val": "N/A", "change": "0.00%"}
     return macro_summary
 
+# 類股數據抓取
 @st.cache_data(ttl=1800)
 def get_taiwan_sector_performance(target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
@@ -132,6 +142,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "無法取得類股數據"
 
+# 籌碼數據抓取
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
@@ -150,6 +161,7 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
+# 生成 AI 精選股票
 def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     price_limit_str = f"單股價格低於 {price_limit} 元" if price_limit > 0 else "股價不限"
     prompt_select = (
@@ -184,6 +196,7 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
         final_results.append(item)
     return final_results
 
+# 生成詳細報告
 def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capital, target_date_str):
     capital_str = f"{capital:,} 元" if capital > 0 else "未限定金額"
     real_price = get_realtime_tw_price(stock_id)
@@ -204,6 +217,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
     )
     return call_gemini_with_retry(prompt)
 
+# 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
 selected_date = st.sidebar.date_input("市場看板基準日期", value=datetime.today())
