@@ -79,16 +79,17 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 多模型自動降級 Gemini REST API 呼叫函式
+# 多模型自動降級 Gemini REST API 呼叫函式 (已更正為官方標準模型名稱)
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未找到 GEMINI_API_KEY，請確認設定。")
         
     api_key_clean = GEMINI_API_KEY.strip()
-    models_to_try = ["gemini-3.6-flash", "gemini-1.5-flash"]
+    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
     
+    last_err_msg = ""
     for model_name in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key_clean}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key_clean}"
         headers = {"Content-Type": "application/json"}
         payload = {
             "contents": [{"parts": [{"text": prompt}]}]
@@ -106,27 +107,20 @@ def call_gemini_with_retry(prompt, max_retries=3):
                         if parts and len(parts) > 0:
                             return parts[0].get("text", "")
                 elif resp.status_code == 429:
+                    last_err_msg = "Google API 流量已達每分鐘限制 (429)，請稍候 30-60 秒後再試。"
                     if attempt < max_retries - 1:
-                        time.sleep(3 * (attempt + 1))
+                        time.sleep(5)  # 遇 429 自動等待 5 秒重試
                         continue
                 elif resp.status_code == 404:
                     break
+                else:
+                    last_err_msg = res_data.get("error", {}).get("message", resp.text)
             except Exception as e:
-                if attempt == max_retries - 1 and model_name == models_to_try[-1]:
-                    raise e
+                last_err_msg = str(e)
+                if attempt < max_retries - 1:
+                    time.sleep(2)
                     
-    fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key_clean}"
-    resp = requests.post(fallback_url, headers=headers, json=payload, timeout=30)
-    res_data = resp.json()
-    if resp.status_code == 200:
-        candidates = res_data.get("candidates", [])
-        if candidates and len(candidates) > 0:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            if parts and len(parts) > 0:
-                return parts[0].get("text", "")
-                
-    err_msg = res_data.get("error", {}).get("message", resp.text)
-    raise ValueError(f"API 請求失敗 ({resp.status_code}): {err_msg}")
+    raise ValueError(f"API 請求失敗: {last_err_msg}")
 
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
@@ -255,12 +249,11 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, target_d
         stock_id = item.get("股號")
         real_p = get_realtime_tw_price(stock_id)
         
-        # 股價區間硬性審核機制 (Hard Filter)
         if real_p:
             if min_price > 0 and real_p < min_price:
-                continue  # 低於下限者剔除
+                continue
             if max_price > 0 and real_p > max_price:
-                continue  # 高於上限者剔除
+                continue
                 
             item["當前實價"] = f"{real_p:.2f}"
             item["建議進場"] = f"{round(real_p * 0.985, 2):.2f}"
@@ -275,11 +268,9 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, target_d
             
         final_results.append(item)
         
-        # 最多取符合價格限制的前 3 檔
         if len(final_results) >= 3:
             break
             
-    # 如果過濾後不足 3 檔，填補提示
     while len(final_results) < 3:
         final_results.append({
             "上漲率預估": "--%", "族群": "無符合區間", "股名": "無符合股票",
@@ -336,7 +327,7 @@ sector_data = get_taiwan_sector_performance(target_date_str)
 # 顯示最新的預測/開啟時間
 st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 精選股票預測")
 
-# 設定股價區間 (雙欄並排輸入)
+# 設定股價區間
 st.sidebar.markdown("**設定股價區間 (新台幣元)**")
 p_col1, p_col2 = st.sidebar.columns(2)
 with p_col1:
