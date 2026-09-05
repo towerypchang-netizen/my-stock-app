@@ -277,7 +277,8 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
     real_price = get_realtime_tw_price(stock_id)
     price_info_str = f"當前真實市場成交價：{real_price} 元" if real_price else "即時股價：需參考市場現價"
     
-    chip_str = chip_data.to_markdown(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "無最新籌碼數據"
+    # 避免依賴 tabulate，使用 to_string() 原生轉換
+    chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "無最新籌碼數據"
     
     prompt = (
         "請作為華爾街 Top-Down 分析師。基準日期：" + str(target_date_str) + "。\n"
