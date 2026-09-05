@@ -11,23 +11,31 @@ import pandas as pd
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 強制台股配色 CSS：上漲一律鮮紅 (#ff4d4f)，下跌一律鮮綠 (#52c41a)
+# 自訂 CSS：大標題縮小、台股漲跌色、側邊欄日期緊湊同行
 st.markdown(
     """
     <style>
     /* 大標題縮小至與 ### / subheader 相同大小 */
     h1 { font-size: 1.5rem !important; margin-bottom: 1rem !important; }
     
-    /* 強制側邊欄日期選擇器與標題同行且緊湊排列 */
-    div[data-testid="stHorizontalBlock"]:has(div.date-label-target) {
+    /* 側邊欄日期選擇器：強制 Label 與 Input 在同一行緊密排列 */
+    div.compact-date-container > div[data-testid="stDateInput"] {
         display: flex !important;
+        flex-direction: row !important;
         align-items: center !important;
-        justify-content: space-between !important;
-        gap: 8px !important;
+        justify-content: flex-start !important;
+        gap: 12px !important;
     }
-    div[data-testid="stHorizontalBlock"]:has(div.date-label-target) > div {
+    div.compact-date-container > div[data-testid="stDateInput"] > label {
+        margin-bottom: 0px !important;
+        white-space: nowrap !important;
+        font-weight: bold !important;
+        font-size: 0.95rem !important;
+        padding-top: 0px !important;
+    }
+    div.compact-date-container > div[data-testid="stDateInput"] > div {
         width: auto !important;
-        flex: 0 0 auto !important;
+        min-width: 130px !important;
     }
 
     /* 1. 針對所有向上箭頭 (Up) 與相關容器：強制紅字、紅箭頭、淡紅背景 */
@@ -285,12 +293,10 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
-# 使用 Flexbox CSS 將文字與日期選擇按鈕完全對齊於同一行
-date_col1, date_col2 = st.sidebar.columns([1, 1], vertical_alignment="center")
-with date_col1:
-    st.markdown('<div class="date-label-target" style="white-space: nowrap; font-weight: bold;">市場看板基準日期</div>', unsafe_allow_html=True)
-with date_col2:
-    selected_date = st.date_input("市場看板基準日期", value=datetime.today(), label_visibility="collapsed")
+# 市場看板基準日期：透過 CSS 包裹容器，使 Label 與日期按鈕完全貼合同行
+st.sidebar.markdown('<div class="compact-date-container">', unsafe_allow_html=True)
+selected_date = st.sidebar.date_input("市場看板基準日期", value=datetime.today())
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
 target_date_str = selected_date.strftime("%Y-%m-%d")
 
