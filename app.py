@@ -7,7 +7,6 @@ import streamlit as st
 import yfinance as yf
 import requests
 import pandas as pd
-import google.generativeai as genai
 
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
@@ -57,12 +56,9 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 金鑰安全讀取與官方 SDK 初始化
+# 金鑰安全讀取
 FINMIND_TOKEN = st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
-
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY.strip())
 
 # 取得台灣標準時間 (UTC+8)
 def get_taiwan_now():
@@ -83,34 +79,50 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 使用官方標準 SDK 與簡化重試邏輯
+# 使用兼具 API v1 正式端點與多模型退避之高相容性呼叫函式
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY。")
         
-    # 只使用完全標準且長久支援的模型名稱
-    model_name = "gemini-1.5-flash"
-    last_err = ""
+    api_key_clean = GEMINI_API_KEY.strip()
     
-    try:
-        model = genai.GenerativeModel(model_name)
+    # 支援 API v1 / v1beta 正確模型組合
+    targets = [
+        ("v1", "gemini-1.5-flash"),
+        ("v1beta", "gemini-2.0-flash"),
+        ("v1beta", "gemini-1.5-flash-latest")
+    ]
+    
+    last_err = ""
+    for api_ver, model_name in targets:
+        url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_name}:generateContent?key={api_key_clean}"
+        headers = {"Content-Type": "application/json"}
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        
         for attempt in range(max_retries):
             try:
-                response = model.generate_content(prompt)
-                if response and response.text:
-                    return response.text
-            except Exception as e:
-                err_str = str(e)
-                if "429" in err_str or "quota" in err_str.lower():
+                resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                res_data = resp.json()
+                
+                if resp.status_code == 200:
+                    candidates = res_data.get("candidates", [])
+                    if candidates and len(candidates) > 0:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts and len(parts) > 0:
+                            return parts[0].get("text", "")
+                elif resp.status_code == 429:
                     last_err = "API 請求過於頻繁 (429 Rate Limit)，請等待 15-30 秒後再試。"
-                    time.sleep(3 * (attempt + 1))  # 漸進式退避重試
+                    time.sleep(3 * (attempt + 1))
                     continue
+                elif resp.status_code == 404:
+                    break
                 else:
-                    last_err = err_str
-                    time.sleep(2)
-    except Exception as e:
-        last_err = str(e)
-            
+                    err_info = res_data.get("error", {})
+                    last_err = f"[{resp.status_code}] {err_info.get('message', resp.text)}"
+            except Exception as e:
+                last_err = str(e)
+                time.sleep(2)
+                
     raise ValueError(f"Gemini API 呼叫失敗: {last_err}")
 
 # 即時台股價格抓取
