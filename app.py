@@ -224,15 +224,22 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 生成 AI 精選股票 (含波段期間預測)
-def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
-    price_limit_str = f"單股價格低於 {price_limit} 元" if price_limit and price_limit > 0 else "股價不限"
+# 生成 AI 精選股票 (含股價區間硬性過濾機制)
+def generate_daily_picks(macro_data, sector_data, min_price, max_price, target_date_str):
+    cond_list = []
+    if min_price > 0:
+        cond_list.append(f"最低不得低於 {min_price} 元")
+    if max_price > 0:
+        cond_list.append(f"最高不得超過 {max_price} 元")
+        
+    price_limit_str = f"【硬性股價區間限制】：{', '.join(cond_list)}" if cond_list else "股價不限"
+    
     prompt_select = (
         "請作為台股選股分析師，基準日期：" + str(target_date_str) + "。\n"
-        "限制：" + price_limit_str + "。\n"
+        "價格條件：" + price_limit_str + "。\n"
         "大盤：" + str(macro_data) + "\n"
         "強勢族群：" + str(sector_data) + "\n"
-        "請挑選3檔符合強勢族群的台股個股，並評估從建議進場到達成退場目標價的『波段期間』(如: 5-10天、10-15天)。\n"
+        "請挑選 6 檔符合強勢族群且股價盡可能符合區間條件的台股個股，並評估波段期間。\n"
         "請嚴格只回傳 JSON 陣列，格式如：\n"
         '[{"上漲率預估":"75%","族群":"半導體","股名":"台積電","股號":"2330","波段期間":"5-10天"}]\n'
         "不要包含任何Markdown標記。"
@@ -247,7 +254,14 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     for item in picks:
         stock_id = item.get("股號")
         real_p = get_realtime_tw_price(stock_id)
+        
+        # 股價區間硬性審核機制 (Hard Filter)
         if real_p:
+            if min_price > 0 and real_p < min_price:
+                continue  # 低於下限者剔除
+            if max_price > 0 and real_p > max_price:
+                continue  # 高於上限者剔除
+                
             item["當前實價"] = f"{real_p:.2f}"
             item["建議進場"] = f"{round(real_p * 0.985, 2):.2f}"
             item["建議退場"] = f"{round(real_p * 1.08, 2):.2f}"
@@ -260,6 +274,19 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
             item["波段期間"] = "5-10天"
             
         final_results.append(item)
+        
+        # 最多取符合價格限制的前 3 檔
+        if len(final_results) >= 3:
+            break
+            
+    # 如果過濾後不足 3 檔，填補提示
+    while len(final_results) < 3:
+        final_results.append({
+            "上漲率預估": "--%", "族群": "無符合區間", "股名": "無符合股票",
+            "股號": "----", "當前實價": "---", "建議進場": "---",
+            "建議退場": "---", "波段期間": "---"
+        })
+        
     return final_results
 
 # 生成詳細報告
@@ -309,19 +336,25 @@ sector_data = get_taiwan_sector_performance(target_date_str)
 # 顯示最新的預測/開啟時間
 st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 精選股票預測")
 
-# 輸入框預設空白
-price_limit_input = st.sidebar.number_input("設定股價金額上限 (新台幣元)", min_value=0, value=None, placeholder="請輸入金額上限", step=10)
-price_limit = price_limit_input if price_limit_input is not None else 0
+# 設定股價區間 (雙欄並排輸入)
+st.sidebar.markdown("**設定股價區間 (新台幣元)**")
+p_col1, p_col2 = st.sidebar.columns(2)
+with p_col1:
+    min_price_input = st.number_input("最低價", min_value=0, value=None, placeholder="最低金額", step=10, label_visibility="collapsed")
+with p_col2:
+    max_price_input = st.number_input("最高價", min_value=0, value=None, placeholder="最高金額", step=10, label_visibility="collapsed")
+
+min_price = min_price_input if min_price_input is not None else 0
+max_price = max_price_input if max_price_input is not None else 0
 
 if st.sidebar.button("🚀 產生當日 AI 精選股票", use_container_width=True):
     with st.spinner("🤖 AI 正在掃描族群與即時股價..."):
         try:
-            picks_data = generate_daily_picks(macro_data, sector_data, price_limit, target_date_str)
+            picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
-            # 按下按鈕時，即時更新時間戳記為台灣當下時間
             st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
             st.sidebar.success("更新成功！")
-            st.rerun()  # 重新整理頁面以立即刷新標題上的時間
+            st.rerun()
         except Exception as e:
             st.sidebar.error(f"生成失敗: {e}")
 
