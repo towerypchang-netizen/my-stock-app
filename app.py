@@ -83,33 +83,28 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 官方 SDK 呼叫 Gemini API (含自動冷卻與自動降級)
+# 使用單一絕對穩定模型 + 智能退避重試
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY，請確認 Secrets 設定。")
         
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
+    model = genai.GenerativeModel("gemini-1.5-flash")
     last_err = ""
     
-    for model_name in models_to_try:
+    for attempt in range(max_retries):
         try:
-            model = genai.GenerativeModel(model_name)
-            for attempt in range(max_retries):
-                try:
-                    response = model.generate_content(prompt)
-                    if response and response.text:
-                        return response.text
-                except Exception as e:
-                    err_msg = str(e)
-                    if "429" in err_msg or "quota" in err_msg.lower():
-                        last_err = "API 請求超過免費頻率限制 (429 Rate Limit)，請稍候 30 秒再試。"
-                        time.sleep(4 * (attempt + 1))
-                        continue
-                    else:
-                        last_err = err_msg
-                        time.sleep(2)
+            response = model.generate_content(prompt)
+            if response and response.text:
+                return response.text
         except Exception as e:
-            last_err = str(e)
+            err_msg = str(e)
+            if "429" in err_msg or "quota" in err_msg.lower():
+                last_err = "API 請求超過免費頻率限制 (429 Rate Limit)，請稍候 30 秒再試。"
+                time.sleep(5 * (attempt + 1))  # 自動平滑等待後重試
+                continue
+            else:
+                last_err = err_msg
+                time.sleep(2)
             
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
