@@ -80,15 +80,15 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 使用官方 google-genai SDK 進行 API 調用
+# 使用最新 gemini-3.6-flash 模型呼叫 API
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY，請確認 Secrets 設定。")
         
     client = genai.Client(api_key=GEMINI_API_KEY)
     
-    # 使用新版 SDK 模型名稱組合（自動退避）
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash"]
+    # 採用官方最新指名模型 gemini-3.6-flash
+    models_to_try = ["gemini-3.6-flash"]
     last_err = ""
     
     for model_name in models_to_try:
