@@ -83,12 +83,12 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 使用官方 SDK 調用 Gemini API (具備自動重試與模型切換)
+# 使用官方 SDK 調用 Gemini API (更正正確模型名稱)
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY。")
         
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
+    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro-latest"]
     last_err = ""
     
     for model_name in models_to_try:
@@ -277,7 +277,6 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
     real_price = get_realtime_tw_price(stock_id)
     price_info_str = f"當前真實市場成交價：{real_price} 元" if real_price else "即時股價：需參考市場現價"
     
-    # 避免依賴 tabulate，使用 to_string() 原生轉換
     chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "無最新籌碼數據"
     
     prompt = (
