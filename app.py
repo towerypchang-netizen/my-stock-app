@@ -7,7 +7,7 @@ import streamlit as st
 import yfinance as yf
 import requests
 import pandas as pd
-import google.generativeai as genai
+from google import genai
 
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
@@ -61,9 +61,6 @@ st.markdown(
 FINMIND_TOKEN = str(st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))).strip()
 GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))).strip()
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-
 # 取得台灣標準時間 (UTC+8)
 def get_taiwan_now():
     return datetime.utcnow() + timedelta(hours=8)
@@ -83,34 +80,35 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 使用 SDK 正式呼叫 Gemini API（更正模型別名相容性）
+# 使用最新 google-genai SDK 進行 API 呼叫
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
-        raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY，請確認設定。")
+        raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY，請確認 Secrets 設定。")
         
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    
+    # 使用新版 2.0-flash / 1.5-flash 模型名稱
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
     last_err = ""
-    # 採用具備全版本相容性的官方模型別名
-    models_to_try = ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest"]
     
     for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            for attempt in range(max_retries):
-                try:
-                    response = model.generate_content(prompt)
-                    if response and response.text:
-                        return response.text
-                except Exception as e:
-                    err_msg = str(e)
-                    if "429" in err_msg or "quota" in err_msg.lower():
-                        last_err = "API 請求超過免費頻率限制 (429 Rate Limit)，請稍候 30 秒再試。"
-                        time.sleep(3 * (attempt + 1))
-                        continue
-                    else:
-                        last_err = err_msg
-                        time.sleep(2)
-        except Exception as e:
-            last_err = str(e)
+        for attempt in range(max_retries):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                err_msg = str(e)
+                if "429" in err_msg or "quota" in err_msg.lower():
+                    last_err = "API 請求超過免費頻率限制 (429 Rate Limit)，請稍候 15 秒再試。"
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                else:
+                    last_err = err_msg
+                    time.sleep(2)
             
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
