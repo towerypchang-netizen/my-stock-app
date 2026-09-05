@@ -11,35 +11,13 @@ import pandas as pd
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：大標題縮小、台股漲跌色、側邊欄日期資訊同行靠緊
+# 自訂 CSS：大標題縮小、台股漲跌色
 st.markdown(
     """
     <style>
     /* 大標題縮小至與 ### / subheader 相同大小 */
     h1 { font-size: 1.5rem !important; margin-bottom: 1rem !important; }
     
-    /* 側邊欄系統抓取時間標籤對齊 */
-    .system-date-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 10px;
-    }
-    .system-date-label {
-        font-weight: bold;
-        font-size: 0.9rem;
-        color: #e0e0e0;
-    }
-    .system-date-value {
-        background-color: #262730;
-        border: 1px solid #464b5d;
-        border-radius: 4px;
-        padding: 4px 8px;
-        font-size: 0.85rem;
-        color: #ff4d4f;
-        font-weight: bold;
-    }
-
     /* 1. 針對所有向上箭頭 (Up) 與相關容器：強制紅字、紅箭頭、淡紅背景 */
     [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
         fill: #ff4d4f !important;
@@ -295,17 +273,18 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
-# 自動抓取當前系統時間 (使用者操作 App 當下)
+# 自動抓取當前系統時間
 today_dt = datetime.now()
 target_date_str = today_dt.strftime("%Y-%m-%d")
 display_date_str = today_dt.strftime("%Y / %m / %d")
 
-# 側邊欄改為不可點擊的「系統抓取時間」提示標籤 (完全解決文字擠壓與點擊問題)
+# 將標題、資料來源與日期寫在同一個行內 inline 標籤中，徹底防止換行與跑版
 st.sidebar.markdown(
     f"""
-    <div class="system-date-row">
-        <span class="system-date-label">市場看板基準日期<br><small style="color:#a0a0a0; font-weight:normal;">(資料來源：Yahoo Finance)</small></span>
-        <span class="system-date-value">{display_date_str}</span>
+    <div style="font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; line-height: 1.8;">
+        市場看板基準日期
+        <span style="font-size: 0.75rem; color: #a0a0a0; font-weight: normal; margin-left: 4px;">(資料來源: Yahoo Finance)</span>
+        <span style="background-color: #262730; border: 1px solid #464b5d; border-radius: 4px; padding: 2px 8px; color: #ff4d4f; font-weight: bold; margin-left: 8px;">{display_date_str}</span>
     </div>
     """,
     unsafe_allow_html=True
