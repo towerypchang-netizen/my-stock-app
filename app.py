@@ -7,6 +7,7 @@ import streamlit as st
 import yfinance as yf
 import requests
 import pandas as pd
+from google import genai
 
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
@@ -79,52 +80,37 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 使用原生 requests 直接發送 REST API 請求，全面避免 SDK 版本/路徑混淆
+# 使用官方 google-genai SDK 進行 API 調用
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY，請確認 Secrets 設定。")
         
-    api_key_clean = GEMINI_API_KEY.strip()
+    client = genai.Client(api_key=GEMINI_API_KEY)
     
-    # 定義要嘗試的（API版本, 模型名稱）組合，全面跳過會引發 404 的無效路徑
-    endpoints_to_try = [
-        ("v1", "gemini-1.5-flash"),
-        ("v1beta", "gemini-2.0-flash")
-    ]
-    
-    headers = {"Content-Type": "application/json"}
-    payload = {"contents": [{"parts": [{"text": str(prompt)}]}]}
+    # 使用新版 SDK 模型名稱組合（自動退避）
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash"]
     last_err = ""
-
-    for api_ver, model_name in endpoints_to_try:
-        url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_name}:generateContent?key={api_key_clean}"
-        
+    
+    for model_name in models_to_try:
         for attempt in range(max_retries):
             try:
-                resp = requests.post(url, headers=headers, json=payload, timeout=30)
-                res_data = resp.json()
-                
-                if resp.status_code == 200:
-                    candidates = res_data.get("candidates", [])
-                    if candidates and len(candidates) > 0:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts and len(parts) > 0:
-                            return parts[0].get("text", "")
-                elif resp.status_code == 429:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                err_msg = str(e)
+                if "429" in err_msg or "quota" in err_msg.lower():
                     last_err = "API 請求超過免費頻率限制 (429 Rate Limit)，請稍候 15 秒再試。"
                     time.sleep(3 * (attempt + 1))
                     continue
-                elif resp.status_code == 404:
-                    # 當前版本/模型不存在，直接切換到下一個組合
-                    last_err = f"Endpoint {api_ver}/{model_name} 404 Not Found"
-                    break
                 else:
-                    err_msg = res_data.get("error", {}).get("message", resp.text)
-                    last_err = f"HTTP {resp.status_code}: {err_msg}"
-            except Exception as e:
-                last_err = f"網路請求異常: {str(e)}"
-                time.sleep(2)
-                
+                    last_err = err_msg
+                    time.sleep(1)
+                    break
+            
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
 # 即時台股價格抓取
