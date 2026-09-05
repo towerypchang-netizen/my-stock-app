@@ -87,8 +87,8 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 使用官方規範模型 gemini-3.6-flash，嚴格避開無效備用模型別名
-def call_gemini_with_retry(prompt, max_retries=2):
+# 自動吸收 503 高負載與 429 流量限制的防護函式
+def call_gemini_with_retry(prompt, max_retries=5):
     if not API_KEYS:
         raise ValueError("Secrets 中未找到有效的 GEMINI_API_KEY，請確認設定。")
         
@@ -107,15 +107,19 @@ def call_gemini_with_retry(prompt, max_retries=2):
                     return response.text
             except Exception as e:
                 err_msg = str(e)
-                last_err = f"Key #{idx+1} (嘗試 {attempt+1}) 失敗: {err_msg}"
-                if "503" in err_msg or "UNAVAILABLE" in err_msg or "429" in err_msg:
-                    time.sleep(2)  # 短暫延遲避開冷卻點
+                last_err = f"Key #{idx+1} (嘗試 {attempt+1}/{max_retries}) 失敗: {err_msg}"
+                if "503" in err_msg or "UNAVAILABLE" in err_msg:
+                    # 遭遇伺服器繁忙，靜置 3 秒後自動再試
+                    time.sleep(3)
+                    continue
+                elif "429" in err_msg or "quota" in err_msg.lower():
+                    time.sleep(2)
                     continue
                 else:
                     time.sleep(1)
                     continue
 
-    raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]，伺服器繁忙或配額不足，請稍後重試。")
+    raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]，目前 Google 伺服器負載極高，請等候約 10 秒後重試。")
 
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
