@@ -79,15 +79,15 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 多模型自動降級 Gemini REST API 呼叫函式 (已更正為官方標準模型名稱)
+# 強化版 Gemini API 調用函式
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
-        raise ValueError("Streamlit Secrets 中未找到 GEMINI_API_KEY，請確認設定。")
+        raise ValueError("Streamlit Secrets 中未找到 GEMINI_API_KEY，請確認 Secrets 設定。")
         
     api_key_clean = GEMINI_API_KEY.strip()
     models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
     
-    last_err_msg = ""
+    last_err = "未知錯誤"
     for model_name in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key_clean}"
         headers = {"Content-Type": "application/json"}
@@ -107,20 +107,17 @@ def call_gemini_with_retry(prompt, max_retries=3):
                         if parts and len(parts) > 0:
                             return parts[0].get("text", "")
                 elif resp.status_code == 429:
-                    last_err_msg = "Google API 流量已達每分鐘限制 (429)，請稍候 30-60 秒後再試。"
-                    if attempt < max_retries - 1:
-                        time.sleep(5)  # 遇 429 自動等待 5 秒重試
-                        continue
-                elif resp.status_code == 404:
-                    break
+                    last_err = "API 每分鐘請求次數已達上限 (429 Rate Limit)。請等待 30 秒後重新嘗試。"
+                    time.sleep(3)
+                    continue
                 else:
-                    last_err_msg = res_data.get("error", {}).get("message", resp.text)
+                    err_info = res_data.get("error", {})
+                    last_err = f"[{resp.status_code}] {err_info.get('message', resp.text)}"
             except Exception as e:
-                last_err_msg = str(e)
-                if attempt < max_retries - 1:
-                    time.sleep(2)
-                    
-    raise ValueError(f"API 請求失敗: {last_err_msg}")
+                last_err = str(e)
+                time.sleep(2)
+                
+    raise ValueError(f"Gemini API 呼叫失敗: {last_err}")
 
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
