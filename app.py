@@ -79,17 +79,23 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 強化版 Gemini API 調用函式
+# 修正與強化版 Gemini API 調用函式
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未找到 GEMINI_API_KEY，請確認 Secrets 設定。")
         
     api_key_clean = GEMINI_API_KEY.strip()
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
+    
+    # 修正模型配置：使用標準相容名稱 (v1/v1beta API 相容)
+    model_configs = [
+        ("v1beta", "gemini-1.5-flash"),
+        ("v1beta", "gemini-1.5-pro-latest"),
+        ("v1", "gemini-1.5-flash")
+    ]
     
     last_err = "未知錯誤"
-    for model_name in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key_clean}"
+    for api_version, model_name in model_configs:
+        url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={api_key_clean}"
         headers = {"Content-Type": "application/json"}
         payload = {
             "contents": [{"parts": [{"text": prompt}]}]
@@ -107,9 +113,11 @@ def call_gemini_with_retry(prompt, max_retries=3):
                         if parts and len(parts) > 0:
                             return parts[0].get("text", "")
                 elif resp.status_code == 429:
-                    last_err = "API 每分鐘請求次數已達上限 (429 Rate Limit)。請等待 30 秒後重新嘗試。"
+                    last_err = "API 請求過於頻繁 (429 Rate Limit)，請稍候 30-60 秒後再試。"
                     time.sleep(3)
                     continue
+                elif resp.status_code == 404:
+                    break  # 模型名稱不符，直接切換下一個模型設定
                 else:
                     err_info = res_data.get("error", {})
                     last_err = f"[{resp.status_code}] {err_info.get('message', resp.text)}"
