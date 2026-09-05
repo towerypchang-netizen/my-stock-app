@@ -60,14 +60,14 @@ st.markdown(
 FINMIND_TOKEN = st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
-# 初始化 Session State
+# 初始化 Session State (新增 "波段期間" 欄位)
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
-        columns=["上漲率預估", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場"],
+        columns=["上漲率預估", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"],
         data=[
-            ["--%", "---", "---", "---", "---", "---", "---"],
-            ["--%", "---", "---", "---", "---", "---", "---"],
-            ["--%", "---", "---", "---", "---", "---", "---"]
+            ["--%", "---", "---", "---", "---", "---", "---", "---"],
+            ["--%", "---", "---", "---", "---", "---", "---", "---"],
+            ["--%", "---", "---", "---", "---", "---", "---", "---"]
         ]
     )
 
@@ -216,7 +216,7 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 生成 AI 精選股票
+# 生成 AI 精選股票 (含波段期間預測)
 def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
     price_limit_str = f"單股價格低於 {price_limit} 元" if price_limit and price_limit > 0 else "股價不限"
     prompt_select = (
@@ -224,8 +224,9 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
         "限制：" + price_limit_str + "。\n"
         "大盤：" + str(macro_data) + "\n"
         "強勢族群：" + str(sector_data) + "\n"
-        "請挑選3檔符合強勢族群的台股個股，並嚴格只回傳 JSON 陣列，格式如：\n"
-        '[{"上漲率預估":"75%","族群":"半導體","股名":"台積電","股號":"2330"}]\n'
+        "請挑選3檔符合強勢族群的台股個股，並評估從建議進場到達成退場目標價的『波段期間』(如: 5-10天、10-15天)。\n"
+        "請嚴格只回傳 JSON 陣列，格式如：\n"
+        '[{"上漲率預估":"75%","族群":"半導體","股名":"台積電","股號":"2330","波段期間":"5-10天"}]\n'
         "不要包含任何Markdown標記。"
     )
     res_raw = call_gemini_with_retry(prompt_select)
@@ -246,6 +247,10 @@ def generate_daily_picks(macro_data, sector_data, price_limit, target_date_str):
             item["當前實價"] = "查無即時價"
             item["建議進場"] = "---"
             item["建議退場"] = "---"
+        
+        if "波段期間" not in item:
+            item["波段期間"] = "5-10天"
+            
         final_results.append(item)
     return final_results
 
@@ -265,7 +270,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
         "1. 全球宏觀與科技大勢總結\n"
         "2. 台股主流產業與資金流向研判\n"
         "3. 個股籌碼與連動分析\n"
-        "4. 進退場價位規劃與部位建議\n"
+        "4. 進退場價位規劃、預估波段操作天數與部位建議\n"
         "5. 未來1週上漲機率估算"
     )
     return call_gemini_with_retry(prompt)
@@ -278,7 +283,7 @@ today_dt = datetime.now()
 target_date_str = today_dt.strftime("%Y-%m-%d")
 display_date_str = today_dt.strftime("%Y / %m / %d")
 
-# 將標題、資料來源與日期寫在同一個行內 inline 標籤中，徹底防止換行與跑版
+# 側邊欄基準日期標籤
 st.sidebar.markdown(
     f"""
     <div style="font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; line-height: 1.8;">
