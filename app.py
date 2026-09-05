@@ -60,7 +60,11 @@ st.markdown(
 FINMIND_TOKEN = st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
-# 初始化 Session State (新增 "波段期間" 欄位)
+# 取得台灣標準時間 (UTC+8)
+def get_taiwan_now():
+    return datetime.utcnow() + timedelta(hours=8)
+
+# 初始化 Session State
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
         columns=["上漲率預估", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"],
@@ -70,6 +74,10 @@ if "daily_picks" not in st.session_state:
             ["--%", "---", "---", "---", "---", "---", "---", "---"]
         ]
     )
+
+# 初始化預測時間紀錄（開啟 App 時的時間）
+if "last_predict_time" not in st.session_state:
+    st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
 # 多模型自動降級 Gemini REST API 呼叫函式
 def call_gemini_with_retry(prompt, max_retries=3):
@@ -278,10 +286,10 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
-# 自動抓取當前系統時間
-today_dt = datetime.now()
-target_date_str = today_dt.strftime("%Y-%m-%d")
-display_date_str = today_dt.strftime("%Y / %m / %d")
+# 取得台灣當前時間
+taiwan_now = get_taiwan_now()
+target_date_str = taiwan_now.strftime("%Y-%m-%d")
+display_date_str = taiwan_now.strftime("%Y / %m / %d")
 
 # 側邊欄基準日期標籤
 st.sidebar.markdown(
@@ -298,9 +306,8 @@ st.sidebar.markdown(
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
-# 取得當前操作的即時時間
-current_time_str = today_dt.strftime("%m/%d %H:%M:%S")
-st.sidebar.markdown(f"### 🎯 今日 [{current_time_str}] AI 精選股票預測")
+# 顯示最新的預測/開啟時間
+st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 精選股票預測")
 
 # 輸入框預設空白
 price_limit_input = st.sidebar.number_input("設定股價金額上限 (新台幣元)", min_value=0, value=None, placeholder="請輸入金額上限", step=10)
@@ -311,7 +318,10 @@ if st.sidebar.button("🚀 產生當日 AI 精選股票", use_container_width=Tr
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, price_limit, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
+            # 按下按鈕時，即時更新時間戳記為台灣當下時間
+            st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
             st.sidebar.success("更新成功！")
+            st.rerun()  # 重新整理頁面以立即刷新標題上的時間
         except Exception as e:
             st.sidebar.error(f"生成失敗: {e}")
 
