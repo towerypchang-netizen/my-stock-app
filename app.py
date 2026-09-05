@@ -11,30 +11,33 @@ import pandas as pd
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：大標題縮小、台股漲跌色、側邊欄日期緊湊同行
+# 自訂 CSS：大標題縮小、台股漲跌色、側邊欄日期資訊同行靠緊
 st.markdown(
     """
     <style>
     /* 大標題縮小至與 ### / subheader 相同大小 */
     h1 { font-size: 1.5rem !important; margin-bottom: 1rem !important; }
     
-    /* 強制側邊欄日期選擇器 Label 與 Input 在同一行緊密排列 */
-    [data-testid="stSidebar"] [data-testid="stDateInput"] {
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        justify-content: flex-start !important;
+    /* 側邊欄系統抓取時間標籤對齊 */
+    .system-date-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
     }
-    [data-testid="stSidebar"] [data-testid="stDateInput"] label {
-        margin-right: 8px !important;
-        margin-bottom: 0px !important;
-        white-space: nowrap !important;
-        font-weight: bold !important;
-        font-size: 0.9rem !important;
-        min-width: 210px !important;
+    .system-date-label {
+        font-weight: bold;
+        font-size: 0.9rem;
+        color: #e0e0e0;
     }
-    [data-testid="stSidebar"] [data-testid="stDateInput"] > div {
-        flex-grow: 1 !important;
+    .system-date-value {
+        background-color: #262730;
+        border: 1px solid #464b5d;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 0.85rem;
+        color: #ff4d4f;
+        font-weight: bold;
     }
 
     /* 1. 針對所有向上箭頭 (Up) 與相關容器：強制紅字、紅箭頭、淡紅背景 */
@@ -292,16 +295,27 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
-# 市場看板基準日期：加註資料來源並同行靠靠
-selected_date = st.sidebar.date_input("市場看板基準日期 (資料來源：Yahoo Finance)", value=datetime.today())
+# 自動抓取當前系統時間 (使用者操作 App 當下)
+today_dt = datetime.now()
+target_date_str = today_dt.strftime("%Y-%m-%d")
+display_date_str = today_dt.strftime("%Y / %m / %d")
 
-target_date_str = selected_date.strftime("%Y-%m-%d")
+# 側邊欄改為不可點擊的「系統抓取時間」提示標籤 (完全解決文字擠壓與點擊問題)
+st.sidebar.markdown(
+    f"""
+    <div class="system-date-row">
+        <span class="system-date-label">市場看板基準日期<br><small style="color:#a0a0a0; font-weight:normal;">(資料來源：Yahoo Finance)</small></span>
+        <span class="system-date-value">{display_date_str}</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
 # 取得當前操作的即時時間
-current_time_str = datetime.now().strftime("%m/%d %H:%M:%S")
+current_time_str = today_dt.strftime("%m/%d %H:%M:%S")
 st.sidebar.markdown(f"### 🎯 今日 [{current_time_str}] AI 精選股票預測")
 
 # 輸入框預設空白
