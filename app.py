@@ -11,14 +11,14 @@ import pandas as pd
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：大標題縮小、台股漲跌色、側邊欄日期一行緊湊對齊
+# 自訂 CSS：大標題縮小、台股漲跌色、側邊欄日期緊湊同行
 st.markdown(
     """
     <style>
     /* 大標題縮小至與 ### / subheader 相同大小 */
     h1 { font-size: 1.5rem !important; margin-bottom: 1rem !important; }
     
-    /* 強制側邊欄日期選擇器 Label 與 Input 同列顯示且緊靠 */
+    /* 強制側邊欄日期選擇器 Label 與 Input 在同一行緊密排列 */
     [data-testid="stSidebar"] [data-testid="stDateInput"] {
         display: flex !important;
         flex-direction: row !important;
@@ -26,12 +26,12 @@ st.markdown(
         justify-content: flex-start !important;
     }
     [data-testid="stSidebar"] [data-testid="stDateInput"] label {
-        margin-right: 10px !important;
+        margin-right: 8px !important;
         margin-bottom: 0px !important;
         white-space: nowrap !important;
         font-weight: bold !important;
-        font-size: 0.95rem !important;
-        min-width: 130px !important;
+        font-size: 0.9rem !important;
+        min-width: 210px !important;
     }
     [data-testid="stSidebar"] [data-testid="stDateInput"] > div {
         flex-grow: 1 !important;
@@ -292,8 +292,8 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
-# 直接在 date_input 的原生 label 行實施 inline flex
-selected_date = st.sidebar.date_input("市場看板基準日期", value=datetime.today())
+# 市場看板基準日期：加註資料來源並同行靠靠
+selected_date = st.sidebar.date_input("市場看板基準日期 (資料來源：Yahoo Finance)", value=datetime.today())
 
 target_date_str = selected_date.strftime("%Y-%m-%d")
 
