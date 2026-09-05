@@ -80,36 +80,33 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 使用最新 gemini-3.6-flash 模型呼叫 API
-def call_gemini_with_retry(prompt, max_retries=3):
+# 防暴擊重试邏輯：加入自動休眠避免流量卡死
+def call_gemini_with_retry(prompt, max_retries=2):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY，請確認 Secrets 設定。")
         
     client = genai.Client(api_key=GEMINI_API_KEY)
-    
-    # 採用官方最新指名模型 gemini-3.6-flash
-    models_to_try = ["gemini-3.6-flash"]
+    model_name = "gemini-3.6-flash"
     last_err = ""
     
-    for model_name in models_to_try:
-        for attempt in range(max_retries):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                )
-                if response and response.text:
-                    return response.text
-            except Exception as e:
-                err_msg = str(e)
-                if "429" in err_msg or "quota" in err_msg.lower():
-                    last_err = "API 請求超過免費頻率限制 (429 Rate Limit)，請稍候 15 秒再試。"
-                    time.sleep(3 * (attempt + 1))
-                    continue
-                else:
-                    last_err = err_msg
-                    time.sleep(1)
-                    break
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            err_msg = str(e)
+            if "429" in err_msg or "quota" in err_msg.lower():
+                last_err = "API 額度短暫冷卻中，請稍等 15 秒後點擊按鈕重試。"
+                # 遇到 429 時強制於後台冷卻 10 秒，避免繼續轟炸 API
+                time.sleep(10)
+                continue
+            else:
+                last_err = err_msg
+                time.sleep(1)
             
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
