@@ -273,8 +273,8 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
-# 市場看板基準日期：標題與選擇框置於同一行
-date_col1, date_col2 = st.sidebar.columns([1, 1], vertical_alignment="center")
+# 市場看板基準日期：調整欄位比例為 1.8:1，讓日期緊靠標題文字
+date_col1, date_col2 = st.sidebar.columns([1.8, 1], vertical_alignment="center")
 with date_col1:
     st.markdown("**市場看板基準日期**")
 with date_col2:
