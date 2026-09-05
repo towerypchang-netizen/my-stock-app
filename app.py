@@ -79,42 +79,54 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# REST API 穩定串接函式
-def call_gemini_with_retry(prompt, max_retries=3):
+# REST API 多端點與模型輪詢串接函式
+def call_gemini_with_retry(prompt, max_retries=2):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY，請確認 Secrets 設定。")
         
     api_key_clean = GEMINI_API_KEY.strip()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key_clean}"
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "contents": [{"parts": [{"text": str(prompt)}]}]
-    }
+    
+    # 組合多種可用的 (API版本, 模型名稱)
+    endpoints_to_try = [
+        ("v1", "gemini-1.5-flash"),
+        ("v1beta", "gemini-2.0-flash"),
+        ("v1beta", "gemini-1.5-flash-latest"),
+        ("v1", "gemini-pro")
+    ]
     
     last_err = ""
-    for attempt in range(max_retries):
-        try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=30)
-            res_data = resp.json()
-            
-            if resp.status_code == 200:
-                candidates = res_data.get("candidates", [])
-                if candidates and len(candidates) > 0:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts and len(parts) > 0:
-                        return parts[0].get("text", "")
-            elif resp.status_code == 429:
-                last_err = "API 每分鐘請求已達上限 (429 Rate Limit)，請等待 15 秒後再試。"
-                time.sleep(3 * (attempt + 1))
-                continue
-            else:
-                err_msg = res_data.get("error", {}).get("message", resp.text)
-                last_err = f"HTTP {resp.status_code}: {err_msg}"
-        except Exception as e:
-            last_err = f"網路請求異常: {str(e)}"
-            time.sleep(2)
-            
-    raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
+    headers = {"Content-Type": "application/json"}
+    payload = {"contents": [{"parts": [{"text": str(prompt)}]}]}
+
+    for api_ver, model_name in endpoints_to_try:
+        url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_name}:generateContent?key={api_key_clean}"
+        
+        for attempt in range(max_retries):
+            try:
+                resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                res_data = resp.json()
+                
+                if resp.status_code == 200:
+                    candidates = res_data.get("candidates", [])
+                    if candidates and len(candidates) > 0:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts and len(parts) > 0:
+                            return parts[0].get("text", "")
+                elif resp.status_code == 429:
+                    last_err = "API 請求頻率過高 (429 Rate Limit)，等待重試中..."
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                elif resp.status_code == 404:
+                    # 當前模型/版本不存在，直接切換到下一個組合
+                    break
+                else:
+                    err_msg = res_data.get("error", {}).get("message", resp.text)
+                    last_err = f"HTTP {resp.status_code}: {err_msg}"
+            except Exception as e:
+                last_err = f"網路請求異常: {str(e)}"
+                time.sleep(2)
+                
+    raise ValueError(f"Gemini API 所有模型組合皆回應失敗 [{last_err}]")
 
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
