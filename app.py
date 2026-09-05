@@ -11,17 +11,21 @@ import pandas as pd
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：響應式裝置與顏色設定
+# 自訂 CSS：響應式裝置、顏色設定與看板字型縮小
 st.markdown(
     "<style>\n"
     "[data-testid=\"stMetricDelta\"] svg[data-testid=\"stMetricDeltaIcon-Up\"] { fill: #ff4d4f !important; }\n"
     "[data-testid=\"stMetricDelta\"] div:has(svg[data-testid=\"stMetricDeltaIcon-Up\"]) { color: #ff4d4f !important; }\n"
     "[data-testid=\"stMetricDelta\"] svg[data-testid=\"stMetricDeltaIcon-Down\"] { fill: #52c41a !important; }\n"
     "[data-testid=\"stMetricDelta\"] div:has(svg[data-testid=\"stMetricDeltaIcon-Down\"]) { color: #52c41a !important; }\n"
+    "/* 縮小市場看板字型 */\n"
+    "[data-testid=\"stMetricValue\"] { font-size: 1.8rem !important; }\n"
+    "[data-testid=\"stMetricLabel\"] { font-size: 0.9rem !important; }\n"
     "html, body, [class*=\"css\"] { font-size: 16px; }\n"
     "@media (max-width: 768px) {\n"
     "    html, body, [class*=\"css\"] { font-size: 13.5px !important; }\n"
     "    [data-testid=\"stSidebar\"] { width: 100% !important; }\n"
+    "    [data-testid=\"stMetricValue\"] { font-size: 1.4rem !important; }\n"
     "}\n"
     "</style>",
     unsafe_allow_html=True
@@ -108,12 +112,16 @@ def get_realtime_tw_price(stock_id):
         pass
     return None
 
-# 全球數據抓取
+# 全球數據抓取 (更新為只包含各大主要指數)
 @st.cache_data(ttl=1800)
 def get_macro_data(target_date_str):
     macro_tickers = {
-        "道瓊工業": "^DJI", "標普500": "^GSPC", "那斯達克": "^IXIC", "費城半導體": "^SOX",
-        "美債10年殖利率": "^TNX", "美元指數": "DX-Y.NYB", "台積電ADR": "TSM", "輝達": "NVDA", "美光": "MU"
+        "道瓊工業": "^DJI",
+        "標普500": "^GSPC",
+        "那斯達克": "^IXIC",
+        "費城半導體": "^SOX",
+        "日經225": "^N225",
+        "台灣加權": "^TWII"
     }
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=10)
@@ -269,10 +277,10 @@ capital = st.sidebar.number_input("預計進場金額 (新台幣元)", min_value
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
-cols = st.columns([1, 1, 1, 1])
+cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
 for name, info in macro_data.items():
-    with cols[idx % 4]:
+    with cols[idx % 6]:
         st.metric(label=name, value=info["val"], delta=info["change"])
     idx += 1
 
