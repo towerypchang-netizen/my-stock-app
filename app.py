@@ -18,6 +18,18 @@ st.markdown(
     /* 大標題縮小至與 ### / subheader 相同大小 */
     h1 { font-size: 1.5rem !important; margin-bottom: 1rem !important; }
     
+    /* 強制側邊欄日期選擇器與標題同行且緊湊排列 */
+    div[data-testid="stHorizontalBlock"]:has(div.date-label-target) {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(div.date-label-target) > div {
+        width: auto !important;
+        flex: 0 0 auto !important;
+    }
+
     /* 1. 針對所有向上箭頭 (Up) 與相關容器：強制紅字、紅箭頭、淡紅背景 */
     [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
         fill: #ff4d4f !important;
@@ -273,10 +285,10 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
-# 市場看板基準日期：調整欄位比例為 1.8:1，讓日期緊靠標題文字
-date_col1, date_col2 = st.sidebar.columns([1.8, 1], vertical_alignment="center")
+# 使用 Flexbox CSS 將文字與日期選擇按鈕完全對齊於同一行
+date_col1, date_col2 = st.sidebar.columns([1, 1], vertical_alignment="center")
 with date_col1:
-    st.markdown("**市場看板基準日期**")
+    st.markdown('<div class="date-label-target" style="white-space: nowrap; font-weight: bold;">市場看板基準日期</div>', unsafe_allow_html=True)
 with date_col2:
     selected_date = st.date_input("市場看板基準日期", value=datetime.today(), label_visibility="collapsed")
 
