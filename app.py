@@ -16,10 +16,8 @@ st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系
 st.markdown(
     """
     <style>
-    /* 大標題縮小至與 ### / subheader 相同大小 */
     h1 { font-size: 1.5rem !important; margin-bottom: 1rem !important; }
     
-    /* 1. 針對所有向上箭頭 (Up) 與相關容器：強制紅字、紅箭頭、淡紅背景 */
     [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
         fill: #ff4d4f !important;
     }
@@ -31,7 +29,6 @@ st.markdown(
         color: #ff4d4f !important;
     }
 
-    /* 2. 針對所有向下箭頭 (Down) 與相關容器：強制綠字、綠箭頭、淡綠背景 */
     [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Down"] {
         fill: #52c41a !important;
     }
@@ -43,7 +40,6 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    /* 看板數字與標籤字型調整 */
     [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
     [data-testid="stMetricLabel"] { font-size: 0.95rem !important; }
     html, body, [class*="css"] { font-size: 16px; }
@@ -57,9 +53,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 金鑰安全讀取與清理
+# 金鑰安全讀取與清理 (支援多金鑰池)
 FINMIND_TOKEN = str(st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))).strip()
-GEMINI_API_KEY = str(st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))).strip()
+
+raw_keys = [
+    st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", "")),
+    st.secrets.get("GEMINI_API_KEY_2", os.getenv("GEMINI_API_KEY_2", ""))
+]
+API_KEYS = [str(k).strip() for k in raw_keys if k and str(k).strip()]
 
 # 取得台灣標準時間 (UTC+8)
 def get_taiwan_now():
@@ -76,20 +77,20 @@ if "daily_picks" not in st.session_state:
         ]
     )
 
-# 初始化預測時間紀錄
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 防暴擊重试邏輯：加入自動休眠避免流量卡死
-def call_gemini_with_retry(prompt, max_retries=2):
-    if not GEMINI_API_KEY:
-        raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY，請確認 Secrets 設定。")
+# 支援多 Key 輪詢與自動無感切換的 API 呼叫函式
+def call_gemini_with_retry(prompt):
+    if not API_KEYS:
+        raise ValueError("Streamlit Secrets 中未設定任何 GEMINI_API_KEY，請確認設定。")
         
-    client = genai.Client(api_key=GEMINI_API_KEY)
     model_name = "gemini-3.6-flash"
     last_err = ""
     
-    for attempt in range(max_retries):
+    # 遍歷所有可用的 API Key 進行嘗試
+    for key_index, key in enumerate(API_KEYS):
+        client = genai.Client(api_key=key)
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -100,15 +101,13 @@ def call_gemini_with_retry(prompt, max_retries=2):
         except Exception as e:
             err_msg = str(e)
             if "429" in err_msg or "quota" in err_msg.lower():
-                last_err = "API 額度短暫冷卻中，請稍等 15 秒後點擊按鈕重試。"
-                # 遇到 429 時強制於後台冷卻 10 秒，避免繼續轟炸 API
-                time.sleep(10)
-                continue
+                last_err = f"金鑰 #{key_index + 1} 達到頻率上限 (429 Rate Limit)"
+                continue  # 切換到下一個 API Key 嘗試
             else:
                 last_err = err_msg
                 time.sleep(1)
-            
-    raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
+                
+    raise ValueError(f"Gemini API 呼叫失敗 [{last_err}，請等候約 1 分鐘後再試。]")
 
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
@@ -299,7 +298,6 @@ taiwan_now = get_taiwan_now()
 target_date_str = taiwan_now.strftime("%Y-%m-%d")
 display_date_str = taiwan_now.strftime("%Y / %m / %d")
 
-# 側邊欄基準日期標籤
 st.sidebar.markdown(
     f"""
     <div style="font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; line-height: 1.8;">
@@ -314,10 +312,8 @@ st.sidebar.markdown(
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
-# 顯示最新的預測/開啟時間
 st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 精選股票預測")
 
-# 設定股價區間
 st.sidebar.markdown("**設定股價區間 (新台幣元)**")
 p_col1, p_col2 = st.sidebar.columns(2)
 with p_col1:
@@ -344,7 +340,6 @@ st.sidebar.divider()
 
 st.sidebar.markdown("### ⚙️ 個股詳細分析與資金設定")
 
-# 輸入框預設空白
 stock_id = st.sidebar.text_input("輸入台股代碼", value="", placeholder="例如: 2330")
 capital_input = st.sidebar.number_input("預計進場金額 (新台幣元)", min_value=0, value=None, placeholder="請輸入金額", step=10000)
 capital = capital_input if capital_input is not None else 0
