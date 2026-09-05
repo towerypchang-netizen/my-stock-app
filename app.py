@@ -11,26 +11,48 @@ import pandas as pd
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：大標題縮小、台股漲跌色 (上漲紅 #ff4d4f，下跌綠 #52c41a)、看板字型優化
+# 強制台股配色 CSS：上漲一律鮮紅 (#ff4d4f)，下跌一律鮮綠 (#52c41a)
 st.markdown(
-    "<style>\n"
-    "/* 大標題縮小至與 ### / subheader 相同大小 */\n"
-    "h1 { font-size: 1.5rem !important; margin-bottom: 1rem !important; }\n"
-    "/* 全局 Metric 顏色：強制作台股台式 (上漲紅 #ff4d4f, 下跌綠 #52c41a) */\n"
-    "[data-testid=\"stMetricDelta\"] svg[data-testid=\"stMetricDeltaIcon-Up\"] { fill: #ff4d4f !important; }\n"
-    "[data-testid=\"stMetricDelta\"] div:has(svg[data-testid=\"stMetricDeltaIcon-Up\"]) { color: #ff4d4f !important; }\n"
-    "[data-testid=\"stMetricDelta\"] svg[data-testid=\"stMetricDeltaIcon-Down\"] { fill: #52c41a !important; }\n"
-    "[data-testid=\"stMetricDelta\"] div:has(svg[data-testid=\"stMetricDeltaIcon-Down\"]) { color: #52c41a !important; }\n"
-    "/* 看板數字與標籤字型調整 */\n"
-    "[data-testid=\"stMetricValue\"] { font-size: 1.6rem !important; }\n"
-    "[data-testid=\"stMetricLabel\"] { font-size: 0.95rem !important; }\n"
-    "html, body, [class*=\"css\"] { font-size: 16px; }\n"
-    "@media (max-width: 768px) {\n"
-    "    html, body, [class*=\"css\"] { font-size: 13.5px !important; }\n"
-    "    [data-testid=\"stSidebar\"] { width: 100% !important; }\n"
-    "    [data-testid=\"stMetricValue\"] { font-size: 1.3rem !important; }\n"
-    "}\n"
-    "</style>",
+    """
+    <style>
+    /* 大標題縮小至與 ### / subheader 相同大小 */
+    h1 { font-size: 1.5rem !important; margin-bottom: 1rem !important; }
+    
+    /* 1. 針對所有向上箭頭 (Up) 與相關容器：強制紅字、紅箭頭、淡紅背景 */
+    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
+        fill: #ff4d4f !important;
+    }
+    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Up"]) {
+        color: #ff4d4f !important;
+        background-color: rgba(255, 77, 79, 0.15) !important;
+    }
+    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Up"]) * {
+        color: #ff4d4f !important;
+    }
+
+    /* 2. 針對所有向下箭頭 (Down) 與相關容器：強制綠字、綠箭頭、淡綠背景 */
+    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Down"] {
+        fill: #52c41a !important;
+    }
+    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Down"]) {
+        color: #52c41a !important;
+        background-color: rgba(82, 196, 26, 0.15) !important;
+    }
+    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Down"]) * {
+        color: #52c41a !important;
+    }
+
+    /* 看板數字與標籤字型調整 */
+    [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.95rem !important; }
+    html, body, [class*="css"] { font-size: 16px; }
+    @media (max-width: 768px) {
+        html, body, [class*="css"] { font-size: 13.5px !important; }
+        [data-testid="stSidebar"] { width: 100% !important; }
+        [data-testid="stMetricValue"] { font-size: 1.2rem !important; }
+    }
+    </style>
+    """,
     unsafe_allow_html=True
 )
 
@@ -248,7 +270,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
     )
     return call_gemini_with_retry(prompt)
 
-# 主 UI 邏輯 (大標題字型縮小)
+# 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
 selected_date = st.sidebar.date_input("市場看板基準日期", value=datetime.today())
@@ -257,11 +279,11 @@ target_date_str = selected_date.strftime("%Y-%m-%d")
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
-# 取得當前操作的即時時間 (月/日 時:分:秒)
+# 取得當前操作的即時時間
 current_time_str = datetime.now().strftime("%m/%d %H:%M:%S")
 st.sidebar.markdown(f"### 🎯 今日 [{current_time_str}] AI 精選股票預測")
 
-# 輸入框預設為空白/0
+# 輸入框預設空白
 price_limit_input = st.sidebar.number_input("設定股價金額上限 (新台幣元)", min_value=0, value=None, placeholder="請輸入金額上限", step=10)
 price_limit = price_limit_input if price_limit_input is not None else 0
 
@@ -291,7 +313,8 @@ cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
 for name, info in macro_data.items():
     with cols[idx % 6]:
-        st.metric(label=name, value=info["val"], delta=info["change"])
+        # 使用 delta_color="inverse" 將預設配色反轉，搭配強效 CSS 全面鎖定：上漲為紅，下跌為綠
+        st.metric(label=name, value=info["val"], delta=info["change"], delta_color="inverse")
     idx += 1
 
 st.divider()
