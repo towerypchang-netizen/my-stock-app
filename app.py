@@ -80,15 +80,15 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 使用最新 google-genai SDK 進行 API 呼叫 (修正正確模型名稱與容錯機制)
+# 使用最新 google-genai SDK 正確模型名稱進行呼叫
 def call_gemini_with_retry(prompt, max_retries=3):
     if not GEMINI_API_KEY:
         raise ValueError("Streamlit Secrets 中未設定 GEMINI_API_KEY，請確認 Secrets 設定。")
         
     client = genai.Client(api_key=GEMINI_API_KEY)
     
-    # 使用目前官方最穩定的模型名稱與別名
-    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash-latest"]
+    # 採用 google-genai 官方完全相容之模型名稱
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
     last_err = ""
     
     for model_name in models_to_try:
@@ -106,13 +106,10 @@ def call_gemini_with_retry(prompt, max_retries=3):
                     last_err = "API 請求超過免費頻率限制 (429 Rate Limit)，請稍候 15 秒再試。"
                     time.sleep(3 * (attempt + 1))
                     continue
-                elif "404" in err_msg:
-                    # 模型名稱不存在，自動跳出並嘗試下一個模型
+                else:
+                    # 404 或其他錯誤，紀錄後跳出嘗試下一個模型
                     last_err = err_msg
                     break
-                else:
-                    last_err = err_msg
-                    time.sleep(2)
             
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
