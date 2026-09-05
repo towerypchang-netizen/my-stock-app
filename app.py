@@ -53,14 +53,21 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 金鑰安全讀取與清理 (支援多金鑰池)
-FINMIND_TOKEN = str(st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", ""))).strip()
+# 金鑰安全清理與讀取
+def clean_key(raw):
+    if not raw:
+        return ""
+    k = str(raw).strip()
+    k = k.replace('"', '').replace("'", "")
+    return k
 
-raw_keys = [
-    st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", "")),
-    st.secrets.get("GEMINI_API_KEY_2", os.getenv("GEMINI_API_KEY_2", ""))
+FINMIND_TOKEN = clean_key(st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", "")))
+
+keys_pool = [
+    clean_key(st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))),
+    clean_key(st.secrets.get("GEMINI_API_KEY_2", os.getenv("GEMINI_API_KEY_2", "")))
 ]
-API_KEYS = [str(k).strip() for k in raw_keys if k and str(k).strip()]
+API_KEYS = [k for k in keys_pool if k]
 
 # 取得台灣標準時間 (UTC+8)
 def get_taiwan_now():
@@ -80,34 +87,36 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 支援多 Key 輪詢與自動無感切換的 API 呼叫函式
+# 自動處理 503 高負載與多 Key 輪詢之 API 呼叫函式
 def call_gemini_with_retry(prompt):
     if not API_KEYS:
-        raise ValueError("Streamlit Secrets 中未設定任何 GEMINI_API_KEY，請確認設定。")
+        raise ValueError("Secrets 中未找到有效的 GEMINI_API_KEY，請確認設定。")
         
-    model_name = "gemini-3.6-flash"
+    models_to_try = ["gemini-3.6-flash", "gemini-1.5-flash-latest"]
     last_err = ""
     
-    # 遍歷所有可用的 API Key 進行嘗試
-    for key_index, key in enumerate(API_KEYS):
-        client = genai.Client(api_key=key)
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            err_msg = str(e)
-            if "429" in err_msg or "quota" in err_msg.lower():
-                last_err = f"金鑰 #{key_index + 1} 達到頻率上限 (429 Rate Limit)"
-                continue  # 切換到下一個 API Key 嘗試
-            else:
-                last_err = err_msg
-                time.sleep(1)
-                
-    raise ValueError(f"Gemini API 呼叫失敗 [{last_err}，請等候約 1 分鐘後再試。]")
+    for model_name in models_to_try:
+        for idx, key in enumerate(API_KEYS):
+            try:
+                client = genai.Client(api_key=key)
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                err_msg = str(e)
+                last_err = f"Model {model_name} Key #{idx+1} 失敗: {err_msg}"
+                if "503" in err_msg or "UNAVAILABLE" in err_msg:
+                    time.sleep(1)  # 短暫延遲後嘗試切換 Key 或 Model
+                    continue
+                elif "429" in err_msg or "quota" in err_msg.lower():
+                    continue
+                else:
+                    continue
+
+    raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]，伺服器繁忙，請稍後點擊重試。")
 
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
@@ -293,7 +302,6 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
-# 取得台灣當前時間
 taiwan_now = get_taiwan_now()
 target_date_str = taiwan_now.strftime("%Y-%m-%d")
 display_date_str = taiwan_now.strftime("%Y / %m / %d")
