@@ -273,7 +273,13 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
 # 主 UI 邏輯
 st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 
-selected_date = st.sidebar.date_input("市場看板基準日期", value=datetime.today())
+# 市場看板基準日期：標題與選擇框置於同一行
+date_col1, date_col2 = st.sidebar.columns([1, 1], vertical_alignment="center")
+with date_col1:
+    st.markdown("**市場看板基準日期**")
+with date_col2:
+    selected_date = st.date_input("市場看板基準日期", value=datetime.today(), label_visibility="collapsed")
+
 target_date_str = selected_date.strftime("%Y-%m-%d")
 
 macro_data = get_macro_data(target_date_str)
@@ -313,7 +319,6 @@ cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
 for name, info in macro_data.items():
     with cols[idx % 6]:
-        # 使用 delta_color="inverse" 將預設配色反轉，搭配強效 CSS 全面鎖定：上漲為紅，下跌為綠
         st.metric(label=name, value=info["val"], delta=info["change"], delta_color="inverse")
     idx += 1
 
@@ -346,7 +351,7 @@ if btn_analyze_stock:
         chip_df = get_stock_chip(stock_id, target_date_str)
         with st.spinner(f"🤖 AI 正在分析 {stock_id}..."):
             try:
-                report = ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_df, capital, target_date_str)
+                report = ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data=chip_df, capital=capital, target_date_str=target_date_str)
                 st.subheader(f"🤖 Gemini AI 個股詳細分析報告 ({stock_id})")
                 st.markdown(report)
             except Exception as e:
