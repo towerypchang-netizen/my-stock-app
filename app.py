@@ -202,8 +202,8 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 生成 AI 精選股票（支援價格與族群獨立或合併篩選）
-def generate_daily_picks(macro_data, sector_data, min_price, max_price, selected_sector, target_date_str):
+# 生成 AI 精選股票（支援自定義族群與價格區間自由組合）
+def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0:
         cond_list.append(f"最低不得低於 {min_price} 元")
@@ -212,10 +212,10 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, selected
         
     price_limit_str = f"【硬性股價區間限制】：{', '.join(cond_list)}" if cond_list else "股價不限"
     
-    if selected_sector != "全部族群 (AI 自動推薦強勢主流)":
-        sector_limit_str = f"【指定產業族群限制】：必須嚴格從「{selected_sector}」中挑選個股"
+    if custom_sector and custom_sector.strip() != "":
+        sector_limit_str = f"【指定產業或題材族群限制】：必須嚴格從「{custom_sector.strip()}」相關個股中挑選（例如次產業、細分板塊或熱門概念股）"
     else:
-        sector_limit_str = "【指定產業族群限制】：由 AI 結合大盤與強勢族群自主推薦當紅主流"
+        sector_limit_str = "【指定產業或題材族群限制】：由 AI 結合大盤與強勢族群自主推薦當紅主流"
 
     prompt_select = (
         "請作為台股選股分析師，基準日期：" + str(target_date_str) + "。\n"
@@ -223,9 +223,9 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, selected
         "族群條件：" + sector_limit_str + "。\n"
         "大盤：" + str(macro_data) + "\n"
         "強勢族群參考：" + str(sector_data) + "\n"
-        "請挑選 6 檔符合上述條件（若指定族群則必須全數屬於該族群，若指定股價則必須盡可能符合）的台股個股，並評估波段期間。\n"
+        "請挑選 6 檔符合上述條件的台股個股，並評估波段期間。\n"
         "請嚴格只回傳 JSON 陣列，格式如：\n"
-        '[{"上漲率預估":"75%","族群":"半導體","股名":"台積電","股號":"2330","波段期間":"5-10天"}]\n'
+        '[{"上漲率預估":"75%","族群":"半導體/記憶體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
         "不要包含任何Markdown標記。"
     )
     res_raw = call_gemini_with_retry(prompt_select)
@@ -319,31 +319,19 @@ sector_data = get_taiwan_sector_performance(target_date_str)
 
 st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲率最高前三檔")
 
-# 新增族群選擇下拉式選單
-st.sidebar.markdown("**指定篩選族群**")
-selected_sector = st.sidebar.selectbox(
-    "選擇族群",
-    [
-        "全部族群 (AI 自動推薦強勢主流)",
-        "半導體業",
-        "電腦及週邊設備業",
-        "電子零組件業",
-        "金融保險業",
-        "生技醫療業",
-        "航運業",
-        "通訊網路業",
-        "光電業",
-        "電機機械業",
-        "汽車工業",
-        "化學工業",
-        "鋼鐵工業",
-        "塑膠工業",
-        "食品業",
-        "紡織纖維業",
-        "營建業",
-        "貿易百貨業"
-    ],
+# 自由輸入族群或題材欄位，並附上提示說明
+st.sidebar.markdown("**指定產業族群或題材 (選填)**")
+custom_sector = st.sidebar.text_input(
+    "輸入族群或題材",
+    value="",
+    placeholder="例如: 記憶體、PCB、半導體、重電...",
     label_visibility="collapsed"
+)
+st.sidebar.markdown(
+    "<div style='font-size: 0.75rem; color: #888888; margin-top: -6px; margin-bottom: 8px;'>"
+    "💡 可輸入大類（如半導體）或細分題材（如記憶體、PCB、CPO、機器人）"
+    "</div>",
+    unsafe_allow_html=True
 )
 
 st.sidebar.markdown("**設定股價區間 (新台幣元)**")
@@ -357,9 +345,9 @@ min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
 if st.sidebar.button("🚀 產生今日AI預估上漲率最高前三檔", type="primary", use_container_width=True):
-    with st.spinner("🤖 AI 正在結合族群與即時股價掃描..."):
+    with st.spinner("🤖 AI 正在結合自定義族群與即時股價掃描..."):
         try:
-            picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, selected_sector, target_date_str)
+            picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
             st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
             st.sidebar.success("更新成功！")
