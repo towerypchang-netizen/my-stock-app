@@ -62,12 +62,7 @@ def clean_key(raw):
     return k
 
 FINMIND_TOKEN = clean_key(st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", "")))
-
-keys_pool = [
-    clean_key(st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))),
-    clean_key(st.secrets.get("GEMINI_API_KEY_2", os.getenv("GEMINI_API_KEY_2", "")))
-]
-API_KEYS = [k for k in keys_pool if k]
+GEMINI_API_KEY = clean_key(st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", "")))
 
 # 取得台灣標準時間 (UTC+8)
 def get_taiwan_now():
@@ -87,39 +82,29 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-# 自動吸收 503 高負載與 429 流量限制的防護函式
-def call_gemini_with_retry(prompt, max_retries=5):
-    if not API_KEYS:
+# API 呼叫函式（付費版單一金鑰高穩定調用）
+def call_gemini_with_retry(prompt, max_retries=3):
+    if not GEMINI_API_KEY:
         raise ValueError("Secrets 中未找到有效的 GEMINI_API_KEY，請確認設定。")
         
     target_model = "gemini-3.6-flash"
     last_err = ""
     
     for attempt in range(max_retries):
-        for idx, key in enumerate(API_KEYS):
-            try:
-                client = genai.Client(api_key=key)
-                response = client.models.generate_content(
-                    model=target_model,
-                    contents=prompt,
-                )
-                if response and response.text:
-                    return response.text
-            except Exception as e:
-                err_msg = str(e)
-                last_err = f"Key #{idx+1} (嘗試 {attempt+1}/{max_retries}) 失敗: {err_msg}"
-                if "503" in err_msg or "UNAVAILABLE" in err_msg:
-                    # 遭遇伺服器繁忙，靜置 3 秒後自動再試
-                    time.sleep(3)
-                    continue
-                elif "429" in err_msg or "quota" in err_msg.lower():
-                    time.sleep(2)
-                    continue
-                else:
-                    time.sleep(1)
-                    continue
+        try:
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            response = client.models.generate_content(
+                model=target_model,
+                contents=prompt,
+            )
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            err_msg = str(e)
+            last_err = f"嘗試 {attempt+1}/{max_retries} 失敗: {err_msg}"
+            time.sleep(2)
 
-    raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]，目前 Google 伺服器負載極高，請等候約 10 秒後重試。")
+    raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]，請稍後重試。")
 
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
@@ -279,7 +264,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, target_d
         
     return final_results
 
-# 生成詳細報告
+# 生成詳細報告（加入頂端精闢結論與專業提示詞）
 def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capital, target_date_str):
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
     real_price = get_realtime_tw_price(stock_id)
@@ -288,17 +273,20 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
     chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "無最新籌碼數據"
     
     prompt = (
-        "請作為華爾街 Top-Down 分析師。基準日期：" + str(target_date_str) + "。\n"
-        "個股：" + str(stock_id) + "，" + price_info_str + "，預計資金：" + capital_str + "。\n"
-        "全球宏觀：" + str(macro_data) + "\n"
-        "台股族群：" + str(sector_data) + "\n"
-        "籌碼：" + chip_str + "\n"
-        "請輸出繁體中文詳細報告：\n"
+        "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期：" + str(target_date_str) + "。\n"
+        "分析標的：" + str(stock_id) + "，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
+        "全球宏觀背景：" + str(macro_data) + "\n"
+        "台股產業族群表現：" + str(sector_data) + "\n"
+        "近期三大法人籌碼細節：" + chip_str + "\n\n"
+        "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
+        "=== 第一部分：【實戰結論摘要】（必須放置於報告最前端，內容以簡單明瞭為主） ===\n"
+        "請直接給出一至兩段精闢的操盤結論。例如判斷是否處於低檔盤整、是否連續上漲不宜追高，或是明確給出建議買進價、賣出價與波段操作天數。\n\n"
+        "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結\n"
         "2. 台股主流產業與資金流向研判\n"
-        "3. 個股籌碼與連動分析\n"
+        "3. 籌碼面與法人動向連動分析\n"
         "4. 進退場價位規劃、預估波段操作天數與部位建議\n"
-        "5. 未來1週上漲機率估算"
+        "5. 未來1週上漲機率估算與風險回報評估"
     )
     return call_gemini_with_retry(prompt)
 
@@ -323,7 +311,7 @@ st.sidebar.markdown(
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
-st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 精選股票預測")
+st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲率最高前三檔")
 
 st.sidebar.markdown("**設定股價區間 (新台幣元)**")
 p_col1, p_col2 = st.sidebar.columns(2)
@@ -335,7 +323,8 @@ with p_col2:
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
-if st.sidebar.button("🚀 產生當日 AI 精選股票", use_container_width=True):
+# 將按鈕文字修改為需求 1，並加上 type="primary" 與個股分析按鈕顏色一致
+if st.sidebar.button("🚀 產生今日AI預估上漲率最高前三檔", type="primary", use_container_width=True):
     with st.spinner("🤖 AI 正在掃描族群與即時股價..."):
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, target_date_str)
