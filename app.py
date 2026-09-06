@@ -270,7 +270,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         
     return final_results
 
-# 生成詳細報告（加入頂端精闢結論與專業提示詞）
+# 生成詳細報告（調整 Prompt 結構順序：結論 -> 勝率風報比 -> 具體操作指引 -> 深度分析）
 def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capital, target_date_str):
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
     real_price = get_realtime_tw_price(stock_id)
@@ -285,14 +285,15 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
         "台股產業族群表現：" + str(sector_data) + "\n"
         "近期三大法人籌碼細節：" + chip_str + "\n\n"
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
-        "=== 第一部分：【實戰結論摘要】（必須放置於報告最前端，內容以簡單明瞭為主） ===\n"
-        "請直接給出一至兩段精闢的操盤結論。例如判斷是否處於低檔盤整、是否連續上漲不宜追高，或是明確給出建議買進價、賣出價與波段操作天數。\n\n"
+        "=== 第一部分：【實戰結論摘要】 ===\n"
+        "1. 操盤實戰結論：請直接給出一至兩段精闢的操盤結論（例如判斷是否處於低檔盤整、是否連續上漲不宜追高，以簡單明瞭為主）。\n"
+        "2. 未來 1 週上漲機率估算與風險回報評估：明確估算上漲機率百分比、潛在獲利與最大風險，並計算風報比 (R/R Ratio) 予以研判推薦度。\n"
+        "3. 具體操作指引：條列出明確的建議買進價位、波段停利目標價、嚴格停損價位、預估波段操作天數與資金部位建議。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結\n"
         "2. 台股主流產業與資金流向研判\n"
         "3. 籌碼面與法人動向連動分析\n"
-        "4. 進退場價位規劃、預估波段操作天數與部位建議\n"
-        "5. 未來1週上漲機率估算與風險回報評估"
+        "4. 標的技術型態與進退場深層邏輯解析"
     )
     return call_gemini_with_retry(prompt)
 
