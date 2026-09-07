@@ -202,25 +202,26 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 抓取歷史月營收資料（同時支援 data_id 與本地欄位保險防護）
+# 抓取歷史月營收資料（改用 yfinance 財務報表或強固版 FinMind 請求）
 @st.cache_data(ttl=1800)
 def get_stock_revenue(stock_id):
-    url = "https://api.finmindtrade.com/api/v4/data"
-    parameter = {
-        "dataset": "TaiwanStockMonthRevenue",
-        "data_id": stock_id,
-        "start_date": "2020-01-01",
-        "token": FINMIND_TOKEN,
-    }
+    # 優先嘗試透過 yfinance 取得季報/財務摘要或透過 FinMind 穩健查詢
     try:
+        url = "https://api.finmindtrade.com/api/v4/data"
+        parameter = {
+            "dataset": "TaiwanStockMonthRevenue",
+            "data_id": stock_id,
+            "start_date": "2023-01-01",
+            "token": FINMIND_TOKEN,
+        }
         resp = requests.get(url, params=parameter)
         data = resp.json()
         if data.get("msg") == "success" and len(data.get("data", [])) > 0:
             df = pd.DataFrame(data["data"])
-            # 確保欄位名稱相容（FinMind 月營收回傳欄位為 stock_id）
-            id_col = 'stock_id' if 'stock_id' in df.columns else ('data_id' if 'data_id' in df.columns else None)
-            if id_col:
-                df = df[df[id_col].astype(str) == str(stock_id)]
+            if 'stock_id' in df.columns:
+                df = df[df['stock_id'].astype(str) == str(stock_id)]
+            elif 'data_id' in df.columns:
+                df = df[df['data_id'].astype(str) == str(stock_id)]
             
             if not df.empty:
                 df = df[['date', 'revenue', 'revenue_year_on_year', 'revenue_month_on_month']]
@@ -231,6 +232,20 @@ def get_stock_revenue(stock_id):
                 return df.sort_values(by="月份", ascending=False)
     except Exception:
         pass
+
+    # 備用方案：若 FinMind 逾時或無回應，改用 yfinance 抓取基本財務數據
+    try:
+        ticker_symbol = stock_id + ".TW"
+        ticker = yf.Ticker(ticker_symbol)
+        financials = ticker.financials
+        if financials is not None and not financials.empty:
+            # 轉換 yfinance 財報格式供參考
+            fin_df = financials.T.reset_index()
+            fin_df.columns = [str(c) for c in fin_df.columns]
+            return fin_df.head(8)
+    except Exception:
+        pass
+
     return pd.DataFrame()
 
 # 生成 AI 精選股票
@@ -450,19 +465,24 @@ if btn_query_rev:
     else:
         start_str = rev_start.strftime("%Y-%m-%d")
         end_str = rev_end.strftime("%Y-%m-%d")
-        with st.spinner(f"📂 正在載入 {rev_stock_id} 歷史月營收資料..."):
+        with st.spinner(f"📂 正在載入 {rev_stock_id} 歷史營收資料..."):
             rev_df = get_stock_revenue(rev_stock_id)
             if not rev_df.empty:
-                mask = (rev_df["月份"] >= start_str) & (rev_df["月份"] <= end_str)
-                filtered_df = rev_df.loc[mask]
-                
-                if not filtered_df.empty:
-                    st.markdown(f"### 📂 標的 {rev_stock_id} 歷史月營收與成長率（YoY / MoM） [{start_str} ~ {end_str}]")
-                    st.dataframe(filtered_df, hide_index=True, use_container_width=True)
+                if "月份" in rev_df.columns:
+                    mask = (rev_df["月份"] >= start_str) & (rev_df["月份"] <= end_str)
+                    filtered_df = rev_df.loc[mask]
+                    if not filtered_df.empty:
+                        st.markdown(f"### 📂 標的 {rev_stock_id} 歷史月營收與成長率（YoY / MoM） [{start_str} ~ {end_str}]")
+                        st.dataframe(filtered_df, hide_index=True, use_container_width=True)
+                    else:
+                        st.warning(f"取得代碼 {rev_stock_id} 營收成功，但在指定區間內無符合的月份資料，呈現完整近況如下：")
+                        st.dataframe(rev_df.head(12), hide_index=True, use_container_width=True)
                 else:
-                    st.warning(f"取得代碼 {rev_stock_id} 營收成功，但在指定區間內無符合的月份資料，請放寬日期範圍。")
+                    # 若採用 yfinance 備援財報格式
+                    st.markdown(f"### 📂 標的 {rev_stock_id} 歷史財務摘要數據 (透過 Yahoo Finance 備援)")
+                    st.dataframe(rev_df, use_container_width=True)
             else:
-                st.error(f"無法取得代碼 {rev_stock_id} 的營收資料，請確認代碼是否正確。")
+                st.error(f"無法取得代碼 {rev_stock_id} 的營收資料，請確認代碼是否正確或 FinMind Token 是否有效。")
 
 st.divider()
 
