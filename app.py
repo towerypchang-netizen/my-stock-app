@@ -202,13 +202,14 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 抓取完整歷史月營收並在本地進行自訂區間過濾（最高穩定度）
+# 抓取歷史月營收資料（已補上 start_date 參數以確保 API 正常回傳）
 @st.cache_data(ttl=1800)
 def get_stock_revenue(stock_id):
     url = "https://api.finmindtrade.com/api/v4/data"
     parameter = {
         "dataset": "TaiwanStockMonthRevenue",
         "data_id": stock_id,
+        "start_date": "2020-01-01",  # FinMind 必須帶入 start_date 才會正確回傳資料
         "token": FINMIND_TOKEN,
     }
     try:
@@ -391,7 +392,7 @@ capital = capital_input if capital_input is not None else 0
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
 # -------------------------------------------------------------
-# 左側欄位下方：歷史月營收基本面快篩（具備自訂區間與統一按鈕風格）
+# 左側欄位下方：歷史月營收基本面快篩
 # -------------------------------------------------------------
 st.sidebar.divider()
 st.sidebar.markdown("### 📋 歷史月營收基本面快篩")
@@ -446,7 +447,6 @@ if btn_query_rev:
         with st.spinner(f"📂 正在載入 {rev_stock_id} 歷史月營收資料..."):
             rev_df = get_stock_revenue(rev_stock_id)
             if not rev_df.empty:
-                # 在本地端進行區間過濾，確保 100% 抓得到且符合自訂日期
                 mask = (rev_df["月份"] >= start_str) & (rev_df["月份"] <= end_str)
                 filtered_df = rev_df.loc[mask]
                 
