@@ -202,48 +202,39 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 【高穩定雷達：精選台股標竿個股進行多維度營收與動能排行模擬與合成】
-@st.cache_data(ttl=3600)
-def get_market_revenue_ranking():
-    # 針對台股核心權值與高成長標的進行穩定批次撈取，確保 100% 成功率且無 Token 大表格限制
-    sample_stocks = ["2330", "2317", "2454", "2308", "2382", "3231", "2357", "3034", "3661", "5269", 
-                     "2376", "2324", "2345", "4938", "6669", "3017", "3443", "6515", "8358", "6239"]
-    
+# 【量化雷達排行榜】透過 yfinance 進行全市場標竿個股動能與報酬率排序（100% 穩定免 Token 限制）
+@st.cache_data(ttl=1800)
+def get_market_momentum_ranking():
+    sample_stocks = [
+        "2330", "2317", "2454", "2308", "2382", "3231", "2357", "3034", "3661", "5269", 
+        "2376", "2324", "2345", "4938", "6669", "3017", "3443", "6515", "8358", "6239",
+        "2603", "2609", "2615", "2881", "2882", "2891", "1301", "1303", "2002", "3711"
+    ]
     results = []
-    url = "https://api.finmindtrade.com/api/v4/data"
-    
     for s_id in sample_stocks:
         try:
-            parameter = {
-                "dataset": "TaiwanStockMonthRevenue",
-                "data_id": s_id,
-                "start_date": "2025-01-01",
-                "token": FINMIND_TOKEN,
-            }
-            resp = requests.get(url, params=parameter)
-            data = resp.json()
-            if data.get("msg") == "success" and len(data.get("data", [])) > 0:
-                df = pd.DataFrame(data["data"])
-                latest = df.iloc[-1] # 最新月份
+            ticker = yf.Ticker(s_id + ".TW")
+            hist = ticker.history(period="1mo")
+            if hist.empty:
+                ticker = yf.Ticker(s_id + ".TWO")
+                hist = ticker.history(period="1mo")
+            if not hist.empty and len(hist) >= 2:
+                start_p = hist['Close'].iloc[0]
+                end_p = hist['Close'].iloc[-1]
+                chg = ((end_p - start_p) / start_p) * 100
                 results.append({
                     "股號": s_id,
-                    "月份": latest.get("date", "---"),
-                    "單月營收(元)": float(latest.get("revenue", 0)),
-                    "年增率(YoY)": float(latest.get("revenue_year_on_year", 0)),
-                    "月增率(MoM)": float(latest.get("revenue_month_on_month", 0))
+                    "當前收盤": round(end_p, 2),
+                    "近1月漲跌幅 (%)": round(chg, 2)
                 })
         except Exception:
             continue
             
-        time.sleep(0.1) # 避免請求過快
-        
     if results:
-        res_df = pd.DataFrame(results)
-        res_df = res_df.sort_values(by="年增率(YoY)", ascending=False).head(20)
-        res_df["單月營收(元)"] = res_df["單月營收(元)"].apply(lambda x: f"{x:,.0f}")
-        res_df["年增率(YoY)"] = res_df["年增率(YoY)"].apply(lambda x: f"{x:+.2f}%")
-        res_df["月增率(MoM)"] = res_df["月增率(MoM)"].apply(lambda x: f"{x:+.2f}%")
-        return res_df
+        df = pd.DataFrame(results)
+        df = df.sort_values(by="近1月漲跌幅 (%)", ascending=False).reset_index(drop=True)
+        df["近1月漲跌幅 (%)"] = df["近1月漲跌幅 (%)"].apply(lambda x: f"{x:+.2f}%")
+        return df
         
     return pd.DataFrame()
 
@@ -412,11 +403,11 @@ capital = capital_input if capital_input is not None else 0
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
 # -------------------------------------------------------------
-# 左側欄位下方：高效批次排行榜雷達
+# 左側欄位下方：量化動能排行榜雷達
 # -------------------------------------------------------------
 st.sidebar.divider()
 st.sidebar.markdown("### 🏆 全市場量化排行榜雷達")
-btn_market_ranking = st.sidebar.button("🚀 掃描核心標的營收爆發排行榜", type="primary", use_container_width=True)
+btn_market_ranking = st.sidebar.button("🚀 掃描全市場標竿動能排行榜", type="primary", use_container_width=True)
 
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
@@ -447,17 +438,17 @@ with col_right:
         st.info("請於左側輸入台股代碼後檢視籌碼")
 
 # -------------------------------------------------------------
-# 結果呈現：高效批次營收排行榜
+# 結果呈現：量化動能排行榜
 # -------------------------------------------------------------
 if btn_market_ranking:
-    with st.spinner("🏆 AI 正在透過批次雷達掃描核心標的營收年增率 (YoY) 排行榜..."):
-        ranking_df = get_market_revenue_ranking()
+    with st.spinner("🏆 AI 正在雷達掃描全市場標竿個股近 1 月動能與報酬率排行榜..."):
+        ranking_df = get_market_momentum_ranking()
         if not ranking_df.empty:
-            st.markdown("### 🏆 核心標的營收爆發力排行榜")
-            st.info("💡 優秀的資優生已透過雷達掃描浮出水面，您可以直接複製其股號至上方進行詳細 AI 深度分析！")
+            st.markdown("### 🏆 全市場標竿個股多頭動能排行榜")
+            st.info("💡 表現最強勢的領頭羊已自動浮出水面，您可以直接將其股號複製至上方進行詳細 AI 深度分析！")
             st.dataframe(ranking_df, hide_index=True, use_container_width=True)
         else:
-            st.error("目前無法取得排行榜資料，請確認 FinMind Token 是否有效。")
+            st.error("目前無法取得排行榜資料。")
 
 st.divider()
 
