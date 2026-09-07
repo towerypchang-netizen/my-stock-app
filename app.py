@@ -202,39 +202,92 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 【量化雷達排行榜】透過 yfinance 進行全市場標竿個股動能與報酬率排序（100% 穩定免 Token 限制）
-@st.cache_data(ttl=1800)
-def get_market_momentum_ranking():
-    sample_stocks = [
-        "2330", "2317", "2454", "2308", "2382", "3231", "2357", "3034", "3661", "5269", 
-        "2376", "2324", "2345", "4938", "6669", "3017", "3443", "6515", "8358", "6239",
-        "2603", "2609", "2615", "2881", "2882", "2891", "1301", "1303", "2002", "3711"
-    ]
+# -------------------------------------------------------------
+# 【三大維度量化排行榜核心邏輯】
+# -------------------------------------------------------------
+sample_pool = [
+    "2330", "2317", "2454", "2308", "2382", "3231", "2357", "3034", "3661", "5269", 
+    "2376", "2324", "2345", "4938", "6669", "3017", "3443", "6515", "8358", "6239",
+    "2603", "2609", "2615", "2881", "2882", "2891", "1301", "1303", "2002", "3711"
+]
+
+@st.cache_data(ttl=3600)
+def get_ranking_data(ranking_type):
     results = []
-    for s_id in sample_stocks:
+    url = "https://api.finmindtrade.com/api/v4/data"
+    
+    for s_id in sample_pool:
         try:
-            ticker = yf.Ticker(s_id + ".TW")
-            hist = ticker.history(period="1mo")
-            if hist.empty:
-                ticker = yf.Ticker(s_id + ".TWO")
-                hist = ticker.history(period="1mo")
-            if not hist.empty and len(hist) >= 2:
-                start_p = hist['Close'].iloc[0]
-                end_p = hist['Close'].iloc[-1]
-                chg = ((end_p - start_p) / start_p) * 100
-                results.append({
-                    "股號": s_id,
-                    "當前收盤": round(end_p, 2),
-                    "近1月漲跌幅 (%)": round(chg, 2)
-                })
+            if ranking_type == "營收爆發排名":
+                param = {
+                    "dataset": "TaiwanStockMonthRevenue",
+                    "data_id": s_id,
+                    "start_date": "2025-01-01",
+                    "token": FINMIND_TOKEN,
+                }
+                resp = requests.get(url, params=param)
+                data = resp.json()
+                if data.get("msg") == "success" and len(data.get("data", [])) > 0:
+                    latest = data["data"][-1]
+                    results.append({
+                        "股號": s_id,
+                        "月份": latest.get("date", "---"),
+                        "單月營收(元)": float(latest.get("revenue", 0)),
+                        "營收年增率 (YoY)": float(latest.get("revenue_year_on_year", 0))
+                    })
+                    
+            elif ranking_type == "毛利率成長排名":
+                # 透過 yfinance 取得毛利率表現
+                ticker = yf.Ticker(s_id + ".TW")
+                fin = ticker.financials
+                if fin is not None and not fin.empty:
+                    # 嘗試抓取 Gross Profit 與 Total Revenue 計算毛利率
+                    if "Gross Profit" in fin.index and "Total Revenue" in fin.index:
+                        gp = fin.loc["Gross Profit"].iloc[0]
+                        rev = fin.loc["Total Revenue"].iloc[0]
+                        gm = (gp / rev) * 100 if rev > 0 else 0
+                        results.append({
+                            "股號": s_id,
+                            "最新季別": str(fin.columns[0]).split()[0],
+                            "估算毛利率 (%)": round(gm, 2)
+                        })
+                        
+            elif ranking_type == "法人連續買超金額排名":
+                # 透過 FinMind 計算近期三大法人淨買超張數/金額
+                start_d = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+                param = {
+                    "dataset": "TaiwanStockInstitutionalInvestorsBuySell",
+                    "data_id": s_id,
+                    "start_date": start_d,
+                    "token": FINMIND_TOKEN,
+                }
+                resp = requests.get(url, params=param)
+                data = resp.json()
+                if data.get("msg") == "success" and len(data.get("data", [])) > 0:
+                    df_chip = pd.DataFrame(data["data"])
+                    df_chip['net'] = df_chip['buy'].astype(float) - df_chip['sell'].astype(float)
+                    total_net = df_chip['net'].sum()
+                    results.append({
+                        "股號": s_id,
+                        "近1週法人淨買超 (張)": int(total_net)
+                    })
         except Exception:
             continue
-            
+        time.sleep(0.05)
+        
     if results:
-        df = pd.DataFrame(results)
-        df = df.sort_values(by="近1月漲跌幅 (%)", ascending=False).reset_index(drop=True)
-        df["近1月漲跌幅 (%)"] = df["近1月漲跌幅 (%)"].apply(lambda x: f"{x:+.2f}%")
-        return df
+        df_res = pd.DataFrame(results)
+        if ranking_type == "營收爆發排名":
+            df_res = df_res.sort_values(by="營收年增率 (YoY)", ascending=False).head(15)
+            df_res["單月營收(元)"] = df_res["單月營收(元)"].apply(lambda x: f"{x:,.0f}")
+            df_res["營收年增率 (YoY)"] = df_res["營收年增率 (YoY)"].apply(lambda x: f"{x:+.2f}%")
+        elif ranking_type == "毛利率成長排名":
+            df_res = df_res.sort_values(by="估算毛利率 (%)", ascending=False).head(15)
+            df_res["估算毛利率 (%)"] = df_res["估算毛利率 (%)"].apply(lambda x: f"{x:.2f}%")
+        elif ranking_type == "法人連續買超金額排名":
+            df_res = df_res.sort_values(by="近1週法人淨買超 (張)", ascending=False).head(15)
+            df_res["近1週法人淨買超 (張)"] = df_res["近1週法人淨買超 (張)"].apply(lambda x: f"{x:+,d} 張")
+        return df_res.reset_index(drop=True)
         
     return pd.DataFrame()
 
@@ -403,11 +456,16 @@ capital = capital_input if capital_input is not None else 0
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
 # -------------------------------------------------------------
-# 左側欄位下方：量化動能排行榜雷達
+# 左側欄位下方：三大維度量化排行榜雷達選擇器
 # -------------------------------------------------------------
 st.sidebar.divider()
-st.sidebar.markdown("### 🏆 全市場量化排行榜雷達")
-btn_market_ranking = st.sidebar.button("🚀 掃描全市場標竿動能排行榜", type="primary", use_container_width=True)
+st.sidebar.markdown("### 🏆 全市場多維度量化排行榜雷達")
+ranking_option = st.sidebar.selectbox(
+    "選擇雷達掃描維度",
+    ["營收爆發排名", "毛利率成長排名", "法人連續買超金額排名"],
+    label_visibility="collapsed"
+)
+btn_market_ranking = st.sidebar.button("🚀 執行量化雷達掃描", type="primary", use_container_width=True)
 
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
@@ -438,17 +496,17 @@ with col_right:
         st.info("請於左側輸入台股代碼後檢視籌碼")
 
 # -------------------------------------------------------------
-# 結果呈現：量化動能排行榜
+# 結果呈現：多維度量化排行榜
 # -------------------------------------------------------------
 if btn_market_ranking:
-    with st.spinner("🏆 AI 正在雷達掃描全市場標竿個股近 1 月動能與報酬率排行榜..."):
-        ranking_df = get_market_momentum_ranking()
+    with st.spinner(f"🏆 AI 雷達正在全市場同步運算 [{ranking_option}] 排行榜..."):
+        ranking_df = get_ranking_data(ranking_option)
         if not ranking_df.empty:
-            st.markdown("### 🏆 全市場標竿個股多頭動能排行榜")
-            st.info("💡 表現最強勢的領頭羊已自動浮出水面，您可以直接將其股號複製至上方進行詳細 AI 深度分析！")
+            st.markdown(f"### 🏆 全市場【{ranking_option}】排行榜 (Top 15)")
+            st.info("💡 優秀的資優生已自動浮出水面，您可以直接將其股號複製至上方進行詳細 AI 深度分析！")
             st.dataframe(ranking_df, hide_index=True, use_container_width=True)
         else:
-            st.error("目前無法取得排行榜資料。")
+            st.error("目前無法取得排行榜資料，請稍後再試。")
 
 st.divider()
 
