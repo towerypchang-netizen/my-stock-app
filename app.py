@@ -202,14 +202,14 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 抓取歷史月營收資料（已補上 start_date 參數以確保 API 正常回傳）
+# 抓取指定個股歷史月營收資料（修正 data_id 參數）
 @st.cache_data(ttl=1800)
 def get_stock_revenue(stock_id):
     url = "https://api.finmindtrade.com/api/v4/data"
     parameter = {
         "dataset": "TaiwanStockMonthRevenue",
-        "data_id": stock_id,
-        "start_date": "2020-01-01",  # FinMind 必須帶入 start_date 才會正確回傳資料
+        "data_id": stock_id,      # 修正：必須使用 data_id 指定股號
+        "start_date": "2020-01-01",
         "token": FINMIND_TOKEN,
     }
     try:
