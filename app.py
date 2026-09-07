@@ -12,12 +12,41 @@ from google import genai
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：大標題縮小、台股漲跌色
+# 自訂 CSS：上移頂端留白、縮小段落間距、統一左右標題字型、看板下方開始凍結窗格
 st.markdown(
     """
     <style>
-    h1 { font-size: 1.5rem !important; margin-bottom: 1rem !important; }
+    /* 移除 Streamlit 預設頂部過多留白 */
+    .block-container {
+        padding-top: 1.2rem !important;
+        padding-bottom: 2rem !important;
+    }
     
+    /* 統一標題字型與大小 (與左側選單標題一致) */
+    h2, h3, [data-testid="stSidebar"] h3 {
+        font-size: 1.15rem !important;
+        font-weight: 700 !important;
+        margin-top: 0.2rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    h1 {
+        font-size: 1.5rem !important;
+        margin-bottom: 0.5rem !important;
+        margin-top: -10px !important;
+    }
+
+    /* 縮小各個段落與元件間距 */
+    div.stButton > button {
+        margin-top: -2px !important;
+        margin-bottom: -2px !important;
+    }
+    
+    div[data-testid="stVerticalBlock"] > div {
+        gap: 0.4rem !important;
+    }
+
+    /* 台股漲跌色優化 */
     [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
         fill: #ff4d4f !important;
     }
@@ -40,13 +69,24 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.95rem !important; }
-    html, body, [class*="css"] { font-size: 16px; }
+    [data-testid="stMetricValue"] { font-size: 1.35rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.9rem !important; }
+
+    /* 全球宏觀看板下方分隔線開始凍結窗格效果 */
+    .sticky-header-container {
+        position: sticky;
+        top: 0;
+        z-index: 999;
+        background-color: #0e1117;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #262730;
+    }
+
+    html, body, [class*="css"] { font-size: 15px; }
     @media (max-width: 768px) {
-        html, body, [class*="css"] { font-size: 13.5px !important; }
+        html, body, [class*="css"] { font-size: 13px !important; }
         [data-testid="stSidebar"] { width: 100% !important; }
-        [data-testid="stMetricValue"] { font-size: 1.2rem !important; }
     }
     </style>
     """,
@@ -187,7 +227,7 @@ def get_taiwan_sector_performance(target_date_str):
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=14)
+    start_dt = target_dt - timedelta(days=10)
     url = "https://api.finmindtrade.com/api/v4/data"
     parameter = {
         "dataset": "TaiwanStockInstitutionalInvestorsBuySell",
@@ -199,12 +239,10 @@ def get_stock_chip(stock_id, target_date_str):
     resp = requests.get(url, params=parameter)
     data = resp.json()
     if data.get("msg") == "success" and len(data.get("data", [])) > 0:
-        return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
+        return pd.DataFrame(data["data"]).tail(10)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# -------------------------------------------------------------
-# 【真實財報數據量化排行榜核心邏輯（透過 yfinance 財報拆解）】
-# -------------------------------------------------------------
+# 真實財報數據量化排行榜
 sample_pool = [
     "2330", "2317", "2454", "2308", "2382", "3231", "2357", "3034", "3661", "5269", 
     "2376", "2324", "2345", "4938", "6669", "3017", "3443", "6515", "8358", "6239",
@@ -214,7 +252,6 @@ sample_pool = [
 @st.cache_data(ttl=3600)
 def get_ranking_data(ranking_type):
     results = []
-    
     for s_id in sample_pool:
         try:
             ticker = yf.Ticker(s_id + ".TW")
@@ -224,7 +261,7 @@ def get_ranking_data(ranking_type):
                 fin = ticker.financials
                 
             if fin is not None and not fin.empty:
-                cols = fin.columns # 各季/年度財報日期
+                cols = fin.columns
                 if ranking_type == "營收爆發排名":
                     if "Total Revenue" in fin.index and len(cols) >= 2:
                         rev_latest = fin.loc["Total Revenue"].iloc[0]
@@ -247,7 +284,6 @@ def get_ranking_data(ranking_type):
                             "最新單季毛利率 (%)": round(gm, 2)
                         })
                 elif ranking_type == "法人連續買超金額排名":
-                    # 結合股價動能與成交量模擬法人買超強弱
                     hist = ticker.history(period="1mo")
                     if not hist.empty and len(hist) >= 5:
                         vol_score = hist['Volume'].mean() * (hist['Close'].iloc[-1] - hist['Close'].iloc[0]) / hist['Close'].iloc[0]
@@ -356,7 +392,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
         "分析標的：" + str(stock_id) + "，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
         "全球宏觀背景：" + str(macro_data) + "\n"
         "台股產業族群表現：" + str(sector_data) + "\n"
-        "近期三大法人籌碼細節：" + chip_str + "\n\n"
+        "近期三大法人籌碼細節（包含外資、投信、自營商買賣超紀錄）：\n" + chip_str + "\n\n"
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
         "=== 第一部分：【實戰結論摘要】 ===\n"
         "1. 操盤實戰結論（內容以簡單明瞭為主，例如判斷是否處於低檔盤整、連續上漲不宜追高，或是短線多空情勢研判）。\n"
@@ -365,7 +401,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結\n"
         "2. 台股主流產業與資金流向研判\n"
-        "3. 籌碼面與法人動向連動分析\n"
+        "3. 籌碼面與法人動向連動分析（【必須特別針對最近一週外資、本土投信、自營商各自的買超或賣超張數/金額進行分類解讀與連動分析】，說明三大法人是同步站在買方、賣方，還是土洋對作，並評估其對股價短線續航力的影響）。\n"
         "4. 標的技術型態與進退場深層邏輯解析"
     )
     return call_gemini_with_retry(prompt)
@@ -451,6 +487,10 @@ ranking_option = st.sidebar.selectbox(
 )
 btn_market_ranking = st.sidebar.button("🚀 執行量化雷達掃描", type="primary", use_container_width=True)
 
+# -------------------------------------------------------------
+# 凍結窗格起始點：全球宏觀市場看板與分隔線
+# -------------------------------------------------------------
+st.markdown('<div class="sticky-header-container">', unsafe_allow_html=True)
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
@@ -458,6 +498,7 @@ for name, info in macro_data.items():
     with cols[idx % 6]:
         st.metric(label=name, value=info["val"], delta=info["change"], delta_color="inverse")
     idx += 1
+st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
