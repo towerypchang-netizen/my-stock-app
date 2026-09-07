@@ -202,7 +202,34 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 生成 AI 精選股票（支援自定義族群與價格區間自由組合）
+# 【新功能】抓取歷史月營收資料
+@st.cache_data(ttl=1800)
+def get_stock_revenue(stock_id):
+    start_date = (datetime.utcnow() - timedelta(days=730)).strftime("%Y-%m-%d") # 抓取近兩年
+    url = "https://api.finmindtrade.com/api/v4/data"
+    parameter = {
+        "dataset": "TaiwanStockMonthRevenue",
+        "data_id": stock_id,
+        "start_date": start_date,
+        "token": FINMIND_TOKEN,
+    }
+    try:
+        resp = requests.get(url, params=parameter)
+        data = resp.json()
+        if data.get("msg") == "success" and len(data.get("data", [])) > 0:
+            df = pd.DataFrame(data["data"])
+            # 選取需要的欄位並重新命名以方便閱讀
+            df = df[['date', 'revenue', 'revenue_year_on_year', 'revenue_month_on_month']]
+            df['revenue'] = df['revenue'].apply(lambda x: f"{x:,.0f}")
+            df['revenue_year_on_year'] = df['revenue_year_on_year'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
+            df['revenue_month_on_month'] = df['revenue_month_on_month'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
+            df.columns = ["月份", "當月營收(元)", "年增率(YoY)", "月增率(MoM)"]
+            return df.sort_values(by="月份", ascending=False).head(12) # 回傳最近 12 個月
+    except Exception:
+        pass
+    return pd.DataFrame()
+
+# 生成 AI 精選股票
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0:
@@ -270,7 +297,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         
     return final_results
 
-# 生成詳細報告（已將勝率百分比改為「多空勝率優勢與風報比評估」）
+# 生成詳細報告
 def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capital, target_date_str):
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
     real_price = get_realtime_tw_price(stock_id)
@@ -366,6 +393,14 @@ capital = capital_input if capital_input is not None else 0
 
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
+# -------------------------------------------------------------
+# 【新功能外掛】左側欄位下方：歷史月營收基本面快篩區塊
+# -------------------------------------------------------------
+st.sidebar.divider()
+st.sidebar.markdown("### 📋 歷史月營收基本面快篩")
+rev_stock_id = st.sidebar.text_input("輸入查詢營收股代", value="", placeholder="例如: 2330", key="rev_input")
+btn_query_rev = st.sidebar.button("📂 查詢近一年月營收", use_container_width=True)
+
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
@@ -393,6 +428,21 @@ with col_right:
             st.info("尚無籌碼資料或代碼錯誤")
     else:
         st.info("請於左側輸入台股代碼後檢視籌碼")
+
+# -------------------------------------------------------------
+# 【新功能結果呈現】若點擊查詢營收，會在主畫面下方展開表格
+# -------------------------------------------------------------
+if btn_query_rev:
+    if not rev_stock_id:
+        st.warning("請先在左側下方輸入要查詢營收的台股代碼！")
+    else:
+        with st.spinner(f"📂 正在載入 {rev_stock_id} 歷史月營收資料..."):
+            rev_df = get_stock_revenue(rev_stock_id)
+            if not rev_df.empty:
+                st.markdown(f"### 📂 標的 {rev_stock_id} 近期歷史月營收與成長率（YoY / MoM）")
+                st.dataframe(rev_df, hide_index=True, use_container_width=True)
+            else:
+                st.error(f"無法取得代碼 {rev_stock_id} 的營收資料，請確認代碼是否正確。")
 
 st.divider()
 
