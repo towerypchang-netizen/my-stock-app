@@ -12,13 +12,13 @@ from google import genai
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：上移頂端留白、縮小段落間距、統一左右標題字型、看板下方開始凍結窗格
+# 自訂 CSS：修正頂部標題截字問題、縮小段落間距、統一左右標題字型
 st.markdown(
     """
     <style>
-    /* 移除 Streamlit 預設頂部過多留白 */
+    /* 調整頂部留白，避免主標題被上方工具列或凍結區塊遮擋 */
     .block-container {
-        padding-top: 1.2rem !important;
+        padding-top: 2rem !important;
         padding-bottom: 2rem !important;
     }
     
@@ -32,8 +32,8 @@ st.markdown(
     
     h1 {
         font-size: 1.5rem !important;
-        margin-bottom: 0.5rem !important;
-        margin-top: -10px !important;
+        margin-bottom: 0.8rem !important;
+        line-height: 1.3 !important;
     }
 
     /* 縮小各個段落與元件間距 */
@@ -78,8 +78,8 @@ st.markdown(
         top: 0;
         z-index: 999;
         background-color: #0e1117;
-        padding-top: 5px;
-        padding-bottom: 5px;
+        padding-top: 8px;
+        padding-bottom: 8px;
         border-bottom: 1px solid #262730;
     }
 
