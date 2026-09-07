@@ -12,35 +12,17 @@ from google import genai
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# -------------------------------------------------------------
-# 【關鍵突破】：打破 Streamlit 外層 overflow 限制以實現真正凍結窗格
-# -------------------------------------------------------------
+# 自訂 CSS：確保流暢滾動、字型大小統一與適當間距
 st.markdown(
     """
     <style>
-    /* 1. 破解外層滾動限制 */
-    [data-testid="stMain"] {
-        overflow: visible !important;
-    }
+    /* 確保標準流暢滾動與舒適的內距 */
     .main .block-container {
-        padding-top: 1.5rem !important;
+        padding-top: 2rem !important;
         padding-bottom: 2rem !important;
-        overflow: visible !important;
     }
-
-    /* 2. 凍結窗格容器設定 */
-    .sticky-top-container {
-        position: -webkit-sticky !important;
-        position: sticky !important;
-        top: 0px !important;
-        z-index: 9999 !important;
-        background-color: #0e1117 !important; /* 與深色主題背景融為一體 */
-        padding-bottom: 12px !important;
-        margin-bottom: 12px !important;
-        border-bottom: 2px solid #ff4d4f !important; /* 凍結窗格紅線分割線 */
-    }
-
-    /* 3. 字型與間距微調 */
+    
+    /* 統一標題字型與大小 (與左側選單標題一致) */
     h2, h3, [data-testid="stSidebar"] h3 {
         font-size: 1.15rem !important;
         font-weight: 700 !important;
@@ -49,12 +31,13 @@ st.markdown(
     }
     
     h1 {
-        font-size: 1.4rem !important;
-        margin-bottom: 0.5rem !important;
-        margin-top: 0rem !important;
+        font-size: 1.5rem !important;
+        margin-bottom: 0.8rem !important;
         line-height: 1.3 !important;
+        margin-top: 0rem !important;
     }
 
+    /* 縮小各個段落與元件間距 */
     div.stButton > button {
         margin-top: -2px !important;
         margin-bottom: -2px !important;
@@ -64,7 +47,7 @@ st.markdown(
         gap: 0.4rem !important;
     }
 
-    /* 台股漲跌色 */
+    /* 台股漲跌色優化 */
     [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
         fill: #ff4d4f !important;
     }
@@ -414,6 +397,8 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
     return call_gemini_with_retry(prompt)
 
 # 主 UI 邏輯
+st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
+
 taiwan_now = get_taiwan_now()
 target_date_str = taiwan_now.strftime("%Y-%m-%d")
 display_date_str = taiwan_now.strftime("%Y / %m / %d")
@@ -491,10 +476,8 @@ ranking_option = st.sidebar.selectbox(
 btn_market_ranking = st.sidebar.button("🚀 執行量化雷達掃描", type="primary", use_container_width=True)
 
 # -------------------------------------------------------------
-# 【被凍結固定在頂部的看板容器】（向下滾動頁面時會固定停在上方）
+# 主畫面看板與內容
 # -------------------------------------------------------------
-st.markdown('<div class="sticky-top-container">', unsafe_allow_html=True)
-st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
@@ -502,11 +485,9 @@ for name, info in macro_data.items():
     with cols[idx % 6]:
         st.metric(label=name, value=info["val"], delta=info["change"], delta_color="inverse")
     idx += 1
-st.markdown('</div>', unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# 【下方隨捲動條上下移動的內容】
-# -------------------------------------------------------------
+st.divider()
+
 col_left, col_right = st.columns([1, 1])
 with col_left:
     st.subheader(f"📊 台股強弱勢族群 ({target_date_str})")
