@@ -202,13 +202,13 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 抓取指定個股歷史月營收資料（修正 data_id 參數）
+# 抓取歷史月營收資料（同時支援 data_id 與本地欄位保險防護）
 @st.cache_data(ttl=1800)
 def get_stock_revenue(stock_id):
     url = "https://api.finmindtrade.com/api/v4/data"
     parameter = {
         "dataset": "TaiwanStockMonthRevenue",
-        "data_id": stock_id,      # 修正：必須使用 data_id 指定股號
+        "data_id": stock_id,
         "start_date": "2020-01-01",
         "token": FINMIND_TOKEN,
     }
@@ -217,12 +217,18 @@ def get_stock_revenue(stock_id):
         data = resp.json()
         if data.get("msg") == "success" and len(data.get("data", [])) > 0:
             df = pd.DataFrame(data["data"])
-            df = df[['date', 'revenue', 'revenue_year_on_year', 'revenue_month_on_month']]
-            df['revenue'] = df['revenue'].apply(lambda x: f"{x:,.0f}")
-            df['revenue_year_on_year'] = df['revenue_year_on_year'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
-            df['revenue_month_on_month'] = df['revenue_month_on_month'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
-            df.columns = ["月份", "當月營收(元)", "年增率(YoY)", "月增率(MoM)"]
-            return df.sort_values(by="月份", ascending=False)
+            # 確保欄位名稱相容（FinMind 月營收回傳欄位為 stock_id）
+            id_col = 'stock_id' if 'stock_id' in df.columns else ('data_id' if 'data_id' in df.columns else None)
+            if id_col:
+                df = df[df[id_col].astype(str) == str(stock_id)]
+            
+            if not df.empty:
+                df = df[['date', 'revenue', 'revenue_year_on_year', 'revenue_month_on_month']]
+                df['revenue'] = df['revenue'].apply(lambda x: f"{x:,.0f}")
+                df['revenue_year_on_year'] = df['revenue_year_on_year'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
+                df['revenue_month_on_month'] = df['revenue_month_on_month'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
+                df.columns = ["月份", "當月營收(元)", "年增率(YoY)", "月增率(MoM)"]
+                return df.sort_values(by="月份", ascending=False)
     except Exception:
         pass
     return pd.DataFrame()
