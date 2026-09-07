@@ -12,13 +12,13 @@ from google import genai
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：修正頂部標題截字問題、縮小段落間距、統一左右標題字型
+# 自訂 CSS：修正凍結窗格效果、將主標題與宏觀看板完美釘選在頂端
 st.markdown(
     """
     <style>
-    /* 調整頂部留白，避免主標題被上方工具列或凍結區塊遮擋 */
+    /* 移除 Streamlit 預設頂部過多留白 */
     .block-container {
-        padding-top: 2rem !important;
+        padding-top: 1rem !important;
         padding-bottom: 2rem !important;
     }
     
@@ -31,9 +31,9 @@ st.markdown(
     }
     
     h1 {
-        font-size: 1.5rem !important;
-        margin-bottom: 0.8rem !important;
-        line-height: 1.3 !important;
+        font-size: 1.4rem !important;
+        margin-bottom: 0.4rem !important;
+        margin-top: 0rem !important;
     }
 
     /* 縮小各個段落與元件間距 */
@@ -69,18 +69,18 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    [data-testid="stMetricValue"] { font-size: 1.35rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.9rem !important; }
+    [data-testid="stMetricValue"] { font-size: 1.3rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.85rem !important; }
 
-    /* 全球宏觀看板下方分隔線開始凍結窗格效果 */
-    .sticky-header-container {
+    /* 【精準凍結窗格區塊】：將主標題與全球宏觀看板釘選在畫面最上方 */
+    .sticky-macro-header {
         position: sticky;
-        top: 0;
-        z-index: 999;
+        top: 0px;
+        z-index: 99999;
         background-color: #0e1117;
-        padding-top: 8px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid #262730;
+        padding-top: 10px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #ff4d4f; /* 紅線標記凍結交界處 */
     }
 
     html, body, [class*="css"] { font-size: 15px; }
@@ -407,8 +407,6 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
     return call_gemini_with_retry(prompt)
 
 # 主 UI 邏輯
-st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
-
 taiwan_now = get_taiwan_now()
 target_date_str = taiwan_now.strftime("%Y-%m-%d")
 display_date_str = taiwan_now.strftime("%Y / %m / %d")
@@ -488,9 +486,10 @@ ranking_option = st.sidebar.selectbox(
 btn_market_ranking = st.sidebar.button("🚀 執行量化雷達掃描", type="primary", use_container_width=True)
 
 # -------------------------------------------------------------
-# 凍結窗格起始點：全球宏觀市場看板與分隔線
+# 【凍結窗格區塊】：將主標題與全球宏觀市場看板包在同一個釘選容器中
 # -------------------------------------------------------------
-st.markdown('<div class="sticky-header-container">', unsafe_allow_html=True)
+st.markdown('<div class="sticky-macro-header">', unsafe_allow_html=True)
+st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
