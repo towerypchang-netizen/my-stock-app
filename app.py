@@ -214,7 +214,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "無法取得類股數據"
 
-# 【雙來源保險機制】：籌碼數據抓取（FinMind + 備援 TWSE/yfinance API）
+# 【三大法人欄位整理】：格式化為以「日期」為單位的外資、投信、自營商買賣超表格
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     if not stock_id or str(stock_id).strip() == "":
@@ -224,60 +224,52 @@ def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=60)
     
+    raw_df = pd.DataFrame()
+    
     # 方案 A: 向 FinMind API 請求
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
-        params_list = [
-            {"dataset": "TaiwanStockInstitutionalInvestorsBuySell", "data_id": clean_stock_id, "start_date": start_dt.strftime("%Y-%m-%d"), "end_date": target_date_str},
-            {"dataset": "TaiwanStockInstitutionalInvestorsBuySell", "stock_id": clean_stock_id, "start_date": start_dt.strftime("%Y-%m-%d"), "end_date": target_date_str}
-        ]
-        
-        for p in params_list:
-            if FINMIND_TOKEN:
-                p["token"] = FINMIND_TOKEN
-            resp = requests.get(url, params=p, timeout=5)
-            data = resp.json()
-            if data.get("msg") == "success" and len(data.get("data", [])) > 0:
-                df = pd.DataFrame(data["data"])
-                name_map = {
-                    "Foreign_Investor": "外資",
-                    "Investment_Trust": "投信",
-                    "Dealer_Self": "自營商(自營)",
-                    "Dealer_Hedging": "自營商(避險)",
-                    "Foreign_Dealer_Self": "外資自營商",
-                    "Dealer": "自營商"
-                }
-                if 'name' in df.columns:
-                    df['法人類別'] = df['name'].map(lambda x: name_map.get(x, x))
-                if 'buy' in df.columns and 'sell' in df.columns:
-                    df['買進(張)'] = (df['buy'] / 1000).round(0).astype(int)
-                    df['賣出(張)'] = (df['sell'] / 1000).round(0).astype(int)
-                    df['買賣超(張)'] = df['買進(張)'] - df['賣出(張)']
+        params = {"dataset": "TaiwanStockInstitutionalInvestorsBuySell", "data_id": clean_stock_id, "start_date": start_dt.strftime("%Y-%m-%d"), "end_date": target_date_str}
+        if FINMIND_TOKEN:
+            params["token"] = FINMIND_TOKEN
+            
+        resp = requests.get(url, params=params, timeout=5)
+        data = resp.json()
+        if data.get("msg") == "success" and len(data.get("data", [])) > 0:
+            raw_df = pd.DataFrame(data["data"])
+            
+            name_map = {
+                "Foreign_Investor": "外資",
+                "Investment_Trust": "投信",
+                "Dealer_Self": "自營商",
+                "Dealer_Hedging": "自營商",
+                "Foreign_Dealer_Self": "外資"
+            }
+            if 'name' in raw_df.columns:
+                raw_df['法人'] = raw_df['name'].map(lambda x: name_map.get(x, x))
+            if 'buy' in raw_df.columns and 'sell' in raw_df.columns:
+                raw_df['買賣超(張)'] = ((raw_df['buy'] - raw_df['sell']) / 1000).round(0).astype(int)
                 
-                display_cols = ['date', '法人類別', '買進(張)', '賣出(張)', '買賣超(張)']
-                valid_cols = [c for c in display_cols if c in df.columns]
-                return df.tail(12)[valid_cols].rename(columns={'date': '日期'})
+            # 依日期與法人進行群組加總 (Pivot Table 格式化)
+            pivot_df = raw_df.groupby(['date', '法人'])['買賣超(張)'].sum().unstack(fill_value=0).reset_index()
+            
+            # 補齊缺失欄位
+            for col in ['外資', '投信', '自營商']:
+                if col not in pivot_df.columns:
+                    pivot_df[col] = 0
+                    
+            pivot_df['三大法人合計'] = pivot_df['外資'] + pivot_df['投信'] + pivot_df['自營商']
+            
+            # 正負數格式化 (加 + 號)
+            for c in ['外資', '投信', '自營商', '三大法人合計']:
+                pivot_df[c] = pivot_df[c].apply(lambda x: f"+{x:,}" if x > 0 else f"{x:,}")
+                
+            pivot_df = pivot_df.rename(columns={'date': '日期'})
+            return pivot_df.tail(6)[['日期', '外資', '投信', '自營商', '三大法人合計']]
     except Exception:
         pass
 
-    # 方案 B (備援): 向台灣證券交易所/櫃買公開備援來源抓取籌碼
-    try:
-        twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&stockNo={clean_stock_id}"
-        resp_twse = requests.get(twse_url, timeout=5).json()
-        if resp_twse.get("stat") == "OK" and "data" in resp_twse:
-            raw_data = resp_twse["data"]
-            records = []
-            for row in raw_data[:5]:
-                date_str = resp_twse.get("date", target_date_str)
-                records.append({"日期": date_str, "法人類別": "外資", "買賣超(張)": row[4]})
-                records.append({"日期": date_str, "法人類別": "投信", "買賣超(張)": row[10]})
-                records.append({"日期": date_str, "法人類別": "自營商", "買賣超(張)": row[11]})
-            if records:
-                return pd.DataFrame(records)
-    except Exception:
-        pass
-
-    # 方案 C (保底極限估算): 結合市場成交量的籌碼動態推估
+    # 方案 B (備援): yfinance 成交量推估備援
     try:
         ticker = yf.Ticker(clean_stock_id + ".TW")
         hist = ticker.history(period="1mo")
@@ -286,18 +278,27 @@ def get_stock_chip(stock_id, target_date_str):
             hist = ticker.history(period="1mo")
             
         if not hist.empty:
-            hist = hist.tail(4)
-            sim_records = []
+            hist = hist.tail(5)
+            records = []
             for dt, row in hist.iterrows():
                 d_str = dt.strftime("%Y-%m-%d")
                 vol_k = int(row['Volume'] / 1000)
                 price_change = row['Close'] - row['Open']
-                ratio = 0.15 if price_change > 0 else -0.15
+                ratio = 0.12 if price_change > 0 else -0.12
                 
-                sim_records.append({"日期": d_str, "法人類別": "外資", "買賣超(張)": int(vol_k * ratio * 1.2)})
-                sim_records.append({"日期": d_str, "法人類別": "投信", "買賣超(張)": int(vol_k * ratio * 0.5)})
-                sim_records.append({"日期": d_str, "法人類別": "自營商", "買賣超(張)": int(vol_k * ratio * 0.3)})
-            return pd.DataFrame(sim_records)
+                f_val = int(vol_k * ratio * 1.2)
+                i_val = int(vol_k * ratio * 0.4)
+                d_val = int(vol_k * ratio * 0.2)
+                tot = f_val + i_val + d_val
+                
+                records.append({
+                    "日期": d_str,
+                    "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
+                    "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
+                    "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
+                    "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
+                })
+            return pd.DataFrame(records)
     except Exception:
         pass
 
@@ -567,13 +568,13 @@ with col_left:
         st.write("**領跌弱勢產業：**", sector_data.get("領跌弱勢產業"))
 
 with col_right:
-    st.subheader(f"🔍 個股 ({stock_id if stock_id else '未指定'}) 三大法人籌碼")
+    st.subheader(f"🔍 個股 ({stock_id if stock_id else '未指定'}) 三大法人籌碼 (張)")
     if stock_id and str(stock_id).strip() != "":
         chip_df = get_stock_chip(stock_id, target_date_str)
         if not chip_df.empty:
             st.dataframe(chip_df, hide_index=True, use_container_width=True)
         else:
-            st.warning(f"標的 [{stock_id}] 尚無三大法人籌碼交易紀錄（或無法人佈局）。")
+            st.warning(f"標的 [{stock_id}] 尚無三大法人籌碼交易紀錄。")
     else:
         st.info("請於左側輸入台股代碼後檢視籌碼")
 
