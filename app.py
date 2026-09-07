@@ -16,7 +16,6 @@ st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系
 st.markdown(
     """
     <style>
-    /* 確保標準流暢滾動與舒適的內距 */
     .main .block-container {
         padding-top: 2rem !important;
         padding-bottom: 2rem !important;
@@ -37,7 +36,6 @@ st.markdown(
         margin-top: 0rem !important;
     }
 
-    /* 縮小各個段落與元件間距 */
     div.stButton > button {
         margin-top: -2px !important;
         margin-bottom: -2px !important;
@@ -139,6 +137,7 @@ def call_gemini_with_retry(prompt, max_retries=3):
 # 即時台股價格抓取
 def get_realtime_tw_price(stock_id):
     try:
+        stock_id = str(stock_id).strip()
         ticker_symbol = stock_id + ".TW"
         ticker = yf.Ticker(ticker_symbol)
         data = ticker.history(period="5d")
@@ -213,23 +212,59 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "無法取得類股數據"
 
-# 籌碼數據抓取
+# 【強化修復】：籌碼數據抓取（支援 30 天滾動搜尋、張數轉換與格式化）
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
+    if not stock_id or str(stock_id).strip() == "":
+        return pd.DataFrame()
+        
+    clean_stock_id = str(stock_id).strip()
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=10)
+    # 將查詢歷史範圍擴大至 30 天，確保能橫跨連續假期與資料更新時間差
+    start_dt = target_dt - timedelta(days=30)
+    
     url = "https://api.finmindtrade.com/api/v4/data"
     parameter = {
         "dataset": "TaiwanStockInstitutionalInvestorsBuySell",
-        "data_id": stock_id,
+        "data_id": clean_stock_id,
         "start_date": start_dt.strftime("%Y-%m-%d"),
         "end_date": target_date_str,
         "token": FINMIND_TOKEN,
     }
-    resp = requests.get(url, params=parameter)
-    data = resp.json()
-    if data.get("msg") == "success" and len(data.get("data", [])) > 0:
-        return pd.DataFrame(data["data"]).tail(10)[['date', 'name', 'buy', 'sell']]
+    
+    try:
+        resp = requests.get(url, params=parameter, timeout=8)
+        data = resp.json()
+        if data.get("msg") == "success" and len(data.get("data", [])) > 0:
+            df = pd.DataFrame(data["data"])
+            
+            # 法人名稱繁體化對應
+            name_map = {
+                "Foreign_Investor": "外資",
+                "Investment_Trust": "投信",
+                "Dealer_Self": "自營商(買賣)",
+                "Dealer_Hedging": "自營商(避險)",
+                "Foreign_Dealer_Self": "外資自營商"
+            }
+            if 'name' in df.columns:
+                df['法人類別'] = df['name'].map(lambda x: name_map.get(x, x))
+            
+            # 計算淨買賣張數 (FinMind 原始單位為股數)
+            if 'buy' in df.columns and 'sell' in df.columns:
+                df['買進(張)'] = (df['buy'] / 1000).round(0).astype(int)
+                df['賣出(張)'] = (df['sell'] / 1000).round(0).astype(int)
+                df['買賣超(張)'] = df['買進(張)'] - df['賣出(張)']
+            
+            # 整理輸出欄位
+            display_cols = ['date', '法人類別', '買進(張)', '賣出(張)', '買賣超(張)']
+            valid_cols = [c for c in display_cols if c in df.columns]
+            
+            # 取最新 12 筆籌碼紀錄（約近 3-4 個交易日三大法人細節）
+            res_df = df.tail(12)[valid_cols].rename(columns={'date': '日期'})
+            return res_df
+    except Exception:
+        pass
+        
     return pd.DataFrame()
 
 # 真實財報數據量化排行榜
@@ -497,12 +532,12 @@ with col_left:
 
 with col_right:
     st.subheader(f"🔍 個股 ({stock_id if stock_id else '未指定'}) 三大法人籌碼")
-    if stock_id:
+    if stock_id and str(stock_id).strip() != "":
         chip_df = get_stock_chip(stock_id, target_date_str)
         if not chip_df.empty:
-            st.dataframe(chip_df, use_container_width=True)
+            st.dataframe(chip_df, hide_index=True, use_container_width=True)
         else:
-            st.info("尚無籌碼資料或代碼錯誤")
+            st.warning(f"標的 [{stock_id}] 尚無三大法人籌碼交易紀錄（或無法人佈局）。")
     else:
         st.info("請於左側輸入台股代碼後檢視籌碼")
 
@@ -519,7 +554,7 @@ if btn_market_ranking:
 st.divider()
 
 if btn_analyze_stock:
-    if not stock_id:
+    if not stock_id or str(stock_id).strip() == "":
         st.warning("請先在左側欄位輸入台股代碼！")
     else:
         chip_df = get_stock_chip(stock_id, target_date_str)
