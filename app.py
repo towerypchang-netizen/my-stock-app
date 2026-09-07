@@ -202,15 +202,13 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 抓取自訂期間歷史月營收資料
+# 抓取完整歷史月營收並在本地進行自訂區間過濾（最高穩定度）
 @st.cache_data(ttl=1800)
-def get_stock_revenue(stock_id, start_date_str, end_date_str):
+def get_stock_revenue(stock_id):
     url = "https://api.finmindtrade.com/api/v4/data"
     parameter = {
         "dataset": "TaiwanStockMonthRevenue",
         "data_id": stock_id,
-        "start_date": start_date_str,
-        "end_date": end_date_str,
         "token": FINMIND_TOKEN,
     }
     try:
@@ -393,7 +391,7 @@ capital = capital_input if capital_input is not None else 0
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
 # -------------------------------------------------------------
-# 【更新後】左側欄位下方：歷史月營收基本面快篩（支援自訂期間與 primary 按鈕）
+# 左側欄位下方：歷史月營收基本面快篩（具備自訂區間與統一按鈕風格）
 # -------------------------------------------------------------
 st.sidebar.divider()
 st.sidebar.markdown("### 📋 歷史月營收基本面快篩")
@@ -437,7 +435,7 @@ with col_right:
         st.info("請於左側輸入台股代碼後檢視籌碼")
 
 # -------------------------------------------------------------
-# 【結果呈現】查詢自訂區間月營收表格
+# 結果呈現：在本地端依自訂日期區間過濾月營收
 # -------------------------------------------------------------
 if btn_query_rev:
     if not rev_stock_id:
@@ -445,13 +443,20 @@ if btn_query_rev:
     else:
         start_str = rev_start.strftime("%Y-%m-%d")
         end_str = rev_end.strftime("%Y-%m-%d")
-        with st.spinner(f"📂 正在載入 {rev_stock_id} 區間 ({start_str} ~ {end_str}) 月營收資料..."):
-            rev_df = get_stock_revenue(rev_stock_id, start_str, end_str)
+        with st.spinner(f"📂 正在載入 {rev_stock_id} 歷史月營收資料..."):
+            rev_df = get_stock_revenue(rev_stock_id)
             if not rev_df.empty:
-                st.markdown(f"### 📂 標的 {rev_stock_id} 歷史月營收與成長率（YoY / MoM）")
-                st.dataframe(rev_df, hide_index=True, use_container_width=True)
+                # 在本地端進行區間過濾，確保 100% 抓得到且符合自訂日期
+                mask = (rev_df["月份"] >= start_str) & (rev_df["月份"] <= end_str)
+                filtered_df = rev_df.loc[mask]
+                
+                if not filtered_df.empty:
+                    st.markdown(f"### 📂 標的 {rev_stock_id} 歷史月營收與成長率（YoY / MoM） [{start_str} ~ {end_str}]")
+                    st.dataframe(filtered_df, hide_index=True, use_container_width=True)
+                else:
+                    st.warning(f"取得代碼 {rev_stock_id} 營收成功，但在指定區間內無符合的月份資料，請放寬日期範圍。")
             else:
-                st.error(f"無法取得代碼 {rev_stock_id} 在指定區間的營收資料，請確認代碼與日期範圍是否正確。")
+                st.error(f"無法取得代碼 {rev_stock_id} 的營收資料，請確認代碼是否正確。")
 
 st.divider()
 
