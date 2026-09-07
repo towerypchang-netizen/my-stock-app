@@ -202,12 +202,12 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 【全新量化功能】抓取全市場最新月份營收排行榜
+# 【強固版全市場營收排行榜】自動擴大回溯天數確保 100% 抓到可用資料
 @st.cache_data(ttl=3600)
 def get_market_revenue_ranking():
     url = "https://api.finmindtrade.com/api/v4/data"
-    # 抓取最近 45 天內的月營收資料來進行全市場排序
-    start_date = (datetime.utcnow() - timedelta(days=45)).strftime("%Y-%m-%d")
+    # 將回溯天數拉長至 90 天，確保絕對能抓到最新已公布的完整月份營收
+    start_date = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
     parameter = {
         "dataset": "TaiwanStockMonthRevenue",
         "start_date": start_date,
@@ -218,19 +218,17 @@ def get_market_revenue_ranking():
         data = resp.json()
         if data.get("msg") == "success" and len(data.get("data", [])) > 0:
             df = pd.DataFrame(data["data"])
-            # 取最新一個月份的資料
             latest_date = df['date'].max()
             df_latest = df[df['date'] == latest_date].copy()
             
-            # 清理與排序欄位
             df_latest['revenue_year_on_year'] = pd.to_numeric(df_latest['revenue_year_on_year'], errors='coerce')
             df_latest['revenue'] = pd.to_numeric(df_latest['revenue'], errors='coerce')
             
-            # 依年增率 (YoY) 排序取前 20 名
             top_yoy = df_latest.sort_values(by="revenue_year_on_year", ascending=False).head(20)
             top_yoy = top_yoy[['stock_id', 'date', 'revenue', 'revenue_year_on_year', 'revenue_month_on_month']]
             top_yoy['revenue'] = top_yoy['revenue'].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else "---")
             top_yoy['revenue_year_on_year'] = top_yoy['revenue_year_on_year'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
+            top_yoy['revenue_month_on_month'] = top_yoy['revenue_month_on_month'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
             top_yoy.columns = ["股號", "月份", "單月營收(元)", "年增率(YoY)", "月增率(MoM)"]
             return top_yoy
     except Exception:
@@ -402,7 +400,7 @@ capital = capital_input if capital_input is not None else 0
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
 # -------------------------------------------------------------
-# 左側欄位下方：全市場量化排行榜雷達觸發按鈕
+# 左側欄位下方：全市場量化排行榜雷達
 # -------------------------------------------------------------
 st.sidebar.divider()
 st.sidebar.markdown("### 🏆 全市場量化排行榜雷達")
@@ -437,17 +435,17 @@ with col_right:
         st.info("請於左側輸入台股代碼後檢視籌碼")
 
 # -------------------------------------------------------------
-# 【雷達區塊結果呈現】如果點擊全市場掃描，會在主畫面展示排行榜
+# 結果呈現：全市場營收排行榜
 # -------------------------------------------------------------
 if btn_market_ranking:
-    with st.spinner("🏆 AI 正在運算全市場 1700+ 家上市櫃公司最新單月營收年增率 (YoY) 排行榜..."):
+    with st.spinner("🏆 AI 正在運算全市場上市櫃公司最新單月營收年增率 (YoY) 排行榜..."):
         ranking_df = get_market_revenue_ranking()
         if not ranking_df.empty:
             st.markdown("### 🏆 全市場最新單月營收爆發力排行榜 (Top 20)")
             st.info("💡 優秀的資優生（營收連續大爆發個股）已自動浮出水面，您可以直接複製其股號至上方進行詳細 AI 深度分析！")
             st.dataframe(ranking_df, hide_index=True, use_container_width=True)
         else:
-            st.error("目前無法取得全市場營收排行榜資料，請確認 FinMind Token 是否有效。")
+            st.error("目前無法取得全市場營收排行榜資料，請確認 FinMind Token 是否有效或服務狀態。")
 
 st.divider()
 
