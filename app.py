@@ -12,15 +12,14 @@ from google import genai
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：實現頂部固定導航看板與下方捲動區塊
+# 自訂 CSS：修正頂部標題截字、精簡元件間距、統一左右標題字型
 st.markdown(
     """
     <style>
-    /* 移除 Streamlit 預設頂部留白 */
+    /* 修正頂部容器內距，確保主標題完美完整顯示 */
     .block-container {
-        padding-top: 0.5rem !important;
+        padding-top: 2.5rem !important;
         padding-bottom: 2rem !important;
-        max-width: 100% !important;
     }
     
     /* 統一標題字型與大小 (與左側選單標題一致) */
@@ -28,13 +27,14 @@ st.markdown(
         font-size: 1.15rem !important;
         font-weight: 700 !important;
         margin-top: 0.2rem !important;
-        margin-bottom: 0.4rem !important;
+        margin-bottom: 0.5rem !important;
     }
     
     h1 {
-        font-size: 1.35rem !important;
-        margin-bottom: 0.2rem !important;
-        margin-top: 0rem !important;
+        font-size: 1.5rem !important;
+        margin-bottom: 0.8rem !important;
+        line-height: 1.3 !important;
+        margin-top: -10px !important;
     }
 
     /* 縮小各個段落與元件間距 */
@@ -44,7 +44,7 @@ st.markdown(
     }
     
     div[data-testid="stVerticalBlock"] > div {
-        gap: 0.3rem !important;
+        gap: 0.4rem !important;
     }
 
     /* 台股漲跌色優化 */
@@ -70,19 +70,8 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    [data-testid="stMetricValue"] { font-size: 1.25rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.85rem !important; }
-
-    /* 【頂部固定看板容器】精準對齊您的紅線位置，向下滾動時保持不動 */
-    .fixed-top-banner {
-        position: sticky;
-        top: 0px;
-        z-index: 999999;
-        background-color: #0e1117;
-        padding-top: 8px;
-        padding-bottom: 8px;
-        border-bottom: 2px solid #ff4d4f; /* 紅線位置對齊交界處 */
-    }
+    [data-testid="stMetricValue"] { font-size: 1.35rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.9rem !important; }
 
     html, body, [class*="css"] { font-size: 15px; }
     @media (max-width: 768px) {
@@ -400,14 +389,16 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, capit
         "2. 多空勝率優勢與風報比評估（深入分析該標的當前多空交戰的勝率優勢、潛在獲利與最大風險試算、風報比 R/R Ratio 評估，以及綜合推薦星等）。\n"
         "3. 具體操作指引（包含建議買進/部署價位、波段停利目標價、嚴格停損價位、預估波段操作天數與資金部位建議）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
-        "1. Global Macroeconomic & Tech Overview (全球宏觀與科技大勢總結)\n"
-        "2. Taiwan Industry Trends & Capital Flow (台股主流產業與資金流向研判)\n"
-        "3. Institutional Investors Chip Dynamics (籌碼面與法人動向連動分析：【必須特別針對最近一週外資、本土投信、自營商各自的買超或賣超張數/金額進行分類解讀與連動分析】，說明三大法人是同步站在買方、賣方，還是土洋對作，並評估其對股價短線續航力的影響)。\n"
-        "4. Technical Patterns & Entry/Exit Logic (標的技術型態與進退場深層邏輯解析)"
+        "1. 全球宏觀與科技大勢總結\n"
+        "2. 台股主流產業與資金流向研判\n"
+        "3. 籌碼面與法人動向連動分析（【必須特別針對最近一週外資、本土投信、自營商各自的買超或賣超張數/金額進行分類解讀與連動分析】，說明三大法人是同步站在買方、賣方，還是土洋對作，並評估其對股價短線續航力的影響）。\n"
+        "4. 標的技術型態與進退場深層邏輯解析"
     )
     return call_gemini_with_retry(prompt)
 
 # 主 UI 邏輯
+st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
+
 taiwan_now = get_taiwan_now()
 target_date_str = taiwan_now.strftime("%Y-%m-%d")
 display_date_str = taiwan_now.strftime("%Y / %m / %d")
@@ -487,10 +478,8 @@ ranking_option = st.sidebar.selectbox(
 btn_market_ranking = st.sidebar.button("🚀 執行量化雷達掃描", type="primary", use_container_width=True)
 
 # -------------------------------------------------------------
-# 【頂部固定看板區塊】：精準釘選於紅線上方，向下捲動時保持不動
+# 全球宏觀市場看板
 # -------------------------------------------------------------
-st.markdown('<div class="fixed-top-banner">', unsafe_allow_html=True)
-st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
@@ -498,11 +487,9 @@ for name, info in macro_data.items():
     with cols[idx % 6]:
         st.metric(label=name, value=info["val"], delta=info["change"], delta_color="inverse")
     idx += 1
-st.markdown('</div>', unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# 【下方捲動區塊】：強勢族群、籌碼分析與 AI 報告
-# -------------------------------------------------------------
+st.divider()
+
 col_left, col_right = st.columns([1, 1])
 with col_left:
     st.subheader(f"📊 台股強弱勢族群 ({target_date_str})")
