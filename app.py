@@ -202,50 +202,39 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame(data["data"]).tail(6)[['date', 'name', 'buy', 'sell']]
     return pd.DataFrame()
 
-# 抓取歷史月營收資料（改用 yfinance 財務報表或強固版 FinMind 請求）
-@st.cache_data(ttl=1800)
-def get_stock_revenue(stock_id):
-    # 優先嘗試透過 yfinance 取得季報/財務摘要或透過 FinMind 穩健查詢
+# 【全新量化功能】抓取全市場最新月份營收排行榜
+@st.cache_data(ttl=3600)
+def get_market_revenue_ranking():
+    url = "https://api.finmindtrade.com/api/v4/data"
+    # 抓取最近 45 天內的月營收資料來進行全市場排序
+    start_date = (datetime.utcnow() - timedelta(days=45)).strftime("%Y-%m-%d")
+    parameter = {
+        "dataset": "TaiwanStockMonthRevenue",
+        "start_date": start_date,
+        "token": FINMIND_TOKEN,
+    }
     try:
-        url = "https://api.finmindtrade.com/api/v4/data"
-        parameter = {
-            "dataset": "TaiwanStockMonthRevenue",
-            "data_id": stock_id,
-            "start_date": "2023-01-01",
-            "token": FINMIND_TOKEN,
-        }
         resp = requests.get(url, params=parameter)
         data = resp.json()
         if data.get("msg") == "success" and len(data.get("data", [])) > 0:
             df = pd.DataFrame(data["data"])
-            if 'stock_id' in df.columns:
-                df = df[df['stock_id'].astype(str) == str(stock_id)]
-            elif 'data_id' in df.columns:
-                df = df[df['data_id'].astype(str) == str(stock_id)]
+            # 取最新一個月份的資料
+            latest_date = df['date'].max()
+            df_latest = df[df['date'] == latest_date].copy()
             
-            if not df.empty:
-                df = df[['date', 'revenue', 'revenue_year_on_year', 'revenue_month_on_month']]
-                df['revenue'] = df['revenue'].apply(lambda x: f"{x:,.0f}")
-                df['revenue_year_on_year'] = df['revenue_year_on_year'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
-                df['revenue_month_on_month'] = df['revenue_month_on_month'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
-                df.columns = ["月份", "當月營收(元)", "年增率(YoY)", "月增率(MoM)"]
-                return df.sort_values(by="月份", ascending=False)
+            # 清理與排序欄位
+            df_latest['revenue_year_on_year'] = pd.to_numeric(df_latest['revenue_year_on_year'], errors='coerce')
+            df_latest['revenue'] = pd.to_numeric(df_latest['revenue'], errors='coerce')
+            
+            # 依年增率 (YoY) 排序取前 20 名
+            top_yoy = df_latest.sort_values(by="revenue_year_on_year", ascending=False).head(20)
+            top_yoy = top_yoy[['stock_id', 'date', 'revenue', 'revenue_year_on_year', 'revenue_month_on_month']]
+            top_yoy['revenue'] = top_yoy['revenue'].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else "---")
+            top_yoy['revenue_year_on_year'] = top_yoy['revenue_year_on_year'].apply(lambda x: f"{x:+.2f}%" if pd.notnull(x) else "---")
+            top_yoy.columns = ["股號", "月份", "單月營收(元)", "年增率(YoY)", "月增率(MoM)"]
+            return top_yoy
     except Exception:
         pass
-
-    # 備用方案：若 FinMind 逾時或無回應，改用 yfinance 抓取基本財務數據
-    try:
-        ticker_symbol = stock_id + ".TW"
-        ticker = yf.Ticker(ticker_symbol)
-        financials = ticker.financials
-        if financials is not None and not financials.empty:
-            # 轉換 yfinance 財報格式供參考
-            fin_df = financials.T.reset_index()
-            fin_df.columns = [str(c) for c in fin_df.columns]
-            return fin_df.head(8)
-    except Exception:
-        pass
-
     return pd.DataFrame()
 
 # 生成 AI 精選股票
@@ -413,20 +402,11 @@ capital = capital_input if capital_input is not None else 0
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
 # -------------------------------------------------------------
-# 左側欄位下方：歷史月營收基本面快篩
+# 左側欄位下方：全市場量化排行榜雷達觸發按鈕
 # -------------------------------------------------------------
 st.sidebar.divider()
-st.sidebar.markdown("### 📋 歷史月營收基本面快篩")
-rev_stock_id = st.sidebar.text_input("輸入查詢營收股代", value="", placeholder="例如: 2330", key="rev_input")
-
-st.sidebar.markdown("**設定營收查詢區間**")
-rev_col1, rev_col2 = st.sidebar.columns(2)
-with rev_col1:
-    rev_start = st.date_input("起始日期", value=datetime.utcnow() - timedelta(days=730), label_visibility="collapsed")
-with rev_col2:
-    rev_end = st.date_input("結束日期", value=datetime.utcnow(), label_visibility="collapsed")
-
-btn_query_rev = st.sidebar.button("📂 查詢歷史月營收", type="primary", use_container_width=True)
+st.sidebar.markdown("### 🏆 全市場量化排行榜雷達")
+btn_market_ranking = st.sidebar.button("🚀 掃描全市場營收爆發 Top 20", type="primary", use_container_width=True)
 
 st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
@@ -457,32 +437,17 @@ with col_right:
         st.info("請於左側輸入台股代碼後檢視籌碼")
 
 # -------------------------------------------------------------
-# 結果呈現：在本地端依自訂日期區間過濾月營收
+# 【雷達區塊結果呈現】如果點擊全市場掃描，會在主畫面展示排行榜
 # -------------------------------------------------------------
-if btn_query_rev:
-    if not rev_stock_id:
-        st.warning("請先在左側下方輸入要查詢營收的台股代碼！")
-    else:
-        start_str = rev_start.strftime("%Y-%m-%d")
-        end_str = rev_end.strftime("%Y-%m-%d")
-        with st.spinner(f"📂 正在載入 {rev_stock_id} 歷史營收資料..."):
-            rev_df = get_stock_revenue(rev_stock_id)
-            if not rev_df.empty:
-                if "月份" in rev_df.columns:
-                    mask = (rev_df["月份"] >= start_str) & (rev_df["月份"] <= end_str)
-                    filtered_df = rev_df.loc[mask]
-                    if not filtered_df.empty:
-                        st.markdown(f"### 📂 標的 {rev_stock_id} 歷史月營收與成長率（YoY / MoM） [{start_str} ~ {end_str}]")
-                        st.dataframe(filtered_df, hide_index=True, use_container_width=True)
-                    else:
-                        st.warning(f"取得代碼 {rev_stock_id} 營收成功，但在指定區間內無符合的月份資料，呈現完整近況如下：")
-                        st.dataframe(rev_df.head(12), hide_index=True, use_container_width=True)
-                else:
-                    # 若採用 yfinance 備援財報格式
-                    st.markdown(f"### 📂 標的 {rev_stock_id} 歷史財務摘要數據 (透過 Yahoo Finance 備援)")
-                    st.dataframe(rev_df, use_container_width=True)
-            else:
-                st.error(f"無法取得代碼 {rev_stock_id} 的營收資料，請確認代碼是否正確或 FinMind Token 是否有效。")
+if btn_market_ranking:
+    with st.spinner("🏆 AI 正在運算全市場 1700+ 家上市櫃公司最新單月營收年增率 (YoY) 排行榜..."):
+        ranking_df = get_market_revenue_ranking()
+        if not ranking_df.empty:
+            st.markdown("### 🏆 全市場最新單月營收爆發力排行榜 (Top 20)")
+            st.info("💡 優秀的資優生（營收連續大爆發個股）已自動浮出水面，您可以直接複製其股號至上方進行詳細 AI 深度分析！")
+            st.dataframe(ranking_df, hide_index=True, use_container_width=True)
+        else:
+            st.error("目前無法取得全市場營收排行榜資料，請確認 FinMind Token 是否有效。")
 
 st.divider()
 
