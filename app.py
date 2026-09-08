@@ -422,7 +422,7 @@ def get_ranking_data(ranking_type):
         
     return pd.DataFrame()
 
-# 生成 AI 精選股票
+# 生成 AI 精選股票 (引入強硬防禦機制 Prompt)
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0:
@@ -434,12 +434,16 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     sector_limit_str = f"【指定產業限制】：必須嚴格從「{custom_sector.strip()}」相關個股挑選" if custom_sector and custom_sector.strip() != "" else "【指定產業限制】：AI 自主推薦主流"
 
     prompt_select = (
-        "請作為台股選股分析師，基準日期：" + str(target_date_str) + "。\n"
+        "請作為頂級華爾街台股選股操盤手，基準日期：" + str(target_date_str) + "。\n"
         "價格條件：" + price_limit_str + "。\n"
         "族群條件：" + sector_limit_str + "。\n"
-        "大盤：" + str(macro_data) + "\n"
-        "強勢族群參考：" + str(sector_data) + "\n"
-        "請挑選 6 檔符合條件的台股個股，並回傳 JSON 陣列格式如：\n"
+        "大盤環境：" + str(macro_data) + "\n"
+        "強勢族群參考：" + str(sector_data) + "\n\n"
+        "🛡️【嚴格選股硬性防禦條款】（違反以下任一條款者一律禁止推薦）：\n"
+        "1. 籌碼防禦：嚴禁推薦近一週三大法人（外資、投信）呈現『連續大量賣超出貨』的個股。優先挑選『法人連續買超』或『土洋同步站在買方』的強勢籌碼集中股。\n"
+        "2. 技術風控：嚴禁推薦日線 KD 指標處於『70 以上高檔死亡交叉』或『嚴重高檔過熱』的標的。優先挑選『低檔（KD<=30）黃金交叉起漲』或『剛完成底部打底』的股票。\n"
+        "3. 實戰勝率：上漲率預估評估必須嚴謹，若該產業龍頭法人正在拋售，不得單靠『龍頭名氣』給予高勝率。\n\n"
+        "請挑選 6 檔嚴格符合上述防禦條件的台股個股，並回傳 JSON 陣列格式如：\n"
         '[{"上漲率預估":"75%","族群":"半導體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
         "不要包含 Markdown 標記。"
     )
@@ -495,7 +499,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, kd_in
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結\n"
         "2. 台股主流產業與資金流向研判\n"
-        "3. 籌碼面與法人動向連動分析（針對最近一週外資、本土投信、自營商買賣超張數進行連動解讀）。\n"
+        "3. 籌碼面與法人動向連動分析（針對最近一週外資、本土投信、自營商買賣超張數進行連動解讀，若法人連續大賣必須給予警示）。\n"
         "4. 標的技術型態與進退場深層邏輯解析（【請務必結合上述提供的 " + period_type + " KD 數據（K=" + str(kd_info.get('K')) + ", D=" + str(kd_info.get('D')) + "）進行技術診斷】）。"
     )
     return call_gemini_with_retry(prompt)
