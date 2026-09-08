@@ -70,11 +70,11 @@ st.markdown(
 
     /* 統一 Metric 數值與標籤，強制禁止折行 */
     [data-testid="stMetricValue"] { 
-        font-size: 1.25rem !important; 
+        font-size: 1.35rem !important; 
         white-space: nowrap !important;
     }
     [data-testid="stMetricLabel"] { 
-        font-size: 0.85rem !important; 
+        font-size: 0.9rem !important; 
         white-space: nowrap !important;
     }
 
@@ -203,16 +203,15 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         prev_k = df['K'].iloc[-2]
         prev_d = df['D'].iloc[-2]
 
-        # 保持簡潔字串，利於排版
         signal = "中性觀望"
         if prev_k <= prev_d and latest_k > latest_d:
             if latest_k <= 30:
-                signal = "🟢 低檔金叉"
+                signal = "🟢 低檔黃金交叉"
             else:
                 signal = "🟢 黃金交叉"
         elif prev_k >= prev_d and latest_k < latest_d:
             if latest_k >= 70:
-                signal = "🔴 高檔死叉"
+                signal = "🔴 高檔死亡交叉"
             else:
                 signal = "🔴 死亡交叉"
         elif latest_k >= 80 and latest_d >= 80:
@@ -576,48 +575,38 @@ for name, info in macro_data.items():
 
 st.divider()
 
-# 主畫面 middle 區塊：籌碼與 KD 圖表動態聯動
-col_left, col_right = st.columns([1, 1])
+# 主畫面改為【全寬度 Full Width】滿版呈現籌碼與 KD 圖表
+st.subheader(f"🔍 個股 ({stock_id if stock_id else '未指定'}) 三大法人籌碼與 {period_type} KD 綜合分析看板")
 
-with col_left:
-    st.subheader(f"📊 台股強弱勢族群 ({target_date_str})")
-    if isinstance(sector_data, dict):
-        st.write("**領漲強勢產業：**", sector_data.get("領漲強勢產業"))
-        st.write("**領跌弱勢產業：**", sector_data.get("領跌弱勢產業"))
-
-with col_right:
-    st.subheader(f"🔍 個股 ({stock_id if stock_id else '未指定'}) 籌碼與 {period_type} KD 分析")
-    if stock_id and str(stock_id).strip() != "":
-        chip_df = get_stock_chip(stock_id, target_date_str)
-        kd_df, kd_info = calculate_kd(stock_id, period_type=period_type)
+if stock_id and str(stock_id).strip() != "":
+    chip_df = get_stock_chip(stock_id, target_date_str)
+    kd_df, kd_info = calculate_kd(stock_id, period_type=period_type)
+    
+    if isinstance(kd_info, dict):
+        k_col, d_col, sig_col, _ = st.columns([1, 1, 1.5, 2.5])
+        k_col.metric(f"{period_type} K 值", kd_info['K'])
+        d_col.metric(f"{period_type} D 值", kd_info['D'])
+        sig_col.metric("KD 轉折訊號", kd_info['signal'])
         
-        # 使用 Streamlit 原生 Metric（三欄等寬配對）
-        if isinstance(kd_info, dict):
-            k_col, d_col, sig_col = st.columns(3)
-            k_col.metric(f"{period_type} K 值", kd_info['K'])
-            d_col.metric(f"{period_type} D 值", kd_info['D'])
-            sig_col.metric("KD 轉折訊號", kd_info['signal'])
-            
-        # 頁籤切換：籌碼表格 vs KD 折線圖
-        tab_chip, tab_kd = st.tabs(["三大法人籌碼 (張)", f"{period_type} KD 指標走勢圖"])
-        with tab_chip:
-            if not chip_df.empty:
-                st.dataframe(chip_df, hide_index=True, use_container_width=True)
-            else:
-                st.warning("尚無三大法人籌碼紀錄。")
-        with tab_kd:
-            if kd_df is not None and not kd_df.empty:
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['K'], mode='lines', name='K 值 (快線)', line=dict(color='#ff4d4f', width=2)))
-                fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['D'], mode='lines', name='D 值 (慢線)', line=dict(color='#1890ff', width=2)))
-                fig.add_hline(y=80, line_dash="dash", line_color="gray", annotation_text="80 超買")
-                fig.add_hline(y=20, line_dash="dash", line_color="gray", annotation_text="20 超賣")
-                fig.update_layout(height=260, margin=dict(l=10, r=10, t=20, b=10), legend=dict(orientation="h", y=1.1))
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("無法計算 KD 線數據。")
-    else:
-        st.info("請於左側輸入台股代碼後檢視籌碼與 KD 線分析")
+    tab_chip, tab_kd = st.tabs(["三大法人籌碼 (張)", f"{period_type} KD 指標走勢圖"])
+    with tab_chip:
+        if not chip_df.empty:
+            st.dataframe(chip_df, hide_index=True, use_container_width=True)
+        else:
+            st.warning("尚無三大法人籌碼紀錄。")
+    with tab_kd:
+        if kd_df is not None and not kd_df.empty:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['K'], mode='lines', name='K 值 (快線)', line=dict(color='#ff4d4f', width=2)))
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['D'], mode='lines', name='D 值 (慢線)', line=dict(color='#1890ff', width=2)))
+            fig.add_hline(y=80, line_dash="dash", line_color="gray", annotation_text="80 超買")
+            fig.add_hline(y=20, line_dash="dash", line_color="gray", annotation_text="20 超賣")
+            fig.update_layout(height=300, margin=dict(l=10, r=10, t=20, b=10), legend=dict(orientation="h", y=1.1))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("無法計算 KD 線數據。")
+else:
+    st.info("請於左側輸入台股代碼後檢視籌碼與 KD 線分析")
 
 if btn_market_ranking:
     with st.spinner(f"🏆 AI 雷達正在全市場同步運算真實財報 [{ranking_option}] 排行榜..."):
