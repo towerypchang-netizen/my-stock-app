@@ -68,8 +68,15 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    [data-testid="stMetricValue"] { font-size: 1.35rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.9rem !important; }
+    /* 統一 Metric 數值與標籤，強制禁止折行 */
+    [data-testid="stMetricValue"] { 
+        font-size: 1.25rem !important; 
+        white-space: nowrap !important;
+    }
+    [data-testid="stMetricLabel"] { 
+        font-size: 0.85rem !important; 
+        white-space: nowrap !important;
+    }
 
     html, body, [class*="css"] { font-size: 15px; }
     @media (max-width: 768px) {
@@ -196,7 +203,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         prev_k = df['K'].iloc[-2]
         prev_d = df['D'].iloc[-2]
 
-        # 精簡訊號字串（利於完美顯示於表格頭部）
+        # 保持簡潔字串，利於排版
         signal = "中性觀望"
         if prev_k <= prev_d and latest_k > latest_d:
             if latest_k <= 30:
@@ -584,22 +591,12 @@ with col_right:
         chip_df = get_stock_chip(stock_id, target_date_str)
         kd_df, kd_info = calculate_kd(stock_id, period_type=period_type)
         
-        # 顯示 KD 關鍵 Metric（對齊字型大小與不被截斷）
+        # 使用 Streamlit 原生 Metric（三欄等寬配對）
         if isinstance(kd_info, dict):
-            k_col, d_col, sig_col = st.columns([1, 1, 1.4])
+            k_col, d_col, sig_col = st.columns(3)
             k_col.metric(f"{period_type} K 值", kd_info['K'])
             d_col.metric(f"{period_type} D 值", kd_info['D'])
-            
-            # 使用自訂 HTML 確保「KD 轉折訊號」的字體大小 (1.35rem) 與左側數字完全對齊一致
-            sig_col.markdown(
-                f"""
-                <div style="display: flex; flex-direction: column;">
-                    <span style="font-size: 0.9rem; color: rgba(250, 250, 250, 0.6); margin-bottom: 4px;">KD 轉折訊號</span>
-                    <span style="font-size: 1.35rem; font-weight: 600; line-height: 1.2;">{kd_info['signal']}</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            sig_col.metric("KD 轉折訊號", kd_info['signal'])
             
         # 頁籤切換：籌碼表格 vs KD 折線圖
         tab_chip, tab_kd = st.tabs(["三大法人籌碼 (張)", f"{period_type} KD 指標走勢圖"])
