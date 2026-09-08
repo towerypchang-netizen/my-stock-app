@@ -103,15 +103,11 @@ GEMINI_API_KEY = clean_key(st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_AP
 def get_taiwan_now():
     return datetime.utcnow() + timedelta(hours=8)
 
-# 初始化 Session State
+# 初始化 Session State (擴充為預設 5 欄標的)
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
         columns=["上漲率預估", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"],
-        data=[
-            ["--%", "---", "---", "---", "---", "---", "---", "---"],
-            ["--%", "---", "---", "---", "---", "---", "---", "---"],
-            ["--%", "---", "---", "---", "---", "---", "---", "---"]
-        ]
+        data=[["--%", "---", "---", "---", "---", "---", "---", "---"] for _ in range(5)]
     )
 
 if "last_predict_time" not in st.session_state:
@@ -422,7 +418,7 @@ def get_ranking_data(ranking_type):
         
     return pd.DataFrame()
 
-# 生成 AI 精選股票 (引入一刀切硬性風控閘門)
+# 生成 AI 精選股票 (擴大候選池至 30 檔，輸出前 5 檔優良個股)
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0:
@@ -433,14 +429,16 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     price_limit_str = f"【硬性股價區間限制】：{', '.join(cond_list)}" if cond_list else "股價不限"
     sector_limit_str = f"【指定產業限制】：必須嚴格從「{custom_sector.strip()}」相關個股挑選" if custom_sector and custom_sector.strip() != "" else "【指定產業限制】：AI 自主推薦主流"
 
+    # 擴大初篩基數至 30 檔，避免過濾後無股票
     prompt_select = (
         "請作為頂級華爾街台股選股操盤手，基準日期：" + str(target_date_str) + "。\n"
         "價格條件：" + price_limit_str + "。\n"
         "族群條件：" + sector_limit_str + "。\n"
         "大盤環境：" + str(macro_data) + "\n"
         "強勢族群參考：" + str(sector_data) + "\n\n"
-        "請挑選 15 檔具備波段攻擊潛力的台股熱門候選名單，並回傳 JSON 陣列格式如：\n"
-        '[{"上漲率預估":"75%","族群":"半導體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
+        "請廣泛挑選 30 檔具備波段攻擊潛力與基本面支撐的台股熱門標的名單，上漲率預估評估請客觀給予 65%-88% 之間的合理數值。\n"
+        "請回傳 JSON 陣列格式如：\n"
+        '[{"上漲率預估":"78%","族群":"半導體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
         "不要包含 Markdown 標記。"
     )
     res_raw = call_gemini_with_retry(prompt_select)
@@ -453,14 +451,13 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         stock_id = item.get("股號")
         
         # -------------------------------------------------------------
-        # 🛡️ 閘門 1：三大法人近 2 日累積淨買賣超檢查 (累計為負數一律剔除)
+        # 🛡️ 閘門 1：三大法人近 2 日累積淨買賣超檢查 (累計為負數剔除)
         # -------------------------------------------------------------
         chip_df = get_stock_chip(stock_id, target_date_str)
         if not chip_df.empty and len(chip_df) >= 2:
             try:
                 recent_2d = chip_df.tail(2)['三大法人合計'].tolist()
                 sum_2d = sum([int(str(v).replace('+', '').replace(',', '')) for v in recent_2d])
-                # 近 2 日累積只要是負數 (法人淨賣出)，直接封殺！
                 if sum_2d < 0:
                     continue
             except Exception:
@@ -473,7 +470,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         if isinstance(kd_info, dict):
             k_val = kd_info.get("K", 50)
             d_val = kd_info.get("D", 50)
-            # 只要 K < D (死亡交叉狀態)，不管數值大小，直接封殺！
             if k_val < d_val:
                 continue
 
@@ -492,9 +488,11 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         
         if "波段期間" not in item: item["波段期間"] = "5-10天"
         final_results.append(item)
-        if len(final_results) >= 3: break
+        
+        # 取前 5 檔符合雙重風控的優良個股
+        if len(final_results) >= 5: break
             
-    while len(final_results) < 3:
+    while len(final_results) < 5:
         final_results.append({
             "上漲率預估": "--%", "族群": "無符合條件", "股名": "無符合股票",
             "股號": "----", "當前實價": "---", "建議進場": "---", "建議退場": "---", "波段期間": "---"
@@ -550,7 +548,7 @@ st.sidebar.markdown(
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
-st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲率最高前三檔")
+st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲率最高前五檔")
 
 st.sidebar.markdown("**指定產業族群或題材 (選填)**")
 custom_sector = st.sidebar.text_input("輸入族群或題材", value="", placeholder="例如: 記憶體、PCB、半導體...", label_visibility="collapsed")
@@ -563,7 +561,7 @@ with p_col2: max_price_input = st.number_input("最高價", min_value=0, value=N
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
-if st.sidebar.button("🚀 產生今日AI預估上漲率最高前三檔", type="primary", use_container_width=True):
+if st.sidebar.button("🚀 產生今日AI預估上漲率最高前五檔", type="primary", use_container_width=True):
     with st.spinner("🤖 AI 正在結合自定義族群與即時股價掃描..."):
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str)
