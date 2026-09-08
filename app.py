@@ -422,7 +422,7 @@ def get_ranking_data(ranking_type):
         
     return pd.DataFrame()
 
-# 生成 AI 精選股票 (加入 Python Code-level 硬體防禦篩選)
+# 生成 AI 精選股票 (引入彈性動態風控閘門)
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0:
@@ -439,7 +439,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         "族群條件：" + sector_limit_str + "。\n"
         "大盤環境：" + str(macro_data) + "\n"
         "強勢族群參考：" + str(sector_data) + "\n\n"
-        "請挑選 6 檔具備波段潛力的台股候選名單，並回傳 JSON 陣列格式如：\n"
+        "請挑選 10 檔具備潛力的台股熱門候選名單，並回傳 JSON 陣列格式如：\n"
         '[{"上漲率預估":"75%","族群":"半導體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
         "不要包含 Markdown 標記。"
     )
@@ -453,31 +453,28 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         stock_id = item.get("股號")
         
         # -------------------------------------------------------------
-        # 🛡️ 核心防禦閘門 1：三大法人近 2 日累積淨買賣超檢查 (Python 硬性計算)
+        # 🛡️ 彈性閘門 1：籌碼面單日大賣防禦（排除最新 1 日主力劇烈倒貨）
         # -------------------------------------------------------------
         chip_df = get_stock_chip(stock_id, target_date_str)
-        if not chip_df.empty and len(chip_df) >= 2:
+        if not chip_df.empty and len(chip_df) >= 1:
             try:
-                # 解析最近 2 日的三大法人合計欄位
-                recent_2d = chip_df.tail(2)['三大法人合計'].tolist()
-                sum_2d = 0
-                for v in recent_2d:
-                    clean_v = str(v).replace('+', '').replace(',', '')
-                    sum_2d += int(clean_v)
-                
-                # 若近 2 日累積為負數 (法人淨賣出出貨)，硬性剔除！
-                if sum_2d < 0:
+                latest_chip_str = chip_df.iloc[-1]['三大法人合計']
+                latest_chip_val = int(str(latest_chip_str).replace('+', '').replace(',', ''))
+                # 若最新 1 個交易日三大法人單日賣超超過 -1500 張，視為主力急挫出貨，剔除！
+                if latest_chip_val < -1500:
                     continue
             except Exception:
                 pass
 
         # -------------------------------------------------------------
-        # 🛡️ 核心防禦閘門 2：日線 KD 指標軟硬兼施 (剔除死亡交叉)
+        # 🛡️ 彈性閘門 2：高檔過熱死亡交叉風控（僅剔除 K>70 高檔追高死叉）
         # -------------------------------------------------------------
         _, kd_info = calculate_kd(stock_id, period_type="日線")
         if isinstance(kd_info, dict):
-            # 若日線 KD 呈現死亡交叉，硬性剔除！
-            if "死亡交叉" in kd_info.get("signal", "") or "高檔死叉" in kd_info.get("signal", ""):
+            k_val = kd_info.get("K", 50)
+            sig_text = kd_info.get("signal", "")
+            # 只有在 K > 70 且處於死亡交叉狀態時，才視為高檔追高風險而剔除！
+            if k_val >= 70 and ("死亡交叉" in sig_text or "高檔死叉" in sig_text):
                 continue
 
         # -------------------------------------------------------------
