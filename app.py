@@ -196,22 +196,22 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         prev_k = df['K'].iloc[-2]
         prev_d = df['D'].iloc[-2]
 
-        # 訊號判讀
+        # 精簡訊號字串（利於完美顯示於表格頭部）
         signal = "中性觀望"
         if prev_k <= prev_d and latest_k > latest_d:
             if latest_k <= 30:
-                signal = "🟢 低檔黃金交叉 (強烈買訊)"
+                signal = "🟢 低檔金叉"
             else:
-                signal = "🟢 黃金交叉 (多頭攻擊)"
+                signal = "🟢 黃金交叉"
         elif prev_k >= prev_d and latest_k < latest_d:
             if latest_k >= 70:
-                signal = "🔴 高檔死亡交叉 (警示賣訊)"
+                signal = "🔴 高檔死叉"
             else:
-                signal = "🔴 死亡交叉 (短線轉弱)"
+                signal = "🔴 死亡交叉"
         elif latest_k >= 80 and latest_d >= 80:
-            signal = "🔥 高檔鈍化 (強勢多頭)"
+            signal = "🔥 高檔鈍化"
         elif latest_k <= 20 and latest_d <= 20:
-            signal = "❄️ 低檔超賣 (等待打底)"
+            signal = "❄️ 低檔超賣"
 
         return df.tail(40), {"K": latest_k, "D": latest_d, "signal": signal}
     except Exception as e:
@@ -466,13 +466,12 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         })
     return final_results
 
-# 生成詳細報告 (包含 KD 分析參數)
+# 生成詳細報告
 def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, kd_info, period_type, capital, target_date_str):
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
     real_price = get_realtime_tw_price(stock_id)
     price_info_str = f"當前真實市場成交價：{real_price} 元" if real_price else "即時股價：需參考市場現價"
     chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "無最新籌碼數據"
-    
     kd_str = f"最新{period_type} KD 指標：K={kd_info.get('K')}, D={kd_info.get('D')}，轉折訊號為 [{kd_info.get('signal')}]" if isinstance(kd_info, dict) else "KD 數據不足"
     
     prompt = (
@@ -491,7 +490,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, kd_in
         "1. 全球宏觀與科技大勢總結\n"
         "2. 台股主流產業與資金流向研判\n"
         "3. 籌碼面與法人動向連動分析（針對最近一週外資、本土投信、自營商買賣超張數進行連動解讀）。\n"
-        "4. 標的技術型態與進退場深層邏輯解析（【請務必結合上述提供的 " + period_type + " KD 數據（K=" + str(kd_info.get('K')) + ", D=" + str(kd_info.get('D')) + "）與黃金交叉/高檔鈍化/背離狀況進行深度技術診斷】）。"
+        "4. 標的技術型態與進退場深層邏輯解析（【請務必結合上述提供的 " + period_type + " KD 數據（K=" + str(kd_info.get('K')) + ", D=" + str(kd_info.get('D')) + "）進行技術診斷】）。"
     )
     return call_gemini_with_retry(prompt)
 
@@ -585,12 +584,22 @@ with col_right:
         chip_df = get_stock_chip(stock_id, target_date_str)
         kd_df, kd_info = calculate_kd(stock_id, period_type=period_type)
         
-        # 顯示 KD 關鍵 Metric
+        # 顯示 KD 關鍵 Metric（對齊字型大小與不被截斷）
         if isinstance(kd_info, dict):
-            k_col, d_col, sig_col = st.columns([1, 1, 2])
+            k_col, d_col, sig_col = st.columns([1, 1, 1.4])
             k_col.metric(f"{period_type} K 值", kd_info['K'])
             d_col.metric(f"{period_type} D 值", kd_info['D'])
-            sig_col.metric("KD 轉折訊號", kd_info['signal'])
+            
+            # 使用自訂 HTML 確保「KD 轉折訊號」的字體大小 (1.35rem) 與左側數字完全對齊一致
+            sig_col.markdown(
+                f"""
+                <div style="display: flex; flex-direction: column;">
+                    <span style="font-size: 0.9rem; color: rgba(250, 250, 250, 0.6); margin-bottom: 4px;">KD 轉折訊號</span>
+                    <span style="font-size: 1.35rem; font-weight: 600; line-height: 1.2;">{kd_info['signal']}</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
             
         # 頁籤切換：籌碼表格 vs KD 折線圖
         tab_chip, tab_kd = st.tabs(["三大法人籌碼 (張)", f"{period_type} KD 指標走勢圖"])
