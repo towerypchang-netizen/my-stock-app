@@ -88,34 +88,38 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 常見熱門台股名稱與代碼對照對應表 (Lookup Dictionary)
+# 常見熱門台股名稱與代碼擴充對照表
 STOCK_NAME_TO_ID = {
     "台積電": "2330", "鴻海": "2317", "聯發科": "2454", "台達電": "2308", "廣達": "2382",
-    "緯創": "3231", "華碩": "2357", "聯詠": "3034", "世芯": "3661", "祥碩": "5269",
-    "技嘉": "2376", "智邦": "2345", "和碩": "4938", "緯穎": "6669", "奇鋐": "3017",
+    "緯創": "3231", "華碩": "2357", "聯詠": "3034", "世芯": "3661", "世芯-KY": "3661", "世芯KY": "3661",
+    "祥碩": "5269", "技嘉": "2376", "智邦": "2345", "和碩": "4938", "緯穎": "6669", "奇鋐": "3017",
     "創意": "3443", "旺矽": "6239", "長榮": "2603", "陽明": "2609", "萬海": "2615",
     "富邦金": "2881", "國泰金": "2882", "中信金": "2891", "日月光": "3711", "日月光投控": "3711",
     "南亞科": "2408", "華邦電": "2344", "聯電": "2303", "欣興": "3037", "健鼎": "3044",
-    "M31": "6643", "m31": "6643"
+    "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958", "臻鼎KY": "4958",
+    "金像電": "2368", "台光電": "2383", "華通": "2313", "群創": "3481", "友達": "2409",
+    "力積電": "6770", "威盛": "2388", "宏碁": "2353", "仁寶": "2324", "光寶科": "2301"
 }
 
 # 股名/股號自動轉換與解析函式
 def parse_stock_input(user_input):
     if not user_input:
         return ""
-    clean_input = str(user_input).strip()
+    clean_input = str(user_input).strip().replace(" ", "")
     
     # 若輸入的是純數字，直接視為代碼
     if clean_input.isdigit():
         return clean_input
         
-    # 若輸入的是文字，查詢對照表
+    # 完全比對
     if clean_input in STOCK_NAME_TO_ID:
         return STOCK_NAME_TO_ID[clean_input]
         
-    # 模糊比對（如輸入台積，可匹配到台積電）
+    # 模糊比對 (去除 KY、符號等關鍵字比對)
+    core_name = clean_input.replace("-KY", "").replace("KY", "").replace("-ky", "").replace("ky", "")
     for name, s_id in STOCK_NAME_TO_ID.items():
-        if clean_input in name or name in clean_input:
+        clean_name = name.replace("-KY", "").replace("KY", "")
+        if core_name == clean_name or core_name in clean_name or clean_name in core_name:
             return s_id
             
     return clean_input
@@ -409,7 +413,7 @@ def get_stock_chip(stock_id, target_date_str):
 sample_pool = [
     "2330", "2317", "2454", "2308", "2382", "3231", "2357", "3034", "3661", "5269", 
     "2376", "2324", "2345", "4938", "6669", "3017", "3443", "6515", "8358", "6239",
-    "2603", "2609", "2615", "2881", "2882", "2891", "1301", "1303", "2002", "3711"
+    "2603", "2609", "2615", "2881", "2882", "2891", "1301", "1303", "2002", "3711", "4958"
 ]
 
 @st.cache_data(ttl=3600)
@@ -496,7 +500,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     
     final_results = []
     for item in picks:
-        stock_id = item.get("股號")
+        stock_id = parse_stock_input(item.get("股號"))
         
         # 🛡️ 閘門 1：三大法人近 2 日累積淨買賣超檢查
         chip_df = get_stock_chip(stock_id, target_date_str)
@@ -581,7 +585,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "5日均線與型態診斷：" + ma_str + "\n\n"
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
         "=== 第一部分：【實戰結論摘要】 ===\n"
-        "1. 操盤實戰結論（請結合當前 5MA 均線相對位置與『回後買上漲』起漲型態進行明確判斷，例如是否為拉回洗盤後重啟漲勢的買點）。\n"
+        "1. 操盤實戰結論（請結合當前 5MA 均線相對位置與『回後買上漲』起漲型態進行明確判讀，例如是否為拉回洗盤後重啟漲勢的買點）。\n"
         "2. 多空勝率優勢與風報比評估（深入分析該標的當前多空交戰的勝率優勢、潛在獲利與最大風險試算、風報比 R/R Ratio 評估，以及綜合推薦星等）。\n"
         "3. 具體操作指引（【請務必嚴格採用上述系統統一計算的進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
@@ -645,7 +649,7 @@ st.sidebar.markdown("### ⚙️ 個股詳細分析與技術指標設定")
 raw_stock_input = st.sidebar.text_input(
     "輸入台股代碼或股名", 
     value="", 
-    placeholder="例如: 2330 或 台積電",
+    placeholder="例如: 2330 或 臻鼎",
     help="如只看三大法人籌碼與 KD 綜合分析看板，輸入股號或股名後直接按 Enter"
 )
 st.sidebar.caption("(如只看三大法人籌碼與 KD 綜合分析看板，輸入股號或股名後直接按 Enter)")
