@@ -481,8 +481,8 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             if max_price > 0 and real_p > max_price: continue
             
             # 建議進場改為區間：[實價*0.985 - 實價*1.005]，涵蓋跳空開高與微幅回擋
-            p_low = round(real_p * 0.985, 2)
-            p_high = round(real_p * 1.005, 2)
+            p_low = round(real_p * 0.985, 1)
+            p_high = round(real_p * 1.005, 1)
             item["當前實價"] = f"{real_p:.2f}"
             item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
             item["建議退場"] = f"{round(real_p * 1.08, 2):.2f}"
@@ -502,17 +502,29 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         })
     return final_results
 
-# 生成詳細報告
+# 生成詳細報告 (將 Python 算好的價位帶入 Prompt 確保左右兩邊完全一致)
 def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, kd_info, period_type, capital, target_date_str):
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
     real_price = get_realtime_tw_price(stock_id)
-    price_info_str = f"當前真實市場成交價：{real_price} 元" if real_price else "即時股價：需參考市場現價"
+    
+    if real_price:
+        price_info_str = f"當前真實市場成交價：{real_price} 元"
+        p_low = round(real_price * 0.985, 1)
+        p_high = round(real_price * 1.005, 1)
+        target_p = round(real_price * 1.08, 1)
+        calc_price_str = f"【系統統一計算建議】：建議進場買進區間為 {p_low} 元 ~ {p_high} 元，波段停利目標價為 {target_p} 元。"
+    else:
+        price_info_str = "即時股價：需參考市場現價"
+        p_low, p_high, target_p = "---", "---", "---"
+        calc_price_str = ""
+
     chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "無最新籌碼數據"
     kd_str = f"最新{period_type} KD 指標：K={kd_info.get('K')}, D={kd_info.get('D')}，轉折訊號為 [{kd_info.get('signal')}]" if isinstance(kd_info, dict) else "KD 數據不足"
     
     prompt = (
         "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期：" + str(target_date_str) + "。\n"
         "分析標的：" + str(stock_id) + "，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
+        + calc_price_str + "\n"
         "全球宏觀背景：" + str(macro_data) + "\n"
         "台股產業族群表現：" + str(sector_data) + "\n"
         "近期三大法人籌碼細節：\n" + chip_str + "\n"
@@ -521,7 +533,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_id, chip_data, kd_in
         "=== 第一部分：【實戰結論摘要】 ===\n"
         "1. 操盤實戰結論（內容以簡單明瞭為主，例如判斷是否處於低檔盤整、連續上漲不宜追高，或是短線多空情勢研判）。\n"
         "2. 多空勝率優勢與風報比評估（深入分析該標的當前多空交戰的勝率優勢、潛在獲利與最大風險試算、風報比 R/R Ratio 評估，以及綜合推薦星等）。\n"
-        "3. 具體操作指引（包含建議買進/部署價位、波段停利目標價、嚴格停損價位、預估波段操作天數與資金部位建議）。\n\n"
+        "3. 具體操作指引（【請務必嚴格採用上述系統統一計算的進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結\n"
         "2. 台股主流產業與資金流向研判\n"
