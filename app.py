@@ -418,7 +418,7 @@ def get_ranking_data(ranking_type):
         
     return pd.DataFrame()
 
-# 生成 AI 精選股票 (擴大候選池至 30 檔，輸出前 3 檔優良個股)
+# 生成 AI 精選股票 (採用動態進場價格區間策略)
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0:
@@ -473,14 +473,18 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
                 continue
 
         # -------------------------------------------------------------
-        # 通過雙重風控閘門，填入即時價格與部署建議
+        # 通過風控閘門，填入即時價格與【動態進場區間】建議
         # -------------------------------------------------------------
         real_p = get_realtime_tw_price(stock_id)
         if real_p:
             if min_price > 0 and real_p < min_price: continue
             if max_price > 0 and real_p > max_price: continue
+            
+            # 建議進場改為區間：[實價*0.985 - 實價*1.005]，涵蓋跳空開高與微幅回擋
+            p_low = round(real_p * 0.985, 2)
+            p_high = round(real_p * 1.005, 2)
             item["當前實價"] = f"{real_p:.2f}"
-            item["建議進場"] = f"{round(real_p * 0.985, 2):.2f}"
+            item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
             item["建議退場"] = f"{round(real_p * 1.08, 2):.2f}"
         else:
             item["當前實價"], item["建議進場"], item["建議退場"] = "查無即時價", "---", "---"
