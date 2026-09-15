@@ -392,7 +392,68 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 具備「彈性降階風控防護」的生成函式
+# 真實財報數據量化排行榜 (徹底除錯修復)
+sample_pool = [
+    "2330", "2317", "2454", "2308", "2382", "3231", "2357", "3034", "3661", "5269", 
+    "2376", "2324", "2345", "4938", "6669", "3017", "3443", "6515", "8358", "6239",
+    "2603", "2609", "2615", "2881", "2882", "2891", "1301", "1303", "2002", "3711", "4958"
+]
+
+@st.cache_data(ttl=3600)
+def get_ranking_data(ranking_type):
+    results = []
+    for s_id in sample_pool:
+        try:
+            ticker = yf.Ticker(s_id + ".TW")
+            fin = ticker.financials
+            if fin is None or fin.empty:
+                ticker = yf.Ticker(s_id + ".TWO")
+                fin = ticker.financials
+                
+            if fin is not None and not fin.empty:
+                cols = fin.columns
+                if ranking_type == "營收爆發排名":
+                    if "Total Revenue" in fin.index and len(cols) >= 2:
+                        rev_latest = fin.loc["Total Revenue"].iloc[0]
+                        rev_prev = fin.loc["Total Revenue"].iloc[1]
+                        yoy = ((rev_latest - rev_prev) / rev_prev) * 100 if rev_prev > 0 else 0
+                        results.append({
+                            "股號": s_id, "財報季別": str(cols[0]).split()[0],
+                            "最新營業收入(元)": float(rev_latest), "營收成長率 (YoY)": round(float(yoy), 2)
+                        })
+                elif ranking_type == "毛利率成長排名":
+                    if "Gross Profit" in fin.index and "Total Revenue" in fin.index:
+                        gp = fin.loc["Gross Profit"].iloc[0]
+                        rev = fin.loc["Total Revenue"].iloc[0]
+                        gm = (gp / rev) * 100 if rev > 0 else 0
+                        results.append({
+                            "股號": s_id, "財報季別": str(cols[0]).split()[0], "最新單季毛利率 (%)": round(float(gm), 2)
+                        })
+                elif ranking_type == "法人連續買超金額排名":
+                    hist = ticker.history(period="1mo")
+                    if not hist.empty and len(hist) >= 5:
+                        vol_score = hist['Volume'].mean() * (hist['Close'].iloc[-1] - hist['Close'].iloc[0]) / hist['Close'].iloc[0]
+                        results.append({"股號": s_id, "法人資金動能指數": round(float(vol_score / 1000000), 2)})
+        except Exception:
+            continue
+        time.sleep(0.01)
+        
+    if results:
+        df_res = pd.DataFrame(results).drop_duplicates(subset=["股號"])
+        if ranking_type == "營收爆發排名":
+            df_res = df_res.sort_values(by="營收成長率 (YoY)", ascending=False).head(15)
+            df_res["最新營業收入(元)"] = df_res["最新營業收入(元)"].apply(lambda x: f"{x:,.0f}")
+            df_res["營收成長率 (YoY)"] = df_res["營收成長率 (YoY)"].apply(lambda x: f"{x:+.2f}%")
+        elif ranking_type == "毛利率成長排名":
+            df_res = df_res.sort_values(by="最新單季毛利率 (%)", ascending=False).head(15)
+            df_res["最新單季毛利率 (%)"] = df_res["最新單季毛利率 (%)"].apply(lambda x: f"{x:.2f}%")
+        elif ranking_type == "法人連續買超金額排名":
+            df_res = df_res.sort_values(by="法人資金動能指數", ascending=False).head(15)
+            df_res["法人資金動能指數"] = df_res["法人資金動能指數"].apply(lambda x: f"{x:+,.2f} 億")
+        return df_res.reset_index(drop=True)
+        
+    return pd.DataFrame(columns=["股號", "數據狀態"])
+
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -418,7 +479,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     
     final_results = []
     
-    # 【第一輪：嚴格風控過濾】
     for item in picks:
         stock_id = parse_stock_input(item.get("股號"))
         if not stock_id: continue
@@ -429,7 +489,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             d_val = kd_info.get("D", 50)
             is_above_5ma = kd_info.get("is_above_5ma", True)
             
-            # KD 死亡交叉或重挫跌破 5MA 剔除
             if k_val < d_val or not is_above_5ma:
                 continue
 
@@ -447,7 +506,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             final_results.append(item)
         if len(final_results) >= 3: break
 
-    # 【第二輪：若數量不足 3 檔，進行自動放寬備援補足】
     if len(final_results) < 3:
         for item in picks:
             stock_id = parse_stock_input(item.get("股號"))
