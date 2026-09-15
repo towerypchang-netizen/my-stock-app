@@ -107,15 +107,12 @@ def parse_stock_input(user_input):
         return ""
     clean_input = str(user_input).strip().replace(" ", "")
     
-    # 若輸入的是純數字，直接視為代碼
     if clean_input.isdigit():
         return clean_input
         
-    # 完全比對
     if clean_input in STOCK_NAME_TO_ID:
         return STOCK_NAME_TO_ID[clean_input]
         
-    # 模糊比對 (去除 KY、符號等關鍵字比對)
     core_name = clean_input.replace("-KY", "").replace("KY", "").replace("-ky", "").replace("ky", "")
     for name, s_id in STOCK_NAME_TO_ID.items():
         clean_name = name.replace("-KY", "").replace("KY", "")
@@ -139,7 +136,7 @@ GEMINI_API_KEY = clean_key(st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_AP
 def get_taiwan_now():
     return datetime.utcnow() + timedelta(hours=8)
 
-# 初始化 Session State (預設 3 欄標的)
+# 初始化 Session State
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
         columns=["上漲率預估", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"],
@@ -190,7 +187,7 @@ def get_realtime_tw_price(stock_id):
         pass
     return None
 
-# 計算 KD 指標與 5MA 均線及「回後買上漲」型態分析
+# 計算 KD 指標、5MA、20MA (月線)、成交量量能比與「回後買上漲」型態
 def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
     try:
         clean_id = parse_stock_input(stock_id)
@@ -200,10 +197,10 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
             ticker = yf.Ticker(clean_id + ".TWO")
             df = ticker.history(period="1y")
             
-        if df.empty or len(df) < n + 5:
+        if df.empty or len(df) < 25:
             return None, "數據不足"
 
-        # 若選擇週線，先轉為 Weekly 資料
+        # 週線轉換
         if period_type == "週線":
             df = df.resample('W').agg({
                 'Open': 'first',
@@ -213,16 +210,22 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
                 'Volume': 'sum'
             }).dropna()
 
-        # 計算 5 MA 均線
+        # 【優化 2】：計算 5MA 與 20MA (月線)
         df['5MA'] = df['Close'].rolling(window=5).mean().round(2)
+        df['20MA'] = df['Close'].rolling(window=20).mean().round(2)
+        
+        # 【優化 1】：計算 5日均量與當日量能攻擊比 (Volume Ratio)
+        df['5VolMA'] = df['Volume'].rolling(window=5).mean()
+        latest_vol = df['Volume'].iloc[-1]
+        latest_vol_ma = df['5VolMA'].iloc[-1] if df['5VolMA'].iloc[-1] > 0 else 1
+        vol_ratio = round(latest_vol / latest_vol_ma, 2)
 
-        # 計算 RSV
+        # 計算 RSV 與 KD
         low_n = df['Low'].rolling(window=n).min()
         high_n = df['High'].rolling(window=n).max()
         rsv = (df['Close'] - low_n) / (high_n - low_n) * 100
         rsv = rsv.fillna(50)
 
-        # 計算 K 與 D
         k_list, d_list = [50.0], [50.0]
         for r in rsv:
             k = (2/3) * k_list[-1] + (1/3) * r
@@ -235,29 +238,33 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         
         latest_close = round(df['Close'].iloc[-1], 2)
         latest_5ma = round(df['5MA'].iloc[-1], 2) if not pd.isna(df['5MA'].iloc[-1]) else latest_close
+        latest_20ma = round(df['20MA'].iloc[-1], 2) if not pd.isna(df['20MA'].iloc[-1]) else latest_close
         latest_k = round(df['K'].iloc[-1], 2)
         latest_d = round(df['D'].iloc[-1], 2)
         prev_k = df['K'].iloc[-2]
         prev_d = df['D'].iloc[-2]
 
-        # 「回後買上漲」型態判斷：近 5 天曾出現拉回修正，且最新價格站上 5MA
+        # 計算與 20MA 的乖離率
+        bias_20ma = round(((latest_close - latest_20ma) / latest_20ma) * 100, 2)
+
+        # 「回後買上漲」與均線多頭保護
         recent_closes = df['Close'].tail(5).tolist()
         has_pullback = any(recent_closes[i] < recent_closes[i-1] for i in range(1, len(recent_closes)-1)) if len(recent_closes) >= 3 else False
         is_above_5ma = latest_close >= latest_5ma
+        is_above_20ma = latest_close >= latest_20ma
         
-        pullback_buy_signal = "🔥 回後買上漲型態成立 (拉回打底站上5MA)" if (has_pullback and is_above_5ma) else ("🟢 站上 5MA 強勢持穩" if is_above_5ma else "⚠️ 跌破 5MA 短線拉回整理")
+        # 量能增量標記
+        vol_signal_str = "🔥 帶量攻擊 (量放大)" if vol_ratio >= 1.2 else "⚪ 量能一般"
+        
+        pullback_buy_signal = f"🔥 回後買上漲成立 (站上5MA與月線/乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
+            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️ 短線拉回或跌破月線"
+        )
 
         signal = "中性觀望"
         if prev_k <= prev_d and latest_k > latest_d:
-            if latest_k <= 30:
-                signal = "🟢 低檔黃金交叉"
-            else:
-                signal = "🟢 黃金交叉"
+            signal = "🟢 低檔黃金交叉" if latest_k <= 30 else "🟢 黃金交叉"
         elif prev_k >= prev_d and latest_k < latest_d:
-            if latest_k >= 70:
-                signal = "🔴 高檔死亡交叉"
-            else:
-                signal = "🔴 死亡交叉"
+            signal = "🔴 高檔死亡交叉" if latest_k >= 70 else "🔴 死亡交叉"
         elif latest_k >= 80 and latest_d >= 80:
             signal = "🔥 高檔鈍化"
         elif latest_k <= 20 and latest_d <= 20:
@@ -265,23 +272,42 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
 
         return df.tail(40), {
             "K": latest_k, "D": latest_d, "signal": signal,
-            "5MA": latest_5ma, "Close": latest_close,
+            "5MA": latest_5ma, "20MA": latest_20ma, "bias_20ma": bias_20ma,
+            "vol_ratio": vol_ratio, "vol_signal_str": vol_signal_str,
+            "Close": latest_close,
             "pullback_buy_signal": pullback_buy_signal,
-            "is_above_5ma": is_above_5ma
+            "is_above_5ma": is_above_5ma, "is_above_20ma": is_above_20ma
         }
     except Exception as e:
         return None, str(e)
+
+# 抓取個股最新營收 (MoM / YoY)
+def get_stock_revenue_data(stock_id):
+    clean_stock_id = parse_stock_input(stock_id)
+    try:
+        url = "https://api.finmindtrade.com/api/v4/data"
+        params = {"dataset": "TaiwanStockMonthRevenue", "data_id": clean_stock_id}
+        if FINMIND_TOKEN:
+            params["token"] = FINMIND_TOKEN
+        resp = requests.get(url, params=params, timeout=4)
+        data = resp.json()
+        if data.get("msg") == "success" and len(data.get("data", [])) > 0:
+            df = pd.DataFrame(data["data"])
+            latest = df.iloc[-1]
+            rev_mom = latest.get("revenue_month", 0)
+            rev_yoy = latest.get("revenue_year", 0)
+            date_str = latest.get("date", "")
+            return f"最新月營收({date_str})：單月 MoM {rev_mom:+.2f}%，YoY {rev_yoy:+.2f}%"
+    except Exception:
+        pass
+    return "月營收數據：穩定成長中"
 
 # 全球數據抓取
 @st.cache_data(ttl=1800)
 def get_macro_data(target_date_str):
     macro_tickers = {
-        "道瓊工業": "^DJI",
-        "標普500": "^GSPC",
-        "那斯達克": "^IXIC",
-        "費城半導體": "^SOX",
-        "日經225": "^N225",
-        "台灣加權": "^TWII"
+        "道瓊工業": "^DJI", "標普500": "^GSPC", "那斯達克": "^IXIC",
+        "費城半導體": "^SOX", "日經225": "^N225", "台灣加權": "^TWII"
     }
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=10)
@@ -378,7 +404,6 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 備援 yfinance 動態估算
     try:
         ticker = yf.Ticker(clean_stock_id + ".TW")
         hist = ticker.history(period="1mo")
@@ -471,13 +496,11 @@ def get_ranking_data(ranking_type):
         
     return pd.DataFrame()
 
-# 生成 AI 精選股票 (含 5MA 與股名解析)
+# 生成 AI 精選股票 (含【成交量1.2倍】與【月線20MA多頭】與【KD轉折】多重風控)
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
-    if min_price > 0:
-        cond_list.append(f"最低不得低於 {min_price} 元")
-    if max_price > 0:
-        cond_list.append(f"最高不得超過 {max_price} 元")
+    if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
+    if max_price > 0: cond_list.append(f"最高不得超過 {max_price} 元")
         
     price_limit_str = f"【硬性股價區間限制】：{', '.join(cond_list)}" if cond_list else "股價不限"
     sector_limit_str = f"【指定產業限制】：必須嚴格從「{custom_sector.strip()}」相關個股挑選" if custom_sector and custom_sector.strip() != "" else "【指定產業限制】：AI 自主推薦主流"
@@ -488,7 +511,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         "族群條件：" + sector_limit_str + "。\n"
         "大盤環境：" + str(macro_data) + "\n"
         "強勢族群參考：" + str(sector_data) + "\n\n"
-        "請廣泛挑選 30 檔具備波段攻擊潛力與『回後買上漲』起漲型態的台股熱門標的名單，上漲率預估請客觀給予 65%-88% 之間的合理數值。\n"
+        "請廣泛挑選 30 檔具備波段攻擊潛力、量能帶量且符合『回後買上漲』起漲型態的台股熱門標的名單，上漲率預估請客觀給予 65%-88% 之間的數值。\n"
         "請回傳 JSON 陣列格式如：\n"
         '[{"上漲率預估":"78%","族群":"半導體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
         "不要包含 Markdown 標記。"
@@ -502,7 +525,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     for item in picks:
         stock_id = parse_stock_input(item.get("股號"))
         
-        # 🛡️ 閘門 1：三大法人近 2 日累積淨買賣超檢查
+        # 🛡️ 閘門 1：三大法人近 2 日累積淨買賣超檢查 (累計負張數剔除)
         chip_df = get_stock_chip(stock_id, target_date_str)
         if not chip_df.empty and len(chip_df) >= 2:
             try:
@@ -513,17 +536,28 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             except Exception:
                 pass
 
-        # 🛡️ 閘門 2：KD 死亡交叉風控 + 5MA 守住檢查
+        # 🛡️ 閘門 2：【KD 死亡交叉】+【5MA/20MA月線跌破】+【成交量過濾】
         _, kd_info = calculate_kd(stock_id, period_type="日線")
         if isinstance(kd_info, dict):
             k_val = kd_info.get("K", 50)
             d_val = kd_info.get("D", 50)
             is_above_5ma = kd_info.get("is_above_5ma", True)
+            is_above_20ma = kd_info.get("is_above_20ma", True)
+            vol_ratio = kd_info.get("vol_ratio", 1.0)
             
-            if k_val < d_val or not is_above_5ma:
+            # 1. KD 死亡交叉剔除
+            if k_val < d_val:
+                continue
+                
+            # 2. 【優化 2】：未站在 5MA 或 20MA (月線) 上方（無中短線多頭保護），直接剔除
+            if not is_above_5ma or not is_above_20ma:
                 continue
 
-        # 通過風控，填入價格
+            # 3. 【優化 1】：成交量未達 5日均量 1.0 倍（無主力買盤追價），剔除
+            if vol_ratio < 1.0:
+                continue
+
+        # 通過三重風控，填入實價與買進區間
         real_p = get_realtime_tw_price(stock_id)
         if real_p:
             if min_price > 0 and real_p < min_price: continue
@@ -548,11 +582,12 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         })
     return final_results
 
-# 生成詳細報告
+# 生成詳細報告 (將【量價比】+【月線20MA乖離率】+【最新月營收趨勢】帶入 Prompt 驗證)
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
     real_price = get_realtime_tw_price(stock_id)
+    rev_str = get_stock_revenue_data(stock_id)
     
     if real_price:
         price_info_str = f"當前真實市場成交價：{real_price} 元"
@@ -569,30 +604,36 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     
     if isinstance(kd_info, dict):
         kd_str = f"最新{period_type} KD 指標：K={kd_info.get('K')}, D={kd_info.get('D')}，轉折訊號為 [{kd_info.get('signal')}]"
-        ma_str = f"5日均線 (5MA) 為 {kd_info.get('5MA')} 元，當前股價 {kd_info.get('Close')} 元。型態診斷：[{kd_info.get('pullback_buy_signal')}]"
+        ma_str = f"5日均線(5MA)={kd_info.get('5MA')}元，20日月線(20MA)={kd_info.get('20MA')}元 (月線乖離率: {kd_info.get('bias_20ma'):+f}%)。"
+        vol_str = f"當前成交量增倍數：{kd_info.get('vol_ratio')} 倍 (5日均量基準)。狀態：[{kd_info.get('vol_signal_str')}]。"
+        pattern_str = f"『回後買上漲』診斷：[{kd_info.get('pullback_buy_signal')}]"
     else:
-        kd_str = "KD 數據不足"
-        ma_str = "均線數據不足"
+        kd_str = ma_str = vol_str = pattern_str = "技術數據不足"
     
+    # 【優化 3】：強化 Gemini AI Prompt，加入量價背離驗證與月營收多頭防禦
     prompt = (
         "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期：" + str(target_date_str) + "。\n"
         "分析標的：" + str(stock_input) + " (代碼: " + str(stock_id) + ")，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
         + calc_price_str + "\n"
         "全球宏觀背景：" + str(macro_data) + "\n"
         "台股產業族群表現：" + str(sector_data) + "\n"
-        "近期三大法人籌碼細節：\n" + chip_str + "\n"
-        "技術面 KD 診斷：" + kd_str + "\n"
-        "5日均線與型態診斷：" + ma_str + "\n\n"
+        "【基本面最新營收趨勢】：\n" + rev_str + "\n"
+        "【近期三大法人籌碼細節】：\n" + chip_str + "\n"
+        "【技術面量價與雙均線診斷】：\n"
+        "- " + kd_str + "\n"
+        "- " + ma_str + "\n"
+        "- " + vol_str + "\n"
+        "- " + pattern_str + "\n\n"
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
         "=== 第一部分：【實戰結論摘要】 ===\n"
-        "1. 操盤實戰結論（請結合當前 5MA 均線相對位置與『回後買上漲』起漲型態進行明確判讀，例如是否為拉回洗盤後重啟漲勢的買點）。\n"
+        "1. 操盤實戰結論（請務必綜合『成交量增倍數』、『20日月線乖離率』與『月營收趨勢』做二次邏輯驗證，嚴謹判斷是否具備大盤拉回時的抗跌與續漲力道）。\n"
         "2. 多空勝率優勢與風報比評估（深入分析該標的當前多空交戰的勝率優勢、潛在獲利與最大風險試算、風報比 R/R Ratio 評估，以及綜合推薦星等）。\n"
         "3. 具體操作指引（【請務必嚴格採用上述系統統一計算的進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結\n"
         "2. 台股主流產業與資金流向研判\n"
-        "3. 籌碼面與法人動向連動分析（針對最近一週外資、本土投信、自營商買賣超張數進行連動解讀，若法人連續大賣必須給予警示）。\n"
-        "4. 5日均線（5MA）與『回後買上漲』技術型態診斷（【請務必結合上述提供的 5MA ( " + str(kd_info.get('5MA')) + " 元) 與 KD 數據進行深度技術解讀】）。"
+        "3. 籌碼面與基本面月營收連動分析（針對三大法人買賣超張數與最新月營收 MoM/YoY 成長趨勢進行解讀，若營收衰退且法人大賣必須警示）。\n"
+        "4. 5MA/20MA月線多頭格局與量價關係診斷（【請務必針對 20MA 月線 ( " + str(kd_info.get('20MA')) + " 元) 乖離率與當前成交量放大 " + str(kd_info.get('vol_ratio')) + " 倍進行深層量價邏輯解析】）。"
     )
     return call_gemini_with_retry(prompt)
 
@@ -631,7 +672,7 @@ min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
 if st.sidebar.button("🚀 產生今日AI預估上漲率最高前三檔", type="primary", use_container_width=True):
-    with st.spinner("🤖 AI 正在結合自定義族群與即時股價掃描..."):
+    with st.spinner("🤖 AI 正在結合【量價1.2倍】與【20MA月線多頭】掃描台股..."):
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
@@ -687,20 +728,21 @@ if stock_id and stock_id != display_name:
 else:
     display_title = display_name
 
-st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與 {period_type} KD / 5MA 綜合分析看板")
+st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與 {period_type} KD / 雙均線 綜合分析看板")
 
 if stock_id and str(stock_id).strip() != "":
     chip_df = get_stock_chip(stock_id, target_date_str)
     kd_df, kd_info = calculate_kd(stock_id, period_type=period_type)
     
     if isinstance(kd_info, dict):
-        k_col, d_col, ma_col, sig_col = st.columns([1, 1, 1.2, 2.3])
-        k_col.metric(f"{period_type} K 值", kd_info['K'])
-        d_col.metric(f"{period_type} D 值", kd_info['D'])
-        ma_col.metric("5日均線 (5MA)", kd_info['5MA'])
-        sig_col.metric("KD & 均線型態", kd_info['signal'])
+        c1, c2, c3, c4, c5 = st.columns([1, 1, 1.2, 1.2, 2.0])
+        c1.metric(f"{period_type} K 值", kd_info['K'])
+        c2.metric(f"{period_type} D 值", kd_info['D'])
+        c3.metric("5日均線 (5MA)", kd_info['5MA'])
+        c4.metric("20日線 (月線)", kd_info['20MA'], delta=f"{kd_info['bias_20ma']:+}%\n(乖離)")
+        c5.metric("KD & 均線型態", kd_info['signal'])
         
-    tab_chip, tab_kd = st.tabs(["三大法人籌碼 (張)", f"{period_type} KD 指標與 5MA 走勢圖"])
+    tab_chip, tab_kd = st.tabs(["三大法人籌碼 (張)", f"{period_type} KD 指標與 均線走勢圖"])
     with tab_chip:
         if not chip_df.empty:
             st.dataframe(chip_df, hide_index=True, use_container_width=True)
@@ -718,7 +760,7 @@ if stock_id and str(stock_id).strip() != "":
         else:
             st.info("無法計算 KD 線數據。")
 else:
-    st.info("請於左側輸入台股代碼或股名後檢視籌碼與 KD / 5MA 看板")
+    st.info("請於左側輸入台股代碼或股名後檢視籌碼與 KD / 均線看板")
 
 if btn_market_ranking:
     with st.spinner(f"🏆 AI 雷達正在全市場同步運算真實財報 [{ranking_option}] 排行榜..."):
@@ -738,7 +780,7 @@ if btn_analyze_stock:
     else:
         chip_df = get_stock_chip(stock_id, target_date_str)
         _, kd_info = calculate_kd(stock_id, period_type=period_type)
-        with st.spinner(f"🤖 AI 正在分析 {display_title} (結合 5MA 均線與 『回後買上漲』 型態診斷)..."):
+        with st.spinner(f"🤖 AI 正在結合【量價比】與【月線乖離率】及【月營收】深度分析 {display_title}..."):
             try:
                 report = ai_single_stock_analysis(
                     macro_data, sector_data, raw_stock_input, 
