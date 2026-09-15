@@ -13,7 +13,7 @@ from google import genai
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
-# 自訂 CSS：確保流暢滾動、字型大小統一與適當間距
+# 自訂 CSS：確保流暢滾動、字型大小統一與適帶間距
 st.markdown(
     """
     <style>
@@ -70,11 +70,11 @@ st.markdown(
 
     /* 統一 Metric 數值與標籤，強制禁止折行 */
     [data-testid="stMetricValue"] { 
-        font-size: 1.35rem !important; 
+        font-size: 1.25rem !important; 
         white-space: nowrap !important;
     }
     [data-testid="stMetricLabel"] { 
-        font-size: 0.9rem !important; 
+        font-size: 0.85rem !important; 
         white-space: nowrap !important;
     }
 
@@ -200,7 +200,6 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         if df.empty or len(df) < 25:
             return None, "數據不足"
 
-        # 週線轉換
         if period_type == "週線":
             df = df.resample('W').agg({
                 'Open': 'first',
@@ -210,17 +209,14 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
                 'Volume': 'sum'
             }).dropna()
 
-        # 【優化 2】：計算 5MA 與 20MA (月線)
         df['5MA'] = df['Close'].rolling(window=5).mean().round(2)
         df['20MA'] = df['Close'].rolling(window=20).mean().round(2)
         
-        # 【優化 1】：計算 5日均量與當日量能攻擊比 (Volume Ratio)
         df['5VolMA'] = df['Volume'].rolling(window=5).mean()
         latest_vol = df['Volume'].iloc[-1]
         latest_vol_ma = df['5VolMA'].iloc[-1] if df['5VolMA'].iloc[-1] > 0 else 1
         vol_ratio = round(latest_vol / latest_vol_ma, 2)
 
-        # 計算 RSV 與 KD
         low_n = df['Low'].rolling(window=n).min()
         high_n = df['High'].rolling(window=n).max()
         rsv = (df['Close'] - low_n) / (high_n - low_n) * 100
@@ -244,16 +240,13 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         prev_k = df['K'].iloc[-2]
         prev_d = df['D'].iloc[-2]
 
-        # 計算與 20MA 的乖離率
         bias_20ma = round(((latest_close - latest_20ma) / latest_20ma) * 100, 2)
 
-        # 「回後買上漲」與均線多頭保護
         recent_closes = df['Close'].tail(5).tolist()
         has_pullback = any(recent_closes[i] < recent_closes[i-1] for i in range(1, len(recent_closes)-1)) if len(recent_closes) >= 3 else False
         is_above_5ma = latest_close >= latest_5ma
         is_above_20ma = latest_close >= latest_20ma
         
-        # 量能增量標記
         vol_signal_str = "🔥 帶量攻擊 (量放大)" if vol_ratio >= 1.2 else "⚪ 量能一般"
         
         pullback_buy_signal = f"🔥 回後買上漲成立 (站上5MA與月線/乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
@@ -302,12 +295,16 @@ def get_stock_revenue_data(stock_id):
         pass
     return "月營收數據：穩定成長中"
 
-# 全球數據抓取
+# 全球數據與關鍵風險指標抓取 (加入 美債殖利率、WTI原油、VIX恐慌指數)
 @st.cache_data(ttl=1800)
 def get_macro_data(target_date_str):
     macro_tickers = {
-        "道瓊工業": "^DJI", "標普500": "^GSPC", "那斯達克": "^IXIC",
-        "費城半導體": "^SOX", "日經225": "^N225", "台灣加權": "^TWII"
+        "費城半導體": "^SOX",
+        "台灣加權": "^TWII",
+        "美10年債殖利率": "^TNX",
+        "WTI 國際原油": "CL=F",
+        "VIX 恐慌指數": "^VIX",
+        "黃金避險": "GC=F"
     }
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=10)
@@ -320,7 +317,8 @@ def get_macro_data(target_date_str):
                 latest = data['Close'].iloc[-1]
                 start = data['Close'].iloc[0]
                 change = ((latest - start) / start) * 100
-                macro_summary[name] = {"val": f"{latest:.2f}", "change": f"{change:+.2f}%"}
+                unit = "%" if symbol == "^TNX" else ""
+                macro_summary[name] = {"val": f"{latest:.2f}{unit}", "change": f"{change:+.2f}%"}
             else:
                 macro_summary[name] = {"val": "資料更新中", "change": "0.00%"}
         except Exception:
@@ -496,7 +494,7 @@ def get_ranking_data(ranking_type):
         
     return pd.DataFrame()
 
-# 生成 AI 精選股票 (含【成交量1.2倍】與【月線20MA多頭】與【KD轉折】多重風控)
+# 生成 AI 精選股票
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -509,7 +507,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         "請作為頂級華爾街台股選股操盤手，基準日期：" + str(target_date_str) + "。\n"
         "價格條件：" + price_limit_str + "。\n"
         "族群條件：" + sector_limit_str + "。\n"
-        "大盤環境：" + str(macro_data) + "\n"
+        "大盤環境與風險指標 (美債/油價/VIX)：" + str(macro_data) + "\n"
         "強勢族群參考：" + str(sector_data) + "\n\n"
         "請廣泛挑選 30 檔具備波段攻擊潛力、量能帶量且符合『回後買上漲』起漲型態的台股熱門標的名單，上漲率預估請客觀給予 65%-88% 之間的數值。\n"
         "請回傳 JSON 陣列格式如：\n"
@@ -525,7 +523,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     for item in picks:
         stock_id = parse_stock_input(item.get("股號"))
         
-        # 🛡️ 閘門 1：三大法人近 2 日累積淨買賣超檢查 (累計負張數剔除)
         chip_df = get_stock_chip(stock_id, target_date_str)
         if not chip_df.empty and len(chip_df) >= 2:
             try:
@@ -536,7 +533,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             except Exception:
                 pass
 
-        # 🛡️ 閘門 2：【KD 死亡交叉】+【5MA/20MA月線跌破】+【成交量過濾】
         _, kd_info = calculate_kd(stock_id, period_type="日線")
         if isinstance(kd_info, dict):
             k_val = kd_info.get("K", 50)
@@ -545,19 +541,9 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             is_above_20ma = kd_info.get("is_above_20ma", True)
             vol_ratio = kd_info.get("vol_ratio", 1.0)
             
-            # 1. KD 死亡交叉剔除
-            if k_val < d_val:
-                continue
-                
-            # 2. 【優化 2】：未站在 5MA 或 20MA (月線) 上方（無中短線多頭保護），直接剔除
-            if not is_above_5ma or not is_above_20ma:
+            if k_val < d_val or not is_above_5ma or not is_above_20ma or vol_ratio < 1.0:
                 continue
 
-            # 3. 【優化 1】：成交量未達 5日均量 1.0 倍（無主力買盤追價），剔除
-            if vol_ratio < 1.0:
-                continue
-
-        # 通過三重風控，填入實價與買進區間
         real_p = get_realtime_tw_price(stock_id)
         if real_p:
             if min_price > 0 and real_p < min_price: continue
@@ -582,7 +568,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         })
     return final_results
 
-# 生成詳細報告 (將【量價比】+【月線20MA乖離率】+【最新月營收趨勢】帶入 Prompt 驗證)
+# 生成詳細報告 (包含 10年期美債殖利率、WTI原油與 VIX 戰事避險分析)
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
@@ -610,12 +596,11 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     else:
         kd_str = ma_str = vol_str = pattern_str = "技術數據不足"
     
-    # 【優化 3】：強化 Gemini AI Prompt，加入量價背離驗證與月營收多頭防禦
     prompt = (
         "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期：" + str(target_date_str) + "。\n"
         "分析標的：" + str(stock_input) + " (代碼: " + str(stock_id) + ")，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
         + calc_price_str + "\n"
-        "全球宏觀背景：" + str(macro_data) + "\n"
+        "全球宏觀與總經風險指標 (包含美債10年期殖利率、WTI原油、VIX恐慌與黃金避險)：\n" + str(macro_data) + "\n"
         "台股產業族群表現：" + str(sector_data) + "\n"
         "【基本面最新營收趨勢】：\n" + rev_str + "\n"
         "【近期三大法人籌碼細節】：\n" + chip_str + "\n"
@@ -626,13 +611,13 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "- " + pattern_str + "\n\n"
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
         "=== 第一部分：【實戰結論摘要】 ===\n"
-        "1. 操盤實戰結論（請務必綜合『成交量增倍數』、『20日月線乖離率』與『月營收趨勢』做二次邏輯驗證，嚴謹判斷是否具備大盤拉回時的抗跌與續漲力道）。\n"
+        "1. 操盤實戰結論（請綜合『美債殖利率/原油戰事避險』情緒、量價與 20MA 月線做二次邏輯驗證，嚴謹判斷是否具備大盤拉回時的抗跌與續漲力道）。\n"
         "2. 多空勝率優勢與風報比評估（深入分析該標的當前多空交戰的勝率優勢、潛在獲利與最大風險試算、風報比 R/R Ratio 評估，以及綜合推薦星等）。\n"
         "3. 具體操作指引（【請務必嚴格採用上述系統統一計算的進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
-        "1. 全球宏觀與科技大勢總結\n"
+        "1. 全球宏觀與科技大勢總結（重點評估 10年期美債殖利率波動、國際油價及地緣戰事避險情緒對台股資金流向的影響）。\n"
         "2. 台股主流產業與資金流向研判\n"
-        "3. 籌碼面與基本面月營收連動分析（針對三大法人買賣超張數與最新月營收 MoM/YoY 成長趨勢進行解讀，若營收衰退且法人大賣必須警示）。\n"
+        "3. 籌碼面與基本面月營收連動分析\n"
         "4. 5MA/20MA月線多頭格局與量價關係診斷（【請務必針對 20MA 月線 ( " + str(kd_info.get('20MA')) + " 元) 乖離率與當前成交量放大 " + str(kd_info.get('vol_ratio')) + " 倍進行深層量價邏輯解析】）。"
     )
     return call_gemini_with_retry(prompt)
@@ -672,7 +657,7 @@ min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
 if st.sidebar.button("🚀 產生今日AI預估上漲率最高前三檔", type="primary", use_container_width=True):
-    with st.spinner("🤖 AI 正在結合【量價1.2倍】與【20MA月線多頭】掃描台股..."):
+    with st.spinner("🤖 AI 正在結合【美債/油價/VIX】與【量價20MA】掃描台股..."):
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
@@ -711,7 +696,7 @@ btn_market_ranking = st.sidebar.button("🚀 執行量化雷達掃描", type="pr
 # -------------------------------------------------------------
 # 主畫面看板與內容
 # -------------------------------------------------------------
-st.subheader(f"🌐 全球宏觀市場看板 ({target_date_str})")
+st.subheader(f"🌐 全球宏觀與風險避險指標看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
 for name, info in macro_data.items():
@@ -780,7 +765,7 @@ if btn_analyze_stock:
     else:
         chip_df = get_stock_chip(stock_id, target_date_str)
         _, kd_info = calculate_kd(stock_id, period_type=period_type)
-        with st.spinner(f"🤖 AI 正在結合【量價比】與【月線乖離率】及【月營收】深度分析 {display_title}..."):
+        with st.spinner(f"🤖 AI 正在結合【美債/油價/VIX】與【量價月線】深度分析 {display_title}..."):
             try:
                 report = ai_single_stock_analysis(
                     macro_data, sector_data, raw_stock_input, 
