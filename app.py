@@ -94,7 +94,7 @@ STOCK_NAME_TO_ID = {
     "富邦金": "2881", "國泰金": "2882", "中信金": "2891", "日月光": "3711", "日月光投控": "3711",
     "南亞科": "2408", "華邦電": "2344", "聯電": "2303", "欣興": "3037", "健鼎": "3044",
     "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958", "臻鼎KY": "4958",
-    "金像電": "2368", "台光電": "2383", "華通": "2313", "群創": "3481", "友達": "2409",
+    "聯茂": "6213", "金像電": "2368", "台光電": "2383", "華通": "2313", "群創": "3481", "友達": "2409",
     "力積電": "6770", "威盛": "2388", "宏碁": "2353", "仁寶": "2324", "光寶科": "2301"
 }
 
@@ -155,7 +155,7 @@ def call_gemini_with_retry(prompt, max_retries=3):
 
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
-def get_realtime_tw_price(stock_id):
+def get_realtime_tw_price_info(stock_id):
     try:
         clean_id = parse_stock_input(stock_id)
         ticker_symbol = clean_id + ".TW"
@@ -165,8 +165,17 @@ def get_realtime_tw_price(stock_id):
             ticker_symbol = clean_id + ".TWO"
             ticker = yf.Ticker(ticker_symbol)
             data = ticker.history(period="5d")
+            
         if not data.empty:
-            return round(float(data['Close'].iloc[-1]), 2)
+            latest_close = round(float(data['Close'].iloc[-1]), 2)
+            prev_close = round(float(data['Close'].iloc[-2]), 2) if len(data) >= 2 else latest_close
+            open_price = round(float(data['Open'].iloc[-1]), 2) if 'Open' in data.columns else latest_close
+            return {
+                "real_price": latest_close,
+                "prev_close": prev_close,
+                "open_price": open_price,
+                "is_gap_down": open_price < prev_close # 開盤跳空低開
+            }
     except Exception:
         pass
     return None
@@ -180,7 +189,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
             ticker = yf.Ticker(clean_id + ".TWO")
             df = ticker.history(period="1y")
             
-        if df.empty or len(df) < 15:
+        if df.empty or len(df) < 20:
             return None, "數據不足"
 
         if period_type == "週線":
@@ -195,6 +204,10 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         latest_vol = df['Volume'].iloc[-1]
         latest_vol_ma = df['5VolMA'].iloc[-1] if not pd.isna(df['5VolMA'].iloc[-1]) and df['5VolMA'].iloc[-1] > 0 else 1
         vol_ratio = round(latest_vol / latest_vol_ma, 2)
+
+        # K線型態過濾：檢查前一日是否為高檔爆量長黑 (當日實體跌幅 > 3.5% 且成交量 > 1.5倍)
+        last_body = (df['Close'].iloc[-1] - df['Open'].iloc[-1]) / df['Open'].iloc[-1]
+        is_big_black_k = (last_body < -0.035) and (vol_ratio > 1.5)
 
         low_n = df['Low'].rolling(window=n).min()
         high_n = df['High'].rolling(window=n).max()
@@ -245,6 +258,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
             "K": latest_k, "D": latest_d, "signal": signal,
             "5MA": latest_5ma, "20MA": latest_20ma, "bias_20ma": bias_20ma,
             "vol_ratio": vol_ratio, "vol_signal_str": vol_signal_str,
+            "is_big_black_k": is_big_black_k,
             "Close": latest_close,
             "pullback_buy_signal": pullback_buy_signal,
             "is_above_5ma": is_above_5ma, "is_above_20ma": is_above_20ma
@@ -392,11 +406,10 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 真實財報數據量化排行榜 (徹底除錯修復)
 sample_pool = [
     "2330", "2317", "2454", "2308", "2382", "3231", "2357", "3034", "3661", "5269", 
     "2376", "2324", "2345", "4938", "6669", "3017", "3443", "6515", "8358", "6239",
-    "2603", "2609", "2615", "2881", "2882", "2891", "1301", "1303", "2002", "3711", "4958"
+    "2603", "2609", "2615", "2881", "2882", "2891", "1301", "1303", "2002", "3711", "4958", "6213"
 ]
 
 @st.cache_data(ttl=3600)
@@ -454,6 +467,7 @@ def get_ranking_data(ranking_type):
         
     return pd.DataFrame(columns=["股號", "數據狀態"])
 
+# 生成選股：加入【高檔爆量長黑】與【開盤跳空低開】防禦過濾
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -483,17 +497,27 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         stock_id = parse_stock_input(item.get("股號"))
         if not stock_id: continue
         
+        # 1. 技術指標與型態防衛
         _, kd_info = calculate_kd(stock_id, period_type="日線")
         if isinstance(kd_info, dict):
             k_val = kd_info.get("K", 50)
             d_val = kd_info.get("D", 50)
             is_above_5ma = kd_info.get("is_above_5ma", True)
+            is_big_black_k = kd_info.get("is_big_black_k", False)
             
-            if k_val < d_val or not is_above_5ma:
+            # 🛡️ 防線：剔除 KD 死亡交叉、破 5MA 或高檔爆量長黑出貨的股票
+            if k_val < d_val or not is_above_5ma or is_big_black_k:
                 continue
 
-        real_p = get_realtime_tw_price(stock_id)
-        if real_p:
+        # 2. 開盤跳空低開防護過濾
+        p_info = get_realtime_tw_price_info(stock_id)
+        if p_info:
+            real_p = p_info["real_price"]
+            
+            # 🛡️ 防線：當天開盤跳空低開（弱勢洗盤），直接剔除
+            if p_info["is_gap_down"]:
+                continue
+
             if min_price > 0 and real_p < min_price: continue
             if max_price > 0 and real_p > max_price: continue
             
@@ -511,8 +535,9 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             stock_id = parse_stock_input(item.get("股號"))
             if any(x.get("股號") == item.get("股號") for x in final_results): continue
             
-            real_p = get_realtime_tw_price(stock_id)
-            if real_p:
+            p_info = get_realtime_tw_price_info(stock_id)
+            if p_info:
+                real_p = p_info["real_price"]
                 if min_price > 0 and real_p < min_price: continue
                 if max_price > 0 and real_p > max_price: continue
                 p_low = round(real_p * 0.985, 1)
@@ -534,10 +559,11 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
-    real_price = get_realtime_tw_price(stock_id)
+    p_info = get_realtime_tw_price_info(stock_id)
     rev_str = get_stock_revenue_data(stock_id)
     
-    if real_price:
+    if p_info:
+        real_price = p_info["real_price"]
         price_info_str = f"當前真實市場成交價：{real_price} 元"
         p_low = round(real_price * 0.985, 1)
         p_high = round(real_price * 1.005, 1)
@@ -575,7 +601,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "=== 第一部分：【實戰結論摘要】 ===\n"
         "1. 操盤實戰結論（請綜合美債/原油戰事避險情緒、量價與 20MA 月線做二次邏輯驗證，嚴謹判斷是否具備大盤拉回時的抗跌與續漲力道）。\n"
         "2. 多空勝率優勢與風報比評估（深入分析該標的當前多空交戰的勝率優勢、潛在獲利與最大風險試算、風報比 R/R Ratio 評估，以及綜合推薦星等）。\n"
-        "3. 具體操作指引（【請務必嚴格採用上述系統統一計算的進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "）。\n\n"
+        "3. 具體操作指引（【請務必包含：進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "，以及明確的『預估波段持有天數』）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結\n"
         "2. 台股主流產業與資金流向研判\n"
