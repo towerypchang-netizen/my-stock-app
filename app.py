@@ -98,6 +98,17 @@ STOCK_NAME_TO_ID = {
     "力積電": "6770", "威盛": "2388", "宏碁": "2353", "仁寶": "2324", "光寶科": "2301"
 }
 
+# 族群同業對照表 (用於比較估值與競爭力)
+PEER_GROUPS = {
+    "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
+    "晶圓代工/半導體": ["2330", "2303", "6770", "3711"],
+    "IC 設計": ["2454", "3034", "3661", "5269", "3443", "6643", "2388"],
+    "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324"],
+    "散熱/電源": ["2308", "3017"],
+    "航運": ["2603", "2609", "2615"],
+    "金控": ["2881", "2882", "2891"]
+}
+
 def parse_stock_input(user_input):
     if not user_input:
         return ""
@@ -155,6 +166,66 @@ def call_gemini_with_retry(prompt, max_retries=3):
 
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
+# 抓取個股最新新聞與新聞摘要（市場氣氛與獲利預估）
+def get_stock_news(stock_id):
+    clean_id = parse_stock_input(stock_id)
+    try:
+        ticker = yf.Ticker(clean_id + ".TW")
+        news_list = ticker.news
+        if not news_list:
+            ticker = yf.Ticker(clean_id + ".TWO")
+            news_list = ticker.news
+            
+        if news_list and len(news_list) > 0:
+            titles = [f"- {item.get('title', '')}" for item in news_list[:5] if item.get('title')]
+            return "\n".join(titles)
+    except Exception:
+        pass
+    return "尚無最新市場新聞資料"
+
+# 抓取基本面財務指標 (PE, PB, 毛利率, 股息)
+def get_stock_valuation_metrics(stock_id):
+    clean_id = parse_stock_input(stock_id)
+    try:
+        ticker = yf.Ticker(clean_id + ".TW")
+        info = ticker.info
+        if not info or 'forwardPE' not in info:
+            ticker = yf.Ticker(clean_id + ".TWO")
+            info = ticker.info
+            
+        pe = info.get('trailingPE') or info.get('forwardPE') or 'N/A'
+        pb = info.get('priceToBook') or 'N/A'
+        profit_margin = info.get('grossMargins') or 'N/A'
+        if profit_margin != 'N/A': profit_margin = f"{profit_margin * 100:.2f}%"
+        
+        return {
+            "pe": f"{pe:.2f}" if isinstance(pe, (int, float)) else "N/A",
+            "pb": f"{pb:.2f}" if isinstance(pb, (int, float)) else "N/A",
+            "gross_margin": profit_margin
+        }
+    except Exception:
+        return {"pe": "N/A", "pb": "N/A", "gross_margin": "N/A"}
+
+# 同業估值比較邏輯
+def get_peer_comparison(stock_id):
+    clean_id = parse_stock_input(stock_id)
+    target_group = None
+    for g_name, members in PEER_GROUPS.items():
+        if clean_id in members:
+            target_group = (g_name, members)
+            break
+            
+    if not target_group:
+        return "同業比對：無特定對照組"
+        
+    g_name, members = target_group
+    records = []
+    for m_id in members[:4]: # 抓前 4 檔比較
+        v = get_stock_valuation_metrics(m_id)
+        records.append(f"【{m_id}】本益比: {v['pe']} | 股淨比: {v['pb']} | 毛利率: {v['gross_margin']}")
+        
+    return f"所屬同業族群：[{g_name}]\n" + "\n".join(records)
+
 def get_realtime_tw_price_info(stock_id):
     try:
         clean_id = parse_stock_input(stock_id)
@@ -174,7 +245,7 @@ def get_realtime_tw_price_info(stock_id):
                 "real_price": latest_close,
                 "prev_close": prev_close,
                 "open_price": open_price,
-                "is_gap_down": open_price < prev_close # 開盤跳空低開
+                "is_gap_down": open_price < prev_close
             }
     except Exception:
         pass
@@ -205,7 +276,6 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         latest_vol_ma = df['5VolMA'].iloc[-1] if not pd.isna(df['5VolMA'].iloc[-1]) and df['5VolMA'].iloc[-1] > 0 else 1
         vol_ratio = round(latest_vol / latest_vol_ma, 2)
 
-        # K線型態過濾：檢查前一日是否為高檔爆量長黑 (當日實體跌幅 > 3.5% 且成交量 > 1.5倍)
         last_body = (df['Close'].iloc[-1] - df['Open'].iloc[-1]) / df['Open'].iloc[-1]
         is_big_black_k = (last_body < -0.035) and (vol_ratio > 1.5)
 
@@ -406,68 +476,7 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-sample_pool = [
-    "2330", "2317", "2454", "2308", "2382", "3231", "2357", "3034", "3661", "5269", 
-    "2376", "2324", "2345", "4938", "6669", "3017", "3443", "6515", "8358", "6239",
-    "2603", "2609", "2615", "2881", "2882", "2891", "1301", "1303", "2002", "3711", "4958", "6213"
-]
-
-@st.cache_data(ttl=3600)
-def get_ranking_data(ranking_type):
-    results = []
-    for s_id in sample_pool:
-        try:
-            ticker = yf.Ticker(s_id + ".TW")
-            fin = ticker.financials
-            if fin is None or fin.empty:
-                ticker = yf.Ticker(s_id + ".TWO")
-                fin = ticker.financials
-                
-            if fin is not None and not fin.empty:
-                cols = fin.columns
-                if ranking_type == "營收爆發排名":
-                    if "Total Revenue" in fin.index and len(cols) >= 2:
-                        rev_latest = fin.loc["Total Revenue"].iloc[0]
-                        rev_prev = fin.loc["Total Revenue"].iloc[1]
-                        yoy = ((rev_latest - rev_prev) / rev_prev) * 100 if rev_prev > 0 else 0
-                        results.append({
-                            "股號": s_id, "財報季別": str(cols[0]).split()[0],
-                            "最新營業收入(元)": float(rev_latest), "營收成長率 (YoY)": round(float(yoy), 2)
-                        })
-                elif ranking_type == "毛利率成長排名":
-                    if "Gross Profit" in fin.index and "Total Revenue" in fin.index:
-                        gp = fin.loc["Gross Profit"].iloc[0]
-                        rev = fin.loc["Total Revenue"].iloc[0]
-                        gm = (gp / rev) * 100 if rev > 0 else 0
-                        results.append({
-                            "股號": s_id, "財報季別": str(cols[0]).split()[0], "最新單季毛利率 (%)": round(float(gm), 2)
-                        })
-                elif ranking_type == "法人連續買超金額排名":
-                    hist = ticker.history(period="1mo")
-                    if not hist.empty and len(hist) >= 5:
-                        vol_score = hist['Volume'].mean() * (hist['Close'].iloc[-1] - hist['Close'].iloc[0]) / hist['Close'].iloc[0]
-                        results.append({"股號": s_id, "法人資金動能指數": round(float(vol_score / 1000000), 2)})
-        except Exception:
-            continue
-        time.sleep(0.01)
-        
-    if results:
-        df_res = pd.DataFrame(results).drop_duplicates(subset=["股號"])
-        if ranking_type == "營收爆發排名":
-            df_res = df_res.sort_values(by="營收成長率 (YoY)", ascending=False).head(15)
-            df_res["最新營業收入(元)"] = df_res["最新營業收入(元)"].apply(lambda x: f"{x:,.0f}")
-            df_res["營收成長率 (YoY)"] = df_res["營收成長率 (YoY)"].apply(lambda x: f"{x:+.2f}%")
-        elif ranking_type == "毛利率成長排名":
-            df_res = df_res.sort_values(by="最新單季毛利率 (%)", ascending=False).head(15)
-            df_res["最新單季毛利率 (%)"] = df_res["最新單季毛利率 (%)"].apply(lambda x: f"{x:.2f}%")
-        elif ranking_type == "法人連續買超金額排名":
-            df_res = df_res.sort_values(by="法人資金動能指數", ascending=False).head(15)
-            df_res["法人資金動能指數"] = df_res["法人資金動能指數"].apply(lambda x: f"{x:+,.2f} 億")
-        return df_res.reset_index(drop=True)
-        
-    return pd.DataFrame(columns=["股號", "數據狀態"])
-
-# 生成選股：加入【高檔爆量長黑】與【開盤跳空低開】防禦過濾
+# 生成選股：結合全維度過濾
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -497,7 +506,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         stock_id = parse_stock_input(item.get("股號"))
         if not stock_id: continue
         
-        # 1. 技術指標與型態防衛
         _, kd_info = calculate_kd(stock_id, period_type="日線")
         if isinstance(kd_info, dict):
             k_val = kd_info.get("K", 50)
@@ -505,18 +513,13 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             is_above_5ma = kd_info.get("is_above_5ma", True)
             is_big_black_k = kd_info.get("is_big_black_k", False)
             
-            # 🛡️ 防線：剔除 KD 死亡交叉、破 5MA 或高檔爆量長黑出貨的股票
             if k_val < d_val or not is_above_5ma or is_big_black_k:
                 continue
 
-        # 2. 開盤跳空低開防護過濾
         p_info = get_realtime_tw_price_info(stock_id)
         if p_info:
             real_p = p_info["real_price"]
-            
-            # 🛡️ 防線：當天開盤跳空低開（弱勢洗盤），直接剔除
-            if p_info["is_gap_down"]:
-                continue
+            if p_info["is_gap_down"]: continue
 
             if min_price > 0 and real_p < min_price: continue
             if max_price > 0 and real_p > max_price: continue
@@ -556,11 +559,16 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         })
     return final_results
 
+# AI 深度分析：新增同業估值比較、新聞獲利核心與領先/落後指標結構化輸出
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
     p_info = get_realtime_tw_price_info(stock_id)
     rev_str = get_stock_revenue_data(stock_id)
+    
+    news_titles = get_stock_news(stock_id)
+    val_metrics = get_stock_valuation_metrics(stock_id)
+    peer_str = get_peer_comparison(stock_id)
     
     if p_info:
         real_price = p_info["real_price"]
@@ -588,11 +596,13 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期：" + str(target_date_str) + "。\n"
         "分析標的：" + str(stock_input) + " (代碼: " + str(stock_id) + ")，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
         + calc_price_str + "\n"
-        "全球宏觀與風險避險指標 (美債10年期殖利率/原油/VIX恐慌/黃金)：\n" + str(macro_data) + "\n"
-        "台股產業族群表現：" + str(sector_data) + "\n"
-        "【基本面最新營收趨勢】：\n" + rev_str + "\n"
-        "【近期三大法人籌碼細節】：\n" + chip_str + "\n"
-        "【技術面量價與雙均線診斷】：\n"
+        "【基本面估值與同業競爭者對比】：\n"
+        f"- 本本益比 (P/E): {val_metrics['pe']} | 股淨比 (P/B): {val_metrics['pb']} | 最新毛利率: {val_metrics['gross_margin']}\n"
+        f"- {peer_str}\n\n"
+        "【市場最新新聞輿論與獲利預估】：\n" + news_titles + "\n\n"
+        "【基本面最新營收趨勢 (落後指標)】：\n" + rev_str + "\n\n"
+        "【近期三大法人籌碼細節 (領先/同步指標)】：\n" + chip_str + "\n\n"
+        "【技術面量價與雙均線診斷 (確認指標)】：\n"
         "- " + kd_str + "\n"
         "- " + ma_str + "\n"
         "- " + vol_str + "\n"
@@ -604,9 +614,10 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "3. 具體操作指引（【請務必包含：進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "，以及明確的『預估波段持有天數』）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結\n"
-        "2. 台股主流產業與資金流向研判\n"
-        "3. 籌碼面與基本面月營收連動分析\n"
-        "4. 5MA/20MA月線多頭格局與量價關係診斷（【請務必針對 20MA 月線 ( " + str(kd_info.get('20MA')) + " 元) 乖離率與當前成交量進行深層邏輯解析】）。"
+        "2. 基本面價值評估與同業估值比較（深度解析該公司 P/E、P/B 與毛利率在同業中的競爭優勢與營收核心本質）\n"
+        "3. 新聞輿論與法人獲利預估背離診斷（檢視市場新聞氛圍是否過熱，新聞報導的獲利預估與真實營收是否有落差）\n"
+        "4. 三大法人籌碼流向（領先指標）與基本面月營收連動分析\n"
+        "5. 5MA/20MA月線多頭格局與量價關係診斷（【請務必針對 20MA 月線 ( " + str(kd_info.get('20MA')) + " 元) 乖離率與當前成交量進行深層邏輯解析】）。"
     )
     return call_gemini_with_retry(prompt)
 
@@ -676,14 +687,7 @@ capital = capital_input if capital_input is not None else 0
 
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
-st.sidebar.divider()
-st.sidebar.markdown("### 🏆 全市場多維度量化排行榜雷達")
-ranking_option = st.sidebar.selectbox("選擇雷達掃描維度", ["營收爆發排名", "毛利率成長排名", "法人連續買超金額排名"], label_visibility="collapsed")
-btn_market_ranking = st.sidebar.button("🚀 執行量化雷達掃描", type="primary", use_container_width=True)
-
-# -------------------------------------------------------------
 # 主畫面看板
-# -------------------------------------------------------------
 st.subheader(f"🌐 全球宏觀與風險避險指標看板 ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
@@ -711,7 +715,7 @@ if stock_id and str(stock_id).strip() != "":
         c1.metric(f"{period_type} K 值", kd_info['K'])
         c2.metric(f"{period_type} D 值", kd_info['D'])
         c3.metric("5日均線 (5MA)", kd_info['5MA'])
-        c4.metric("20日線 (月線)", kd_info['20MA'], delta=f"{kd_info['bias_20ma']:+}%\n(乖離)")
+        c4.metric("20日线 (月線)", kd_info['20MA'], delta=f"{kd_info['bias_20ma']:+}%\n(乖離)")
         c5.metric("KD & 均線型態", kd_info['signal'])
         
     tab_chip, tab_kd = st.tabs(["三大法人籌碼 (張)", f"{period_type} KD 指標與 均線走勢圖"])
@@ -734,16 +738,6 @@ if stock_id and str(stock_id).strip() != "":
 else:
     st.info("請於左側輸入台股代碼或股名後檢視籌碼與 KD / 均線看板")
 
-if btn_market_ranking:
-    with st.spinner(f"🏆 AI 雷達正在全市場同步運算真實財報 [{ranking_option}] 排行榜..."):
-        ranking_df = get_ranking_data(ranking_option)
-        if not ranking_df.empty:
-            st.markdown(f"### 🏆 全市場【{ranking_option}】財報排行榜 (Top 15)")
-            st.info("💡 優秀的資優生已透過真實財報數據自動浮出水面，您可以直接將其股號或股名複製至上方進行詳細 AI 深度分析！")
-            st.dataframe(ranking_df, hide_index=True, use_container_width=True)
-        else:
-            st.error("目前無法取得排行榜資料，請稍後再試。")
-
 st.divider()
 
 if btn_analyze_stock:
@@ -752,14 +746,14 @@ if btn_analyze_stock:
     else:
         chip_df = get_stock_chip(stock_id, target_date_str)
         _, kd_info = calculate_kd(stock_id, period_type=period_type)
-        with st.spinner(f"🤖 AI 正在結合【美債/原油/VIX】與【量價月線】深度分析 {display_title}..."):
+        with st.spinner(f"🤖 AI 正在檢析【同業估值比較】與【新聞獲利核心本質】..."):
             try:
                 report = ai_single_stock_analysis(
                     macro_data, sector_data, raw_stock_input, 
                     chip_data=chip_df, kd_info=kd_info, period_type=period_type, 
                     capital=capital, target_date_str=target_date_str
                 )
-                st.subheader(f"🤖 Gemini AI 個股詳細分析報告 ({display_title})")
+                st.subheader(f"🤖 Gemini AI 全維度 (同業估值/新聞核心/籌碼技術) 詳細報告 ({display_title})")
                 st.markdown(report)
             except Exception as e:
                 st.error(f"分析生成失敗: {e}")
