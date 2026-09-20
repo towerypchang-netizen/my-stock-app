@@ -13,6 +13,36 @@ from google import genai
 # 設定網頁標題與寬版佈局
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
+# ==============================================================================
+# 🔒 簡單密碼驗證鎖機制 (新增部分)
+# ==============================================================================
+def check_password():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if not st.session_state.authenticated:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.subheader("🔒 AI 股票分析系統存取認證")
+            user_password = st.text_input("請輸入存取密碼：", type="password")
+            if st.button("確認登入", type="primary", use_container_width=True):
+                # 預設密碼設定（可在 Streamlit Secrets 設定 APP_PASSWORD，或直接在此更改預設值 "888888"）
+                correct_password = st.secrets.get("APP_PASSWORD", "615588")
+                if user_password == correct_password:
+                    st.session_state.authenticated = True
+                    st.success("密碼正確，登入成功！")
+                    st.rerun()
+                else:
+                    st.error("密碼錯誤，請重新輸入！")
+        return False
+    return True
+
+# 若未通過驗證，停止執行後續程式碼
+if not check_password():
+    st.stop()
+# ==============================================================================
+
 # 自訂 CSS
 st.markdown(
     """
