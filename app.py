@@ -28,7 +28,7 @@ def check_password():
             user_password = st.text_input("請輸入存取密碼：", type="password")
             if st.button("確認登入", type="primary", use_container_width=True):
                 # 預設密碼設定（可在 Streamlit Secrets 設定 APP_PASSWORD，或直接將 "888888" 改為您想要的密碼）
-                correct_password = st.secrets.get("APP_PASSWORD", "888888")
+                correct_password = st.secrets.get("APP_PASSWORD", "615588")
                 if user_password == correct_password:
                     st.session_state.authenticated = True
                     st.success("密碼正確，登入成功！")
