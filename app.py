@@ -14,7 +14,7 @@ from google import genai
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
 # ==============================================================================
-# 🔒 簡單密碼驗證鎖機制 (新增部分)
+# 🔒 簡單密碼驗證鎖機制
 # ==============================================================================
 def check_password():
     if "authenticated" not in st.session_state:
@@ -27,8 +27,8 @@ def check_password():
             st.subheader("🔒 AI 股票分析系統存取認證")
             user_password = st.text_input("請輸入存取密碼：", type="password")
             if st.button("確認登入", type="primary", use_container_width=True):
-                # 預設密碼設定（可在 Streamlit Secrets 設定 APP_PASSWORD，或直接在此更改預設值 "888888"）
-                correct_password = st.secrets.get("APP_PASSWORD", "615588")
+                # 預設密碼設定（可在 Streamlit Secrets 設定 APP_PASSWORD，或直接將 "888888" 改為您想要的密碼）
+                correct_password = st.secrets.get("APP_PASSWORD", "888888")
                 if user_password == correct_password:
                     st.session_state.authenticated = True
                     st.success("密碼正確，登入成功！")
@@ -125,7 +125,7 @@ STOCK_NAME_TO_ID = {
     "南亞科": "2408", "華邦電": "2344", "聯電": "2303", "欣興": "3037", "健鼎": "3044",
     "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958", "臻鼎KY": "4958",
     "聯茂": "6213", "金像電": "2368", "台光電": "2383", "華通": "2313", "群創": "3481", "友達": "2409",
-    "力積電": "6770", "威盛": "2388", "宏碁": "2353", "仁寶": "2324", "光寶科": "2301"
+    "力積電": "6770", "威盛": "2388", "宏碁": "2353", "仁寶": "2324", "光寶科": "2301", "英業達": "2356"
 }
 
 # 大型權值股名單（進行波動與持有時間平滑化處理）
@@ -135,7 +135,7 @@ PEER_GROUPS = {
     "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
     "晶圓代工/半導體": ["2330", "2303", "6770", "3711"],
     "IC 設計": ["2454", "3034", "3661", "5269", "3443", "6643", "2388"],
-    "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324"],
+    "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356"],
     "散熱/電源": ["2308", "3017"],
     "航運": ["2603", "2609", "2615"],
     "金控": ["2881", "2882", "2891"]
@@ -505,7 +505,7 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 生成選股（大型權值股波動平滑與時間調整）
+# 生成選股：結合「法人同步賣超剔除」與「KD 中性觀望剔除」
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -535,16 +535,32 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         stock_id = parse_stock_input(item.get("股號"))
         if not stock_id: continue
         
+        # 🛡️ 硬過濾 1：技術指標與型態防衛 (剔除 KD 死亡交叉、破 5MA、爆量長黑與【中性觀望無方向】標的)
         _, kd_info = calculate_kd(stock_id, period_type="日線")
         if isinstance(kd_info, dict):
             k_val = kd_info.get("K", 50)
             d_val = kd_info.get("D", 50)
+            kd_signal = kd_info.get("signal", "")
             is_above_5ma = kd_info.get("is_above_5ma", True)
             is_big_black_k = kd_info.get("is_big_black_k", False)
             
-            if k_val < d_val or not is_above_5ma or is_big_black_k:
+            if k_val < d_val or not is_above_5ma or is_big_black_k or "中性" in kd_signal or "死亡" in kd_signal:
                 continue
 
+        # 🛡️ 硬過濾 2：三大法人籌碼方向過濾 (若外資、投信、自營商全部同步賣超，直接硬性剔除)
+        chip_df = get_stock_chip(stock_id, target_date_str)
+        if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
+            latest_chip = chip_df.iloc[-1]
+            try:
+                f_buy = int(str(latest_chip.get('外資', '0')).replace(',', '').replace('+', ''))
+                i_buy = int(str(latest_chip.get('投信', '0')).replace(',', '').replace('+', ''))
+                d_buy = int(str(latest_chip.get('自營商', '0')).replace(',', '').replace('+', ''))
+                if f_buy < 0 and i_buy < 0 and d_buy < 0:
+                    continue  # 三大法人同步賣超，直接剔除
+            except Exception:
+                pass
+
+        # 3. 開盤價格與股價區間過濾
         p_info = get_realtime_tw_price_info(stock_id)
         if p_info:
             real_p = p_info["real_price"]
@@ -559,7 +575,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
             item["建議退場"] = f"{round(real_p * 1.08, 2):.2f}"
             
-            # 大型權值股自動平滑化波段持有時間
             if stock_id in LARGE_CAP_STOCKS:
                 item["波段期間"] = "5-10天 (權值股階梯墊高)"
             else:
@@ -568,6 +583,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             final_results.append(item)
         if len(final_results) >= 3: break
 
+    # 備援補足機制
     if len(final_results) < 3:
         for item in picks:
             stock_id = parse_stock_input(item.get("股號"))
@@ -635,7 +651,6 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         vol_ratio = 1.0
         kd_str = ma_str = vol_str = pattern_str = "技術數據不足"
     
-    # 策略提醒
     vol_hint = "當前成交量尚未爆發，若量能不及 1.2 倍，建議於『建議進場區間下限』逢低掛單佈局，切勿開高追價。" if vol_ratio < 1.2 else "成交量順利放大，具備攻擊量能！"
     
     prompt = (
