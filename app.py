@@ -27,7 +27,6 @@ def check_password():
             st.subheader("🔒 AI 股票分析系統存取認證")
             user_password = st.text_input("請輸入存取密碼：", type="password")
             if st.button("確認登入", type="primary", use_container_width=True):
-                # 預設密碼設定（可在 Streamlit Secrets 設定 APP_PASSWORD，或直接將 "888888" 改為您想要的密碼）
                 correct_password = st.secrets.get("APP_PASSWORD", "615588")
                 if user_password == correct_password:
                     st.session_state.authenticated = True
@@ -125,10 +124,9 @@ STOCK_NAME_TO_ID = {
     "南亞科": "2408", "華邦電": "2344", "聯電": "2303", "欣興": "3037", "健鼎": "3044",
     "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958", "臻鼎KY": "4958",
     "聯茂": "6213", "金像電": "2368", "台光電": "2383", "華通": "2313", "群創": "3481", "友達": "2409",
-    "力積電": "6770", "威盛": "2388", "宏碁": "2353", "仁寶": "2324", "光寶科": "2301", "英業達": "2356"
+    "力積電": "6770", "威盛": "2388", "宏碁": "2353", "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260"
 }
 
-# 大型權值股名單（進行波動與持有時間平滑化處理）
 LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "2891", "3711", "2303"]
 
 PEER_GROUPS = {
@@ -136,6 +134,7 @@ PEER_GROUPS = {
     "晶圓代工/半導體": ["2330", "2303", "6770", "3711"],
     "IC 設計": ["2454", "3034", "3661", "5269", "3443", "6643", "2388"],
     "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356"],
+    "記憶體/模組": ["3260", "2408", "2344"],
     "散熱/電源": ["2308", "3017"],
     "航運": ["2603", "2609", "2615"],
     "金控": ["2881", "2882", "2891"]
@@ -505,7 +504,46 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 生成選股：結合「法人同步賣超剔除」與「KD 中性觀望剔除」
+# 獨立過濾函數：確保主篩選與備援補足均採用極嚴苛標準
+def is_valid_stock(stock_id, target_date_str, min_price, max_price):
+    _, kd_info = calculate_kd(stock_id, period_type="日線")
+    if isinstance(kd_info, dict):
+        k_val = kd_info.get("K", 50)
+        d_val = kd_info.get("D", 50)
+        kd_signal = kd_info.get("signal", "")
+        is_above_5ma = kd_info.get("is_above_5ma", True)
+        is_big_black_k = kd_info.get("is_big_black_k", False)
+        
+        # 🛡️ 硬過濾 1：KD 死亡交叉、破 5MA、爆量長黑或【中性觀望無方向】一律硬性剔除
+        if k_val < d_val or not is_above_5ma or is_big_black_k or "中性" in kd_signal or "死亡" in kd_signal:
+            return False, None
+
+    # 🛡️ 硬過濾 2：三大法人全賣超或【三大法人合計為負值】一律硬性剔除
+    chip_df = get_stock_chip(stock_id, target_date_str)
+    if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
+        latest_chip = chip_df.iloc[-1]
+        try:
+            f_buy = int(str(latest_chip.get('外資', '0')).replace(',', '').replace('+', ''))
+            i_buy = int(str(latest_chip.get('投信', '0')).replace(',', '').replace('+', ''))
+            d_buy = int(str(latest_chip.get('自營商', '0')).replace(',', '').replace('+', ''))
+            tot_buy = int(str(latest_chip.get('三大法人合計', '0')).replace(',', '').replace('+', ''))
+            
+            if (f_buy < 0 and i_buy < 0 and d_buy < 0) or tot_buy < 0:
+                return False, None
+        except Exception:
+            pass
+
+    p_info = get_realtime_tw_price_info(stock_id)
+    if p_info:
+        real_p = p_info["real_price"]
+        if p_info["is_gap_down"]: return False, None
+        if min_price > 0 and real_p < min_price: return False, None
+        if max_price > 0 and real_p > max_price: return False, None
+        return True, real_p
+        
+    return False, None
+
+# 生成選股：主迴圈與備援迴圈均使用 is_valid_stock 進行雙重鎖死
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -531,44 +569,13 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     
     final_results = []
     
+    # 第一輪嚴格篩選
     for item in picks:
         stock_id = parse_stock_input(item.get("股號"))
         if not stock_id: continue
         
-        # 🛡️ 硬過濾 1：技術指標與型態防衛 (剔除 KD 死亡交叉、破 5MA、爆量長黑與【中性觀望無方向】標的)
-        _, kd_info = calculate_kd(stock_id, period_type="日線")
-        if isinstance(kd_info, dict):
-            k_val = kd_info.get("K", 50)
-            d_val = kd_info.get("D", 50)
-            kd_signal = kd_info.get("signal", "")
-            is_above_5ma = kd_info.get("is_above_5ma", True)
-            is_big_black_k = kd_info.get("is_big_black_k", False)
-            
-            if k_val < d_val or not is_above_5ma or is_big_black_k or "中性" in kd_signal or "死亡" in kd_signal:
-                continue
-
-        # 🛡️ 硬過濾 2：三大法人籌碼方向過濾 (若外資、投信、自營商全部同步賣超，直接硬性剔除)
-        chip_df = get_stock_chip(stock_id, target_date_str)
-        if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
-            latest_chip = chip_df.iloc[-1]
-            try:
-                f_buy = int(str(latest_chip.get('外資', '0')).replace(',', '').replace('+', ''))
-                i_buy = int(str(latest_chip.get('投信', '0')).replace(',', '').replace('+', ''))
-                d_buy = int(str(latest_chip.get('自營商', '0')).replace(',', '').replace('+', ''))
-                if f_buy < 0 and i_buy < 0 and d_buy < 0:
-                    continue  # 三大法人同步賣超，直接剔除
-            except Exception:
-                pass
-
-        # 3. 開盤價格與股價區間過濾
-        p_info = get_realtime_tw_price_info(stock_id)
-        if p_info:
-            real_p = p_info["real_price"]
-            if p_info["is_gap_down"]: continue
-
-            if min_price > 0 and real_p < min_price: continue
-            if max_price > 0 and real_p > max_price: continue
-            
+        valid, real_p = is_valid_stock(stock_id, target_date_str, min_price, max_price)
+        if valid and real_p:
             p_low = round(real_p * 0.985, 1)
             p_high = round(real_p * 1.005, 1)
             item["當前實價"] = f"{real_p:.2f}"
@@ -583,17 +590,14 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             final_results.append(item)
         if len(final_results) >= 3: break
 
-    # 備援補足機制
+    # 第二輪備援篩選（同樣套用 is_valid_stock 硬過濾，拒絕任何破格進入）
     if len(final_results) < 3:
         for item in picks:
             stock_id = parse_stock_input(item.get("股號"))
             if any(x.get("股號") == item.get("股號") for x in final_results): continue
             
-            p_info = get_realtime_tw_price_info(stock_id)
-            if p_info:
-                real_p = p_info["real_price"]
-                if min_price > 0 and real_p < min_price: continue
-                if max_price > 0 and real_p > max_price: continue
+            valid, real_p = is_valid_stock(stock_id, target_date_str, min_price, max_price)
+            if valid and real_p:
                 p_low = round(real_p * 0.985, 1)
                 p_high = round(real_p * 1.005, 1)
                 item["當前實價"] = f"{real_p:.2f}"
@@ -613,7 +617,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         })
     return final_results
 
-# AI 深度分析：加入量能比診斷與權值股平滑提示
+# AI 深度分析
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
