@@ -27,7 +27,7 @@ def check_password():
             st.subheader("🔒 AI 股票分析系統存取認證")
             user_password = st.text_input("請輸入存取密碼：", type="password")
             if st.button("確認登入", type="primary", use_container_width=True):
-                correct_password = st.secrets.get("APP_PASSWORD", "615588")
+                correct_password = st.secrets.get("APP_PASSWORD", "888888")
                 if user_password == correct_password:
                     st.session_state.authenticated = True
                     st.success("密碼正確，登入成功！")
@@ -37,7 +37,6 @@ def check_password():
         return False
     return True
 
-# 若未通過驗證，停止執行後續程式碼
 if not check_password():
     st.stop()
 # ==============================================================================
@@ -504,8 +503,8 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 獨立過濾函數：確保主篩選與備援補足均採用極嚴苛標準
-def is_valid_stock(stock_id, target_date_str, min_price, max_price):
+# 最佳化獨立過濾函數（防呆降噪、合理容錯）
+def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True):
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
         k_val = kd_info.get("K", 50)
@@ -514,11 +513,15 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price):
         is_above_5ma = kd_info.get("is_above_5ma", True)
         is_big_black_k = kd_info.get("is_big_black_k", False)
         
-        # 🛡️ 硬過濾 1：KD 死亡交叉、破 5MA、爆量長黑或【中性觀望無方向】一律硬性剔除
-        if k_val < d_val or not is_above_5ma or is_big_black_k or "中性" in kd_signal or "死亡" in kd_signal:
+        # 1. 嚴格剔除高檔爆量長黑與死亡交叉
+        if is_big_black_k or "死亡" in kd_signal:
+            return False, None
+            
+        # 2. 嚴格模式下才要求 KD 非中性與必須站上 5MA
+        if strict_mode and (k_val < d_val or not is_above_5ma or "中性" in kd_signal):
             return False, None
 
-    # 🛡️ 硬過濾 2：三大法人全賣超或【三大法人合計為負值】一律硬性剔除
+    # 3. 籌碼過濾：僅在確定三大法人「三同賣 (全部負數)」時才剔除，避免數據延遲時誤殺
     chip_df = get_stock_chip(stock_id, target_date_str)
     if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
         latest_chip = chip_df.iloc[-1]
@@ -526,13 +529,13 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price):
             f_buy = int(str(latest_chip.get('外資', '0')).replace(',', '').replace('+', ''))
             i_buy = int(str(latest_chip.get('投信', '0')).replace(',', '').replace('+', ''))
             d_buy = int(str(latest_chip.get('自營商', '0')).replace(',', '').replace('+', ''))
-            tot_buy = int(str(latest_chip.get('三大法人合計', '0')).replace(',', '').replace('+', ''))
             
-            if (f_buy < 0 and i_buy < 0 and d_buy < 0) or tot_buy < 0:
+            if f_buy < 0 and i_buy < 0 and d_buy < 0:
                 return False, None
         except Exception:
             pass
 
+    # 4. 價格與跳空開低過濾
     p_info = get_realtime_tw_price_info(stock_id)
     if p_info:
         real_p = p_info["real_price"]
@@ -543,7 +546,7 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price):
         
     return False, None
 
-# 生成選股：主迴圈與備援迴圈均使用 is_valid_stock 進行雙重鎖死
+# 生成選股：採用兩階段多重降階過濾，保證必定產出優質標的
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -569,12 +572,12 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     
     final_results = []
     
-    # 第一輪嚴格篩選
+    # 第一輪：高標準極嚴格篩選
     for item in picks:
         stock_id = parse_stock_input(item.get("股號"))
         if not stock_id: continue
         
-        valid, real_p = is_valid_stock(stock_id, target_date_str, min_price, max_price)
+        valid, real_p = is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True)
         if valid and real_p:
             p_low = round(real_p * 0.985, 1)
             p_high = round(real_p * 1.005, 1)
@@ -590,13 +593,13 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             final_results.append(item)
         if len(final_results) >= 3: break
 
-    # 第二輪備援篩選（同樣套用 is_valid_stock 硬過濾，拒絕任何破格進入）
+    # 第二輪：放寬 KD 中性限制之備援補足（仍嚴格剔除爆量長黑、三大法人全賣與開低）
     if len(final_results) < 3:
         for item in picks:
             stock_id = parse_stock_input(item.get("股號"))
             if any(x.get("股號") == item.get("股號") for x in final_results): continue
             
-            valid, real_p = is_valid_stock(stock_id, target_date_str, min_price, max_price)
+            valid, real_p = is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=False)
             if valid and real_p:
                 p_low = round(real_p * 0.985, 1)
                 p_high = round(real_p * 1.005, 1)
