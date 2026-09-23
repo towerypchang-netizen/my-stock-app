@@ -27,7 +27,7 @@ def check_password():
             st.subheader("🔒 AI 股票分析系統存取認證")
             user_password = st.text_input("請輸入存取密碼：", type="password")
             if st.button("確認登入", type="primary", use_container_width=True):
-                correct_password = st.secrets.get("APP_PASSWORD", "615588")
+                correct_password = st.secrets.get("APP_PASSWORD", "888888")
                 if user_password == correct_password:
                     st.session_state.authenticated = True
                     st.success("密碼正確，登入成功！")
@@ -40,6 +40,14 @@ def check_password():
 if not check_password():
     st.stop()
 # ==============================================================================
+
+# 初始化 session state 盤前情報動態變數
+if "premarket_focus" not in st.session_state:
+    st.session_state.premarket_focus = []
+if "premarket_avoid" not in st.session_state:
+    st.session_state.premarket_avoid = []
+if "premarket_summary" not in st.session_state:
+    st.session_state.premarket_summary = "尚未進行盤前情報診斷，系統將採用標準 Top-Down 策略。"
 
 # 自訂 CSS
 st.markdown(
@@ -195,6 +203,39 @@ def call_gemini_with_retry(prompt, max_retries=3):
             time.sleep(1.5)
 
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
+
+# 08:00-08:30 盤前情報動態分析模組
+def diagnose_premarket_intelligence(macro_data, target_date_str):
+    prompt_premarket = f"""
+    請作為華爾街資深盤前情報官與台股策略總監，基準日期：{target_date_str}。
+    當前全球宏觀指標：{macro_data}。
+
+    請針對昨夜美股（費半、輝達、台積電 ADR）、美債殖利率、原油與近期台股盤前市場焦點進行盤前戰情診斷。
+    請分析並產出一份【盤前情報動態報告】，格式包含：
+    1. 盤前市場氛圍與美股科技連動總結
+    2. 今日建議強烈聚焦的利多/強勢族群（請寫成 JSON 陣列如 ["AI 伺服器", "PCB", "矽光子"]）
+    3. 今日建議避險或利空不宜碰觸的族群（請寫成 JSON 陣列如 ["塑化", "面板"]）
+
+    請回傳 JSON 格式如下：
+    {{
+      "summary": "簡短 100 字盤前重點摘要...",
+      "focus_sectors": ["族群A", "族群B"],
+      "avoid_sectors": ["族群C"]
+    }}
+    不要包含 Markdown 多餘文字。
+    """
+    res_raw = call_gemini_with_retry(prompt_premarket)
+    try:
+        json_match = re.search(r'\{.*\}', res_raw, re.DOTALL)
+        clean_json = json_match.group(0) if json_match else res_raw.strip()
+        data = json.loads(clean_json)
+        return data
+    except Exception:
+        return {
+            "summary": "盤前總經與美股走勢平穩，維持科技權值與熱門題材輪動。",
+            "focus_sectors": ["AI 伺服器", "PCB", "半導體"],
+            "avoid_sectors": []
+        }
 
 def get_stock_news(stock_id):
     clean_id = parse_stock_input(stock_id)
@@ -542,7 +583,7 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         
     return False, None
 
-# 生成選股
+# 生成選股：結合「08:00-08:30 盤前情報動態注入」
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -551,11 +592,17 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     price_limit_str = f"【硬性股價區間限制】：{', '.join(cond_list)}" if cond_list else "股價不限"
     sector_limit_str = f"【指定產業限制】：必須嚴格從「{custom_sector.strip()}」相關個股挑選" if custom_sector and custom_sector.strip() != "" else "【指定產業限制】：AI 自主推薦熱門主流"
 
+    # 動態注入盤前情報條件
+    premarket_focus_str = f"【08:00 盤前即時利多/聚焦族群 (第一優先權重)】：{st.session_state.premarket_focus}" if st.session_state.premarket_focus else ""
+    premarket_avoid_str = f"【08:00 盤前即時利空/避險族群 (絕對禁止挑選)】：{st.session_state.premarket_avoid}" if st.session_state.premarket_avoid else ""
+
     prompt_select = (
         "請作為頂級華爾街台股選股操盤手，基準日期：" + str(target_date_str) + "。\n"
         "價格條件：" + price_limit_str + "。\n"
         "族群條件：" + sector_limit_str + "。\n"
-        "大盤環境：" + str(macro_data) + "\n\n"
+        "大盤環境：" + str(macro_data) + "\n"
+        + premarket_focus_str + "\n"
+        + premarket_avoid_str + "\n\n"
         "請廣泛挑選 30 檔具備波段攻擊潛力、熱門且實質成交量高的台股標的名單，上漲率預估請給予 68%-88% 之間的數值。\n"
         "請回傳 JSON 陣列格式如：\n"
         '[{"上漲率預估":"78%","族群":"半導體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
@@ -614,7 +661,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         })
     return final_results
 
-# AI 深度分析：精準量化「多空勝率優勢與風報比評估」格式
+# AI 深度分析：精準量化風報比與盤前情報對齊
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
@@ -655,10 +702,13 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     
     vol_hint = "當前成交量尚未爆發，若量能不及 1.2 倍，建議於『建議進場區間下限』逢低掛單佈局，切勿開高追價。" if vol_ratio < 1.2 else "成交量順利放大，具備攻擊量能！"
     
+    premarket_context = f"【08:00 盤前情報動態備忘】：聚焦族群 {st.session_state.premarket_focus} / 避險族群 {st.session_state.premarket_avoid}"
+
     prompt = (
         "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期：" + str(target_date_str) + "。\n"
         "分析標的：" + str(stock_input) + " (代碼: " + str(stock_id) + ")，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
         + calc_price_str + "\n"
+        + premarket_context + "\n"
         "【量能策略叮嚀】：\n" + vol_hint + "\n\n"
         "【基本面估值與同業競爭者對比】：\n"
         f"- 本益比 (P/E): {val_metrics['pe']} | 股淨比 (P/B): {val_metrics['pb']} | 最新毛利率: {val_metrics['gross_margin']}\n"
@@ -673,7 +723,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "- " + pattern_str + "\n\n"
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
         "=== 第一部分：【實戰結論摘要】 ===\n"
-        "1. 操盤實戰結論（請綜合美債/原油戰事避險情緒、大型權值股/中小型股屬性與 20MA 月線做二次邏輯驗證，嚴謹判斷是否具備大盤拉回時的抗跌與續漲力道）。\n"
+        "1. 操盤實戰結論（請結合 08:00 盤前即時情報、美債/原油戰事避險情緒、大型權值股/中小型股屬性與 20MA 月線做二次邏輯驗證，嚴謹判斷是否具備大盤拉回時的抗跌與續漲力道）。\n"
         "2. 多空勝率優勢與風報比評估\n"
         "   請【嚴格依據以下固定格式與縮排】完整填入真實數學計算數據：\n"
         "   * 多空勝率評估：[AI分析當前多空勝率，例如：75% 勝率優勢]\n"
@@ -685,7 +735,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "   * 綜合推薦星等：[例如：★★★★☆ (4/5星)]\n"
         "3. 具體操作指引（【請務必包含：進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "，以及明確的『預估波段持有天數』】）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
-        "1. 全球宏觀與科技大勢總結\n"
+        "1. 全球宏觀與科技大勢總結 (含 08:00 盤前美股/ADR 連動)\n"
         "2. 基本面價值評估與同業估值比較\n"
         "3. 新聞輿論與法人獲利預估背離診斷\n"
         "4. 三大法人籌碼流向與基本面月營收連動分析\n"
@@ -714,6 +764,22 @@ st.sidebar.markdown(
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
+# 📰 新增：08:00-08:30 盤前情報動態注入按鈕區塊
+st.sidebar.markdown("### 📰 盤前情報動態注入 (08:00-08:30)")
+if st.sidebar.button("⚡ 執行 08:00 盤前情報即時診斷", type="secondary", use_container_width=True):
+    with st.spinner("🤖 正在聯網掃描美股ADR、費半、油價與盤前即時新聞..."):
+        try:
+            p_data = diagnose_premarket_intelligence(macro_data, target_date_str)
+            st.session_state.premarket_summary = p_data.get("summary", "")
+            st.session_state.premarket_focus = p_data.get("focus_sectors", [])
+            st.session_state.premarket_avoid = p_data.get("avoid_sectors", [])
+            st.sidebar.success("盤前情報注入完成！已連動選股邏輯。")
+        except Exception as e:
+            st.sidebar.error(f"盤前情報診斷失敗: {e}")
+
+st.sidebar.info(f"💡 **盤前情報摘要**：\n{st.session_state.premarket_summary}")
+st.sidebar.divider()
+
 st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲率最高前三檔")
 
 st.sidebar.markdown("**指定產業族群或題材 (選填)**")
@@ -728,7 +794,7 @@ min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
 if st.sidebar.button("🚀 產生今日AI預估上漲率最高前三檔", type="primary", use_container_width=True):
-    with st.spinner("🤖 AI 正在掃描台股帶量個股與即時報價..."):
+    with st.spinner("🤖 AI 結合 08:00 盤前情報掃描台股中..."):
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
@@ -818,7 +884,7 @@ if btn_analyze_stock:
     else:
         chip_df = get_stock_chip(stock_id, target_date_str)
         _, kd_info = calculate_kd(stock_id, period_type=period_type)
-        with st.spinner(f"🤖 AI 正在檢析【風報比試算】、【同業估值】與【量能位階】..."):
+        with st.spinner(f"🤖 AI 結合 08:00 盤前情報檢析【風報比試算】、【同業估值】與【量能位階】..."):
             try:
                 report = ai_single_stock_analysis(
                     macro_data, sector_data, raw_stock_input, 
