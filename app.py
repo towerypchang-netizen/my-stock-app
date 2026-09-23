@@ -503,7 +503,7 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 最佳化獨立過濾函數（防呆降噪、合理容錯）
+# 獨立過濾函數
 def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True):
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
@@ -513,15 +513,12 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         is_above_5ma = kd_info.get("is_above_5ma", True)
         is_big_black_k = kd_info.get("is_big_black_k", False)
         
-        # 1. 嚴格剔除高檔爆量長黑與死亡交叉
         if is_big_black_k or "死亡" in kd_signal:
             return False, None
             
-        # 2. 嚴格模式下才要求 KD 非中性與必須站上 5MA
         if strict_mode and (k_val < d_val or not is_above_5ma or "中性" in kd_signal):
             return False, None
 
-    # 3. 籌碼過濾：僅在確定三大法人「三同賣 (全部負數)」時才剔除，避免數據延遲時誤殺
     chip_df = get_stock_chip(stock_id, target_date_str)
     if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
         latest_chip = chip_df.iloc[-1]
@@ -535,7 +532,6 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         except Exception:
             pass
 
-    # 4. 價格與跳空開低過濾
     p_info = get_realtime_tw_price_info(stock_id)
     if p_info:
         real_p = p_info["real_price"]
@@ -546,7 +542,7 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         
     return False, None
 
-# 生成選股：採用兩階段多重降階過濾，保證必定產出優質標的
+# 生成選股
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -572,7 +568,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     
     final_results = []
     
-    # 第一輪：高標準極嚴格篩選
     for item in picks:
         stock_id = parse_stock_input(item.get("股號"))
         if not stock_id: continue
@@ -593,7 +588,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             final_results.append(item)
         if len(final_results) >= 3: break
 
-    # 第二輪：放寬 KD 中性限制之備援補足（仍嚴格剔除爆量長黑、三大法人全賣與開低）
     if len(final_results) < 3:
         for item in picks:
             stock_id = parse_stock_input(item.get("股號"))
@@ -620,7 +614,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         })
     return final_results
 
-# AI 深度分析
+# AI 深度分析：精準量化「多空勝率優勢與風報比評估」格式
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
@@ -639,11 +633,12 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         price_info_str = f"當前真實市場成交價：{real_price} 元 ({cap_type_str})"
         p_low = round(real_price * 0.985, 1)
         p_high = round(real_price * 1.005, 1)
+        p_mid = round((p_low + p_high) / 2, 2)
         target_p = round(real_price * 1.08, 1)
-        calc_price_str = f"【系統統一計算建議】：建議進場買進區間為 {p_low} 元 ~ {p_high} 元，波段停利目標價為 {target_p} 元。"
+        calc_price_str = f"【系統統一計算數據】：建議買進區間：{p_low}元 ~ {p_high}元，預估進場均價中間值：{p_mid}元，波段停利目標價：{target_p}元。"
     else:
         price_info_str = "即時股價：需參考市場現價"
-        p_low, p_high, target_p = "---", "---", "---"
+        p_low, p_high, p_mid, target_p = "---", "---", "---", "---"
         calc_price_str = ""
 
     chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "無最新籌碼數據"
@@ -679,7 +674,15 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
         "=== 第一部分：【實戰結論摘要】 ===\n"
         "1. 操盤實戰結論（請綜合美債/原油戰事避險情緒、大型權值股/中小型股屬性與 20MA 月線做二次邏輯驗證，嚴謹判斷是否具備大盤拉回時的抗跌與續漲力道）。\n"
-        "2. 多空勝率優勢與風報比評估（深入分析該標的當前多空交戰的勝率優勢、潛在獲利與最大風險試算、風報比 R/R Ratio 評估，以及綜合推薦星等）。\n"
+        "2. 多空勝率優勢與風報比評估\n"
+        "   請【嚴格依據以下固定格式與縮排】完整填入真實數學計算數據：\n"
+        "   * 多空勝率評估：[AI分析當前多空勝率，例如：75% 勝率優勢]\n"
+        "   * 風險/報酬比 (R/R Ratio) 試算：\n"
+        "     - 預估進場均價：" + f"{p_mid} 元 (取建議買進區間 {p_low} ~ {p_high} 元之中間值)" + "\n"
+        "     - 波段目標價：" + f"{target_p} 元 (潛在獲利空間：+{round(target_p - p_mid, 2)} 元 / +{round((target_p - p_mid)/p_mid*100, 2)}%)" + "\n"
+        "     - 防守停損價：[AI依據技術支撐算出停損價，如 XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%)\n"
+        "     - 風報比 (R/R Ratio)：[AI計算 潛在獲利/潛在風險 比值，如 X.XX : 1] (AI分析，建議高於 2.0:1 方可建立部位)\n"
+        "   * 綜合推薦星等：[例如：★★★★☆ (4/5星)]\n"
         "3. 具體操作指引（【請務必包含：進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "，以及明確的『預估波段持有天數』】）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結\n"
@@ -815,7 +818,7 @@ if btn_analyze_stock:
     else:
         chip_df = get_stock_chip(stock_id, target_date_str)
         _, kd_info = calculate_kd(stock_id, period_type=period_type)
-        with st.spinner(f"🤖 AI 正在檢析【同業估值】、【權值屬性】與【量能位階】..."):
+        with st.spinner(f"🤖 AI 正在檢析【風報比試算】、【同業估值】與【量能位階】..."):
             try:
                 report = ai_single_stock_analysis(
                     macro_data, sector_data, raw_stock_input, 
