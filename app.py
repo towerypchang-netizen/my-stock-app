@@ -126,6 +126,7 @@ STOCK_NAME_TO_ID = {
     "台積電": "2330", "鴻海": "2317", "聯發科": "2454", "台達電": "2308", "廣達": "2382",
     "緯創": "3231", "華碩": "2357", "聯詠": "3034", "世芯": "3661", "世芯-KY": "3661", "世芯KY": "3661",
     "祥碩": "5269", "技嘉": "2376", "智邦": "2345", "和碩": "4938", "緯穎": "6669", "奇鋐": "3017",
+    "雙鴻": "3324", "高力": "8996", "京元電子": "2449", "智原": "3035",
     "創意": "3443", "旺矽": "6239", "長榮": "2603", "陽明": "2609", "萬海": "2615",
     "富邦金": "2881", "國泰金": "2882", "中信金": "2891", "日月光": "3711", "日月光投控": "3711",
     "南亞科": "2408", "華邦電": "2344", "聯電": "2303", "欣興": "3037", "健鼎": "3044",
@@ -137,12 +138,12 @@ STOCK_NAME_TO_ID = {
 LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "2891", "3711", "2303"]
 
 PEER_GROUPS = {
+    "液冷/散熱模組": ["3324", "8996", "3017", "2308"],
     "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
-    "晶圓代工/半導體": ["2330", "2303", "6770", "3711"],
-    "IC 設計": ["2454", "3034", "3661", "5269", "3443", "6643", "2388"],
+    "晶圓代工/半導體": ["2330", "2303", "6770", "3711", "2449"],
+    "IC 設計/ASIC": ["2454", "3034", "3661", "5269", "3443", "6643", "2388", "3035"],
     "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356"],
     "記憶體/模組": ["3260", "2408", "2344"],
-    "散熱/電源": ["2308", "3017"],
     "航運": ["2603", "2609", "2615"],
     "金控": ["2881", "2882", "2891"]
 }
@@ -204,18 +205,13 @@ def call_gemini_with_retry(prompt, max_retries=3):
 
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
-# 08:00-08:30 盤前情報動態分析模組
 def diagnose_premarket_intelligence(macro_data, target_date_str):
     prompt_premarket = f"""
     請作為華爾街資深盤前情報官與台股策略總監，基準日期：{target_date_str}。
     當前全球宏觀指標：{macro_data}。
 
     請針對昨夜美股（費半、輝達、台積電 ADR）、美債殖利率、原油與近期台股盤前市場焦點進行盤前戰情診斷。
-    請分析並產出一份【盤前情報動態報告】，格式包含：
-    1. 盤前市場氛圍與美股科技連動總結
-    2. 今日建議強烈聚焦的利多/強勢族群（請寫成 JSON 陣列如 ["AI 伺服器", "PCB", "矽光子"]）
-    3. 今日建議避險或利空不宜碰觸的族群（請寫成 JSON 陣列如 ["塑化", "面板"]）
-
+    請特別注意當天高檔獲利賣壓族群，避免誤選弱勢族群。
     請回傳 JSON 格式如下：
     {{
       "summary": "簡短 100 字盤前重點摘要...",
@@ -313,7 +309,7 @@ def get_realtime_tw_price_info(stock_id):
                 "real_price": latest_close,
                 "prev_close": prev_close,
                 "open_price": open_price,
-                "is_gap_down": open_price < prev_close
+                "is_gap_down": open_price < prev_close  # 嚴格判斷：開盤價 < 前收即視為跳空開低
             }
     except Exception:
         pass
@@ -515,36 +511,9 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    try:
-        ticker = yf.Ticker(clean_stock_id + ".TW")
-        hist = ticker.history(period="1mo")
-        if hist.empty:
-            ticker = yf.Ticker(clean_stock_id + ".TWO")
-            hist = ticker.history(period="1mo")
-            
-        if not hist.empty:
-            hist = hist.tail(5)
-            records = []
-            for dt, row in hist.iterrows():
-                d_str = dt.strftime("%Y-%m-%d")
-                vol_k = int(row['Volume'] / 1000)
-                price_change = row['Close'] - row['Open']
-                ratio = 0.12 if price_change > 0 else -0.12
-                f_val, i_val, d_val = int(vol_k * ratio * 1.2), int(vol_k * ratio * 0.4), int(vol_k * ratio * 0.2)
-                tot = f_val + i_val + d_val
-                records.append({
-                    "日期": d_str, "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                    "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                    "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                    "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                })
-            return pd.DataFrame(records)
-    except Exception:
-        pass
-
     return pd.DataFrame()
 
-# 獨立過濾函數
+# 升級版獨立過濾函數：封堵假籌碼與開低落阱
 def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True):
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
@@ -554,12 +523,15 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         is_above_5ma = kd_info.get("is_above_5ma", True)
         is_big_black_k = kd_info.get("is_big_black_k", False)
         
+        # 1. 硬性剔除爆量長黑與死亡交叉
         if is_big_black_k or "死亡" in kd_signal:
             return False, None
             
+        # 2. 嚴格模式下：若 KD 為中性，必須硬性站上 5MA 且不能呈向下穿入趨勢
         if strict_mode and (k_val < d_val or not is_above_5ma or "中性" in kd_signal):
             return False, None
 
+    # 3. 三大法人實質過濾（剔除全賣標的）
     chip_df = get_stock_chip(stock_id, target_date_str)
     if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
         latest_chip = chip_df.iloc[-1]
@@ -573,6 +545,7 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         except Exception:
             pass
 
+    # 4. 價格與開盤跳空低開硬過濾（開盤低於昨收代表盤中弱勢，硬性踢除）
     p_info = get_realtime_tw_price_info(stock_id)
     if p_info:
         real_p = p_info["real_price"]
@@ -583,7 +556,7 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         
     return False, None
 
-# 生成選股：結合「08:00-08:30 盤前情報動態注入」
+# 生成選股：結合盤前情報與防呆升級
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -592,7 +565,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     price_limit_str = f"【硬性股價區間限制】：{', '.join(cond_list)}" if cond_list else "股價不限"
     sector_limit_str = f"【指定產業限制】：必須嚴格從「{custom_sector.strip()}」相關個股挑選" if custom_sector and custom_sector.strip() != "" else "【指定產業限制】：AI 自主推薦熱門主流"
 
-    # 動態注入盤前情報條件
     premarket_focus_str = f"【08:00 盤前即時利多/聚焦族群 (第一優先權重)】：{st.session_state.premarket_focus}" if st.session_state.premarket_focus else ""
     premarket_avoid_str = f"【08:00 盤前即時利空/避險族群 (絕對禁止挑選)】：{st.session_state.premarket_avoid}" if st.session_state.premarket_avoid else ""
 
@@ -661,7 +633,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         })
     return final_results
 
-# AI 深度分析：精準量化風報比與盤前情報對齊
+# AI 深度分析
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
@@ -764,7 +736,6 @@ st.sidebar.markdown(
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
-# 📰 新增：08:00-08:30 盤前情報動態注入按鈕區塊
 st.sidebar.markdown("### 📰 盤前情報動態注入 (08:00-08:30)")
 if st.sidebar.button("⚡ 執行 08:00 盤前情報即時診斷", type="secondary", use_container_width=True):
     with st.spinner("🤖 正在聯網掃描美股ADR、費半、油價與盤前即時新聞..."):
