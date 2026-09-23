@@ -27,7 +27,7 @@ def check_password():
             st.subheader("🔒 AI 股票分析系統存取認證")
             user_password = st.text_input("請輸入存取密碼：", type="password")
             if st.button("確認登入", type="primary", use_container_width=True):
-                correct_password = st.secrets.get("APP_PASSWORD", "888888")
+                correct_password = st.secrets.get("APP_PASSWORD", "615588")
                 if user_password == correct_password:
                     st.session_state.authenticated = True
                     st.success("密碼正確，登入成功！")
