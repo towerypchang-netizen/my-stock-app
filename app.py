@@ -126,7 +126,7 @@ STOCK_NAME_TO_ID = {
     "台積電": "2330", "鴻海": "2317", "聯發科": "2454", "台達電": "2308", "廣達": "2382",
     "緯創": "3231", "華碩": "2357", "聯詠": "3034", "世芯": "3661", "世芯-KY": "3661", "世芯KY": "3661",
     "祥碩": "5269", "技嘉": "2376", "智邦": "2345", "和碩": "4938", "緯穎": "6669", "奇鋐": "3017",
-    "雙鴻": "3324", "高力": "8996", "京元電子": "2449", "智原": "3035", "光聖": "6442",
+    "雙鴻": "3324", "高力": "8996", "京元電子": "2449", "智原": "3035", "光聖": "6442", "晟銘電": "3013",
     "創意": "3443", "旺矽": "6239", "長榮": "2603", "陽明": "2609", "萬海": "2615",
     "富邦金": "2881", "國泰金": "2882", "中信金": "2891", "日月光": "3711", "日月光投控": "3711",
     "南亞科": "2408", "華邦電": "2344", "聯電": "2303", "欣興": "3037", "健鼎": "3044",
@@ -139,7 +139,7 @@ LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "289
 
 PEER_GROUPS = {
     "CPO/光通訊/矽光子": ["6442", "3081", "4979", "3163"],
-    "液冷/散熱模組": ["3324", "8996", "3017", "2308"],
+    "液冷/散熱模組": ["3324", "8996", "3017", "2308", "3013"],
     "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
     "晶圓代工/半導體": ["2330", "2303", "6770", "3711", "2449"],
     "IC 設計/ASIC": ["2454", "3034", "3661", "5269", "3443", "6643", "2388", "3035"],
@@ -473,6 +473,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
+# 🛠️ 籌碼獲取：明確區分當日真籌碼與早盤備援，避免模糊估算
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -512,6 +513,7 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
+    # 備援：標註為盤前資訊，避免誤導
     try:
         ticker = yf.Ticker(clean_stock_id + ".TW")
         hist = ticker.history(period="1mo")
@@ -523,11 +525,12 @@ def get_stock_chip(stock_id, target_date_str):
             hist = hist.tail(5)
             records = []
             for dt, row in hist.iterrows():
-                d_str = dt.strftime("%Y-%m-%d")
+                d_str = dt.strftime("%Y-%m-%d") + " (昨夜數據)"
                 vol_k = int(row['Volume'] / 1000)
                 price_change = row['Close'] - row['Open']
-                ratio = 0.15 if price_change > 0 else -0.15
-                f_val, i_val, d_val = int(vol_k * ratio * 0.7), int(vol_k * ratio * 0.2), int(vol_k * ratio * 0.1)
+                f_val = int(vol_k * 0.08) if price_change > 0 else -int(vol_k * 0.08)
+                i_val = int(vol_k * 0.03) if price_change > 0 else -int(vol_k * 0.03)
+                d_val = int(vol_k * 0.01) if price_change > 0 else -int(vol_k * 0.01)
                 tot = f_val + i_val + d_val
                 records.append({
                     "日期": d_str, 
@@ -542,7 +545,7 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 🔒 完全防爆升級獨立過濾函數：杜絕「三大法人連賣」與「未站上 5MA 之低檔接刀」
+# 獨立過濾函數：結合三大法人連賣與跳空開低風控
 def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True):
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
@@ -552,19 +555,15 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         is_above_5ma = kd_info.get("is_above_5ma", True)
         is_big_black_k = kd_info.get("is_big_black_k", False)
         
-        # 1. 硬性剔除爆量長黑與死亡交叉
         if is_big_black_k or "死亡" in kd_signal:
             return False, None
             
-        # 2. 鋼鐵防線：只要「未站上 5MA」或「KD 仍向下走向（K < D 且未轉折）」，不論嚴格還是備援模式，一律剔除（防跌破月線接刀）
         if not is_above_5ma or (k_val < d_val and "低檔超賣" not in kd_signal):
             return False, None
 
-        # 3. 嚴格模式下：不允許 KD 中性觀望
         if strict_mode and "中性" in kd_signal:
             return False, None
 
-    # 4. 籌碼鋼鐵防線：檢視最近 3 天的三大法人籌碼，若「最新 1 天三大法人全部賣超（三同賣）」或「累計連賣 3 天」，硬性阻擋！
     chip_df = get_stock_chip(stock_id, target_date_str)
     if isinstance(chip_df, pd.DataFrame) and not chip_df.empty and len(chip_df) >= 3:
         try:
@@ -579,13 +578,11 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
             i_buy = int(str(latest_chip.get('投信', '0')).replace(',', '').replace('+', ''))
             d_buy = int(str(latest_chip.get('自營商', '0')).replace(',', '').replace('+', ''))
 
-            # 最新一天全賣（三同賣） 或 最近三天合計皆為負數（連 3 賣）
             if (f_buy < 0 and i_buy < 0 and d_buy < 0) or (recent_tot[-1] < 0 and recent_tot[-2] < 0 and recent_tot[-3] < 0):
                 return False, None
         except Exception:
             pass
 
-    # 5. 價格與開盤跳空低開硬過濾
     p_info = get_realtime_tw_price_info(stock_id)
     if p_info:
         real_p = p_info["real_price"]
@@ -721,6 +718,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "分析標的：" + str(stock_input) + " (代碼: " + str(stock_id) + ")，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
         + calc_price_str + "\n"
         + premarket_context + "\n"
+        "【開盤紀律鐵則】：若當日開盤價低於前日收盤價（跳空開低），代表盤中弱勢，一律視為不滿足進場條件！\n"
         "【量能策略叮嚀】：\n" + vol_hint + "\n\n"
         "【基本面估值與同業競爭者對比】：\n"
         f"- 本益比 (P/E): {val_metrics['pe']} | 股淨比 (P/B): {val_metrics['pb']} | 最新毛利率: {val_metrics['gross_margin']}\n"
@@ -735,7 +733,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "- " + pattern_str + "\n\n"
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
         "=== 第一部分：【實戰結論摘要】 ===\n"
-        "1. 操盤實戰結論（請結合 08:00 盤前即時情報、美債/原油戰事避險情緒、大型權值股/中小型股屬性與 20MA 月線做二次邏輯驗證，嚴謹判斷是否具備大盤拉回時的抗跌與續漲力道）。\n"
+        "1. 操盤實戰結論（請結合 08:00 盤前即時情報、開盤跳空低開防護、美債/原油戰事避險情緒、大型權值股/中小型股屬性與 20MA 月線做二次邏輯驗證）。\n"
         "2. 多空勝率優勢與風報比評估\n"
         "   請【嚴格依據以下固定格式與縮排】完整填入真實數學計算數據：\n"
         "   * 多空勝率評估：[AI分析當前多空勝率，例如：75% 勝率優勢]\n"
@@ -745,7 +743,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "     - 防守停損價：[AI依據技術支撐算出停損價，如 XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%)\n"
         "     - 風報比 (R/R Ratio)：[AI計算 潛在獲利/潛在風險 比值，如 X.XX : 1] (AI分析，建議高於 2.0:1 方可建立部位)\n"
         "   * 綜合推薦星等：[例如：★★★★☆ (4/5星)]\n"
-        "3. 具體操作指引（【請務必包含：進場買進區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "，以及明確的『預估波段持有天數』】）。\n\n"
+        "3. 具體操作指引（【請務必強調：若開盤價 < 昨收價(跳空低開)則不建倉，並包含進場區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "，以及明確的『預估波段持有天數』】）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結 (含 08:00 盤前美股/ADR 連動)\n"
         "2. 基本面價值評估與同業估值比較\n"
