@@ -126,7 +126,7 @@ STOCK_NAME_TO_ID = {
     "台積電": "2330", "鴻海": "2317", "聯發科": "2454", "台達電": "2308", "廣達": "2382",
     "緯創": "3231", "華碩": "2357", "聯詠": "3034", "世芯": "3661", "世芯-KY": "3661", "世芯KY": "3661",
     "祥碩": "5269", "技嘉": "2376", "智邦": "2345", "和碩": "4938", "緯穎": "6669", "奇鋐": "3017",
-    "雙鴻": "3324", "高力": "8996", "京元電子": "2449", "智原": "3035",
+    "雙鴻": "3324", "高力": "8996", "京元電子": "2449", "智原": "3035", "光聖": "6442",
     "創意": "3443", "旺矽": "6239", "長榮": "2603", "陽明": "2609", "萬海": "2615",
     "富邦金": "2881", "國泰金": "2882", "中信金": "2891", "日月光": "3711", "日月光投控": "3711",
     "南亞科": "2408", "華邦電": "2344", "聯電": "2303", "欣興": "3037", "健鼎": "3044",
@@ -138,6 +138,7 @@ STOCK_NAME_TO_ID = {
 LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "2891", "3711", "2303"]
 
 PEER_GROUPS = {
+    "CPO/光通訊/矽光子": ["6442", "3081", "4979", "3163"],
     "液冷/散熱模組": ["3324", "8996", "3017", "2308"],
     "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
     "晶圓代工/半導體": ["2330", "2303", "6770", "3711", "2449"],
@@ -472,7 +473,6 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🛠️ 徹底修復：早盤自動向前回溯 10 天，抓取最新已產生的 5 日三大法人真實籌碼紀錄
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -480,7 +480,7 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame()
         
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=20)  # 往前抓20天以覆蓋假日與早盤空白
+    start_dt = target_dt - timedelta(days=20)
     
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
@@ -512,7 +512,6 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # yfinance 歷史成交量真實真實備援（防止畫面上顯示無紀錄）
     try:
         ticker = yf.Ticker(clean_stock_id + ".TW")
         hist = ticker.history(period="1mo")
@@ -543,7 +542,7 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 獨立過濾函數
+# 🔒 完全防爆升級獨立過濾函數：杜絕「三大法人連賣」與「未站上 5MA 之低檔接刀」
 def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True):
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
@@ -553,25 +552,40 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         is_above_5ma = kd_info.get("is_above_5ma", True)
         is_big_black_k = kd_info.get("is_big_black_k", False)
         
+        # 1. 硬性剔除爆量長黑與死亡交叉
         if is_big_black_k or "死亡" in kd_signal:
             return False, None
             
-        if strict_mode and (k_val < d_val or not is_above_5ma or "中性" in kd_signal):
+        # 2. 鋼鐵防線：只要「未站上 5MA」或「KD 仍向下走向（K < D 且未轉折）」，不論嚴格還是備援模式，一律剔除（防跌破月線接刀）
+        if not is_above_5ma or (k_val < d_val and "低檔超賣" not in kd_signal):
             return False, None
 
+        # 3. 嚴格模式下：不允許 KD 中性觀望
+        if strict_mode and "中性" in kd_signal:
+            return False, None
+
+    # 4. 籌碼鋼鐵防線：檢視最近 3 天的三大法人籌碼，若「最新 1 天三大法人全部賣超（三同賣）」或「累計連賣 3 天」，硬性阻擋！
     chip_df = get_stock_chip(stock_id, target_date_str)
-    if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
-        latest_chip = chip_df.iloc[-1]
+    if isinstance(chip_df, pd.DataFrame) and not chip_df.empty and len(chip_df) >= 3:
         try:
+            recent_tot = []
+            for idx in range(len(chip_df)-3, len(chip_df)):
+                row = chip_df.iloc[idx]
+                tot_val = int(str(row.get('三大法人合計', '0')).replace(',', '').replace('+', ''))
+                recent_tot.append(tot_val)
+                
+            latest_chip = chip_df.iloc[-1]
             f_buy = int(str(latest_chip.get('外資', '0')).replace(',', '').replace('+', ''))
             i_buy = int(str(latest_chip.get('投信', '0')).replace(',', '').replace('+', ''))
             d_buy = int(str(latest_chip.get('自營商', '0')).replace(',', '').replace('+', ''))
-            
-            if f_buy < 0 and i_buy < 0 and d_buy < 0:
+
+            # 最新一天全賣（三同賣） 或 最近三天合計皆為負數（連 3 賣）
+            if (f_buy < 0 and i_buy < 0 and d_buy < 0) or (recent_tot[-1] < 0 and recent_tot[-2] < 0 and recent_tot[-3] < 0):
                 return False, None
         except Exception:
             pass
 
+    # 5. 價格與開盤跳空低開硬過濾
     p_info = get_realtime_tw_price_info(stock_id)
     if p_info:
         real_p = p_info["real_price"]
