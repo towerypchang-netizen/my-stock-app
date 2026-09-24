@@ -473,7 +473,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🛠️ 籌碼獲取：明確區分當日真籌碼與早盤備援，避免模糊估算
+# 🔒 100% 官方真實籌碼抓取函數 (徹底廢除人工倍數模擬算式)
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -483,17 +483,29 @@ def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=20)
     
+    # 管道一：FinMind 官方台股資料庫
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
-        params = {"dataset": "TaiwanStockInstitutionalInvestorsBuySell", "data_id": clean_stock_id, "start_date": start_dt.strftime("%Y-%m-%d"), "end_date": target_date_str}
+        params = {
+            "dataset": "TaiwanStockInstitutionalInvestorsBuySell",
+            "data_id": clean_stock_id,
+            "start_date": start_dt.strftime("%Y-%m-%d"),
+            "end_date": target_date_str
+        }
         if FINMIND_TOKEN:
             params["token"] = FINMIND_TOKEN
             
-        resp = requests.get(url, params=params, timeout=4)
+        resp = requests.get(url, params=params, timeout=5)
         data = resp.json()
         if data.get("msg") == "success" and len(data.get("data", [])) > 0:
             raw_df = pd.DataFrame(data["data"])
-            name_map = {"Foreign_Investor": "外資", "Investment_Trust": "投信", "Dealer_Self": "自營商", "Dealer_Hedging": "自營商", "Foreign_Dealer_Self": "外資"}
+            name_map = {
+                "Foreign_Investor": "外資", 
+                "Investment_Trust": "投信", 
+                "Dealer_Self": "自營商", 
+                "Dealer_Hedging": "自營商", 
+                "Foreign_Dealer_Self": "外資"
+            }
             if 'name' in raw_df.columns:
                 raw_df['法人'] = raw_df['name'].map(lambda x: name_map.get(x, x))
             if 'buy' in raw_df.columns and 'sell' in raw_df.columns:
@@ -513,39 +525,32 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 備援：標註為盤前資訊，避免誤導
+    # 管道二：證交所/櫃買中心官方 Open API 直連 (真實資料保底，不使用任何公式模擬)
     try:
-        ticker = yf.Ticker(clean_stock_id + ".TW")
-        hist = ticker.history(period="1mo")
-        if hist.empty:
-            ticker = yf.Ticker(clean_stock_id + ".TWO")
-            hist = ticker.history(period="1mo")
-            
-        if not hist.empty:
-            hist = hist.tail(5)
-            records = []
-            for dt, row in hist.iterrows():
-                d_str = dt.strftime("%Y-%m-%d") + " (昨夜數據)"
-                vol_k = int(row['Volume'] / 1000)
-                price_change = row['Close'] - row['Open']
-                f_val = int(vol_k * 0.08) if price_change > 0 else -int(vol_k * 0.08)
-                i_val = int(vol_k * 0.03) if price_change > 0 else -int(vol_k * 0.03)
-                d_val = int(vol_k * 0.01) if price_change > 0 else -int(vol_k * 0.01)
-                tot = f_val + i_val + d_val
-                records.append({
-                    "日期": d_str, 
-                    "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                    "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                    "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                    "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                })
-            return pd.DataFrame(records)
+        twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&date={target_dt.strftime('%Y%m%d')}"
+        resp = requests.get(twse_url, timeout=4)
+        if resp.status_code == 200 and 'data' in resp.json():
+            jdata = resp.json()['data']
+            for row in jdata:
+                if row[0].strip() == clean_stock_id:
+                    f_val = int(row[4].replace(',', '')) // 1000
+                    i_val = int(row[7].replace(',', '')) // 1000
+                    d_val = int(row[10].replace(',', '')) // 1000
+                    tot = f_val + i_val + d_val
+                    return pd.DataFrame([{
+                        "日期": target_date_str,
+                        "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
+                        "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
+                        "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
+                        "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
+                    }])
     except Exception:
         pass
 
+    # 若真實 API 均未發布或忙線，直接傳回空值，絕不造假產生倍數模擬值
     return pd.DataFrame()
 
-# 獨立過濾函數：結合三大法人連賣與跳空開低風控
+# 獨立過濾函數
 def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True):
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
