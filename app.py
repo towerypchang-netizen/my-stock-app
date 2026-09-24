@@ -473,7 +473,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 100% 官方真實籌碼抓取函數 (徹底廢除人工倍數模擬算式)
+# 🔒 100% 官方真實籌碼抓取函數 (列出最新 5 個交易日)
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -481,9 +481,9 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame()
         
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=20)
+    start_dt = target_dt - timedelta(days=25)
     
-    # 管道一：FinMind 官方台股資料庫
+    # 管道一：FinMind 官方台股資料庫 (擴充回溯範圍以完整涵蓋 5 日)
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
@@ -521,33 +521,42 @@ def get_stock_chip(stock_id, target_date_str):
                 pivot_df[c] = pivot_df[c].apply(lambda x: f"+{x:,}" if x > 0 else f"{x:,}")
                 
             pivot_df = pivot_df.rename(columns={'date': '日期'})
-            return pivot_df.tail(6)[['日期', '外資', '投信', '自營商', '三大法人合計']]
+            return pivot_df.tail(5)[['日期', '外資', '投信', '自營商', '三大法人合計']]
     except Exception:
         pass
 
-    # 管道二：證交所/櫃買中心官方 Open API 直連 (真實資料保底，不使用任何公式模擬)
+    # 管道二：證交所/櫃買中心官方 Open API 直連 (抓取最近5個交易日)
     try:
-        twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&date={target_dt.strftime('%Y%m%d')}"
-        resp = requests.get(twse_url, timeout=4)
-        if resp.status_code == 200 and 'data' in resp.json():
-            jdata = resp.json()['data']
-            for row in jdata:
-                if row[0].strip() == clean_stock_id:
-                    f_val = int(row[4].replace(',', '')) // 1000
-                    i_val = int(row[7].replace(',', '')) // 1000
-                    d_val = int(row[10].replace(',', '')) // 1000
-                    tot = f_val + i_val + d_val
-                    return pd.DataFrame([{
-                        "日期": target_date_str,
-                        "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                        "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                        "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                        "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                    }])
+        records = []
+        curr_dt = target_dt
+        while len(records) < 5 and (target_dt - curr_dt).days < 15:
+            d_str = curr_dt.strftime('%Y%m%d')
+            twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&date={d_str}"
+            resp = requests.get(twse_url, timeout=3)
+            if resp.status_code == 200 and 'data' in resp.json():
+                jdata = resp.json()['data']
+                for row in jdata:
+                    if row[0].strip() == clean_stock_id:
+                        f_val = int(row[4].replace(',', '')) // 1000
+                        i_val = int(row[7].replace(',', '')) // 1000
+                        d_val = int(row[10].replace(',', '')) // 1000
+                        tot = f_val + i_val + d_val
+                        records.append({
+                            "日期": curr_dt.strftime("%Y-%m-%d"),
+                            "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
+                            "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
+                            "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
+                            "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
+                        })
+                        break
+            curr_dt -= timedelta(days=1)
+            
+        if records:
+            res_df = pd.DataFrame(records)
+            return res_df.iloc[::-1].reset_index(drop=True)
     except Exception:
         pass
 
-    # 若真實 API 均未發布或忙線，直接傳回空值，絕不造假產生倍數模擬值
     return pd.DataFrame()
 
 # 獨立過濾函數
