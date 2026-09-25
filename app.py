@@ -127,13 +127,16 @@ STOCK_NAME_TO_ID = {
     "緯創": "3231", "華碩": "2357", "聯詠": "3034", "世芯": "3661", "世芯-KY": "3661", "世芯KY": "3661",
     "祥碩": "5269", "技嘉": "2376", "智邦": "2345", "和碩": "4938", "緯穎": "6669", "奇鋐": "3017",
     "雙鴻": "3324", "高力": "8996", "京元電子": "2449", "智原": "3035", "光聖": "6442", "晟銘電": "3013",
-    "創意": "3443", "旺矽": "6239", "長榮": "2603", "陽明": "2609", "萬海": "2615",
+    "友聯": "2331", "創意": "3443", "旺矽": "6239", "長榮": "2603", "陽明": "2609", "萬海": "2615",
     "富邦金": "2881", "國泰金": "2882", "中信金": "2891", "日月光": "3711", "日月光投控": "3711",
     "南亞科": "2408", "華邦電": "2344", "聯電": "2303", "欣興": "3037", "健鼎": "3044",
     "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958", "臻鼎KY": "4958",
     "聯茂": "6213", "金像電": "2368", "台光電": "2383", "華通": "2313", "群創": "3481", "友達": "2409",
     "力積電": "6770", "威盛": "2388", "宏碁": "2353", "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260"
 }
+
+# 建立反向股號對照表
+STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
 
 LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "2891", "3711", "2303"]
 
@@ -163,6 +166,35 @@ def parse_stock_input(user_input):
         if core_name == clean_name or core_name in clean_name or clean_name in core_name:
             return s_id
     return clean_input
+
+# 🛠️ 新增：自動取得個股中文名稱函數 (即使只輸入股號也能正確顯示中文股名)
+def get_stock_display_name(raw_input, stock_id):
+    if not stock_id:
+        return "未指定"
+    
+    # 若使用者輸入中文，直接回傳
+    clean_input = str(raw_input).strip()
+    if not clean_input.isdigit() and len(clean_input) > 0:
+        return f"{clean_input} ({stock_id})"
+        
+    # 若輸入數字股號，先對照內建對照表
+    if stock_id in STOCK_ID_TO_NAME:
+        return f"{STOCK_ID_TO_NAME[stock_id]} ({stock_id})"
+        
+    # 若字典找不到，透過 yfinance 網路查詢
+    try:
+        ticker = yf.Ticker(stock_id + ".TW")
+        short_name = ticker.info.get('shortName') or ticker.info.get('longName')
+        if not short_name:
+            ticker = yf.Ticker(stock_id + ".TWO")
+            short_name = ticker.info.get('shortName') or ticker.info.get('longName')
+            
+        if short_name:
+            return f"{short_name} ({stock_id})"
+    except Exception:
+        pass
+        
+    return f"{stock_id}"
 
 def clean_key(raw):
     if not raw:
@@ -483,7 +515,7 @@ def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=25)
     
-    # 管道一：FinMind 官方台股資料庫 (擴充回溯範圍以完整涵蓋 5 日)
+    # 管道一：FinMind 官方台股資料庫
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
@@ -525,7 +557,7 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 管道二：證交所/櫃買中心官方 Open API 直連 (抓取最近5個交易日)
+    # 管道二：證交所/櫃買中心官方 Open API 直連
     try:
         records = []
         curr_dt = target_dt
@@ -841,6 +873,7 @@ raw_stock_input = st.sidebar.text_input(
 st.sidebar.caption("(如只看三大法人籌碼與 KD 綜合分析看板，輸入股號或股名後直接按 Enter)")
 
 stock_id = parse_stock_input(raw_stock_input)
+display_title = get_stock_display_name(raw_stock_input, stock_id)
 
 period_type = st.sidebar.radio("KD 技術指標週期選擇", ["日線", "週線"], horizontal=True)
 capital_input = st.sidebar.number_input("預計進場金額 (新台幣元)", min_value=0, value=None, placeholder="請輸入金額", step=10000)
@@ -859,12 +892,7 @@ for name, info in macro_data.items():
 
 st.divider()
 
-display_name = raw_stock_input.strip() if raw_stock_input else "未指定"
-if stock_id and stock_id != display_name:
-    display_title = f"{display_name} ({stock_id})"
-else:
-    display_title = display_name
-
+# 🛠️ 強制統一顯示「個股 [中文名稱] (代碼)」
 st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與 {period_type} KD / 雙均線 綜合分析看板")
 
 if stock_id and str(stock_id).strip() != "":
