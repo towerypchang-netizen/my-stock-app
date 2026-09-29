@@ -122,14 +122,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 擴充台股熱門名稱對照字典
+# 擴充常用中文股名字典
 STOCK_NAME_TO_ID = {
     "台積電": "2330", "鴻海": "2317", "聯發科": "2454", "台達電": "2308", "廣達": "2382",
     "緯創": "3231", "華碩": "2357", "聯詠": "3034", "世芯": "3661", "世芯-KY": "3661", "世芯KY": "3661",
     "祥碩": "5269", "技嘉": "2376", "智邦": "2345", "和碩": "4938", "緯穎": "6669", "奇鋐": "3017",
     "雙鴻": "3324", "高力": "8996", "京元電子": "2449", "智原": "3035", "光聖": "6442", "晟銘電": "3013",
-    "志聖": "2467", "建準": "2421", "友聯": "2331", "創意": "3443", "旺矽": "6239", "長榮": "2603",
-    "陽明": "2609", "萬海": "2615", "富邦金": "2881", "國泰金": "2882", "中信金": "2891",
+    "志聖": "2467", "建準": "2421", "友聯": "2331", "漢唐": "2404", "創意": "3443", "旺矽": "6239",
+    "長榮": "2603", "陽明": "2609", "萬海": "2615", "富邦金": "2881", "國泰金": "2882", "中信金": "2891",
     "日月光": "3711", "日月光投控": "3711", "南亞科": "2408", "華邦電": "2344", "聯電": "2303",
     "欣興": "3037", "健鼎": "3044", "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958",
     "臻鼎KY": "4958", "聯茂": "6213", "金像電": "2368", "台光電": "2383", "華通": "2313",
@@ -137,7 +137,6 @@ STOCK_NAME_TO_ID = {
     "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260"
 }
 
-# 建立反向股號對照表
 STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
 
 LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "2891", "3711", "2303"]
@@ -146,7 +145,7 @@ PEER_GROUPS = {
     "CPO/光通訊/矽光子": ["6442", "3081", "4979", "3163"],
     "液冷/散熱模組": ["3324", "8996", "3017", "2308", "3013"],
     "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
-    "晶圓代工/半導體": ["2330", "2303", "6770", "3711", "2449", "2467"],
+    "晶圓代工/半導體": ["2330", "2303", "6770", "3711", "2449", "2467", "2404"],
     "IC 設計/ASIC": ["2454", "3034", "3661", "5269", "3443", "6643", "2388", "3035"],
     "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356", "2421"],
     "記憶體/模組": ["3260", "2408", "2344"],
@@ -169,34 +168,42 @@ def parse_stock_input(user_input):
             return s_id
     return clean_input
 
-# 🛠️ 強制顯示中文股名優化函數
+@st.cache_data(ttl=86400)
+def get_twse_stock_name(stock_id):
+    """自證交所官方資料庫反查精準中文名稱 (解決 2404、4958 等顯示英文問題)"""
+    try:
+        url = "https://www.twse.com.tw/rwd/zh/api/codeMarket?response=json"
+        resp = requests.get(url, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            for row in data.get('data', []):
+                if len(row) >= 2 and row[0].strip() == str(stock_id).strip():
+                    return row[1].strip()
+    except Exception:
+        pass
+    return None
+
 def get_stock_display_name(raw_input, stock_id):
+    """100% 強制顯示中文股名與正確格式"""
     if not stock_id:
         return "未指定"
     
-    # 若輸入包含中文，直接整理顯示
     clean_input = str(raw_input).strip()
+    
+    # 提取輸入中的中文（若使用者直接輸入中文）
     if not clean_input.isdigit() and len(clean_input) > 0:
-        return f"{clean_input} ({stock_id})"
-        
-    # 若輸入純數字股號，先查內部中文對照表
+        c_name = re.sub(r'[\(\)\d\s]', '', clean_input)
+        if c_name:
+            return f"{c_name} ({stock_id})"
+
+    # 先查本地字典
     if stock_id in STOCK_ID_TO_NAME:
         return f"{STOCK_ID_TO_NAME[stock_id]} ({stock_id})"
         
-    # 網路查詢備援（避免顯示全英文）
-    try:
-        ticker = yf.Ticker(stock_id + ".TW")
-        short_name = ticker.info.get('shortName') or ticker.info.get('longName')
-        if not short_name:
-            ticker = yf.Ticker(stock_id + ".TWO")
-            short_name = ticker.info.get('shortName') or ticker.info.get('longName')
-            
-        if short_name:
-            # 如果抓到英文名稱，進行清理轉換
-            clean_s = re.sub(r'(?i)CO\.|LTD\.|INC\.|CORP\.|MANUFACTURING', '', short_name).strip()
-            return f"{clean_s} ({stock_id})"
-    except Exception:
-        pass
+    # 查證交所 API
+    twse_name = get_twse_stock_name(stock_id)
+    if twse_name:
+        return f"{twse_name} ({stock_id})"
         
     return f"{stock_id}"
 
@@ -509,7 +516,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 100% 官方真實籌碼抓取函數 (修復 08:00 早盤抓取歷史 5 日真實籌碼邏輯)
+# 🔒 100% 官方真實籌碼滾動 5 日對齊邏輯 (自動處理未發布與已發布日)
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -517,9 +524,9 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame()
         
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=30)
+    start_dt = target_dt - timedelta(days=35)
     
-    # 管道一：FinMind 官方台股資料庫 (擴大歷史搜尋天數)
+    # 管道一：FinMind 官方台股資料庫
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
@@ -553,26 +560,29 @@ def get_stock_chip(stock_id, target_date_str):
                     pivot_df[col] = 0
                     
             pivot_df['三大法人合計'] = pivot_df['外資'] + pivot_df['投信'] + pivot_df['自營商']
-            for c in ['外資', '投信', '自營商', '三大法人合計']:
-                pivot_df[c] = pivot_df[c].apply(lambda x: f"+{x:,}" if x > 0 else f"{x:,}")
-                
-            pivot_df = pivot_df.rename(columns={'date': '日期'})
-            if len(pivot_df) > 0:
-                return pivot_df.tail(5)[['日期', '外資', '投信', '自營商', '三大法人合計']]
+            
+            # 確保取得最新的 5 個有交易資料的交易日
+            if len(pivot_df) >= 5:
+                pivot_df = pivot_df.tail(5)
+                for c in ['外資', '投信', '自營商', '三大法人合計']:
+                    pivot_df[c] = pivot_df[c].apply(lambda x: f"+{x:,}" if x > 0 else f"{x:,}")
+                    
+                pivot_df = pivot_df.rename(columns={'date': '日期'})
+                return pivot_df[['日期', '外資', '投信', '自營商', '三大法人合計']]
     except Exception:
         pass
 
-    # 管道二：證交所/櫃買中心官方 Open API (自動跨過未收盤日，順延抓取最新已收盤5個交易日)
+    # 管道二：證交所/櫃買中心官方 Open API (自動往前滾動搜尋最新已發布的 5 個交易日)
     try:
         records = []
         curr_dt = target_dt
-        # 允許往前搜尋最多 20 天以獲取 5 個開盤日數據
-        while len(records) < 5 and (target_dt - curr_dt).days < 20:
+        while len(records) < 5 and (target_dt - curr_dt).days < 25:
             d_str = curr_dt.strftime('%Y%m%d')
             twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&date={d_str}"
             resp = requests.get(twse_url, timeout=3)
             if resp.status_code == 200 and 'data' in resp.json():
                 jdata = resp.json()['data']
+                found = False
                 for row in jdata:
                     if row[0].strip() == clean_stock_id:
                         f_val = int(row[4].replace(',', '')) // 1000
@@ -586,6 +596,7 @@ def get_stock_chip(stock_id, target_date_str):
                             "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
                             "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
                         })
+                        found = True
                         break
             curr_dt -= timedelta(days=1)
             
@@ -898,7 +909,6 @@ for name, info in macro_data.items():
 
 st.divider()
 
-# 強制統一顯示「個股 (中文名稱 (代碼))」
 st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與 {period_type} KD / 雙均線 綜合分析看板")
 
 if stock_id and str(stock_id).strip() != "":
