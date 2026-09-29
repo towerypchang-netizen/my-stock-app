@@ -221,8 +221,8 @@ def get_taiwan_now():
 
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
-        columns=["上漲率預估", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"],
-        data=[["--%", "---", "---", "---", "---", "---", "---", "---"] for _ in range(3)]
+        columns=["預估上漲率", "開盤防護標準", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"],
+        data=[["--%", "---", "---", "---", "---", "---", "---", "---", "---"] for _ in range(3)]
     )
 
 if "last_predict_time" not in st.session_state:
@@ -561,7 +561,6 @@ def get_stock_chip(stock_id, target_date_str):
                     
             pivot_df['三大法人合計'] = pivot_df['外資'] + pivot_df['投信'] + pivot_df['自營商']
             
-            # 確保取得最新的 5 個有交易資料的交易日
             if len(pivot_df) >= 5:
                 pivot_df = pivot_df.tail(5)
                 for c in ['外資', '投信', '自營商', '三大法人合計']:
@@ -582,7 +581,6 @@ def get_stock_chip(stock_id, target_date_str):
             resp = requests.get(twse_url, timeout=3)
             if resp.status_code == 200 and 'data' in resp.json():
                 jdata = resp.json()['data']
-                found = False
                 for row in jdata:
                     if row[0].strip() == clean_stock_id:
                         f_val = int(row[4].replace(',', '')) // 1000
@@ -596,7 +594,6 @@ def get_stock_chip(stock_id, target_date_str):
                             "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
                             "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
                         })
-                        found = True
                         break
             curr_dt -= timedelta(days=1)
             
@@ -608,7 +605,7 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 獨立過濾函數
+# 獨立過濾函數 (嚴格排除中性型態與籌碼鬆動)
 def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True):
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
@@ -656,7 +653,7 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         
     return False, None
 
-# 生成選股
+# 生成選股 (增加開盤防護標準欄位)
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -675,9 +672,9 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         "大盤環境：" + str(macro_data) + "\n"
         + premarket_focus_str + "\n"
         + premarket_avoid_str + "\n\n"
-        "請廣泛挑選 30 檔具備波段攻擊潛力、熱門且實質成交量高的台股標的名單，上漲率預估請給予 68%-88% 之間的數值。\n"
+        "請廣泛挑選 30 檔具備波段攻擊潛力、熱門且實質成交量高的台股標的名單，預估上漲率請給予 68%-88% 之間的數值。\n"
         "請回傳 JSON 陣列格式如：\n"
-        '[{"上漲率預估":"78%","族群":"半導體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
+        '[{"預估上漲率":"78%","族群":"半導體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
         "不要包含 Markdown 標記。"
     )
     res_raw = call_gemini_with_retry(prompt_select)
@@ -698,6 +695,11 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             item["當前實價"] = f"{real_p:.2f}"
             item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
             item["建議退場"] = f"{round(real_p * 1.08, 2):.2f}"
+            item["開盤防護標準"] = f"開盤價 ≥ {real_p:.2f}"
+            
+            # 使用官方 API 精準補全中文股名
+            tw_name = get_twse_stock_name(stock_id) or STOCK_ID_TO_NAME.get(stock_id, item.get("股名"))
+            item["股名"] = tw_name
             
             if stock_id in LARGE_CAP_STOCKS:
                 item["波段期間"] = "5-10天 (權值股階梯墊高)"
@@ -719,6 +721,11 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
                 item["當前實價"] = f"{real_p:.2f}"
                 item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
                 item["建議退場"] = f"{round(real_p * 1.08, 2):.2f}"
+                item["開盤防護標準"] = f"開盤價 ≥ {real_p:.2f}"
+                
+                tw_name = get_twse_stock_name(stock_id) or STOCK_ID_TO_NAME.get(stock_id, item.get("股名"))
+                item["股名"] = tw_name
+                
                 if stock_id in LARGE_CAP_STOCKS:
                     item["波段期間"] = "5-10天 (權值股階梯墊高)"
                 else:
@@ -728,10 +735,14 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
 
     while len(final_results) < 3:
         final_results.append({
-            "上漲率預估": "--%", "族群": "行情整理中", "股名": "無符合標的",
+            "預估上漲率": "--%", "開盤防護標準": "---", "族群": "行情整理中", "股名": "無符合標的",
             "股號": "----", "當前實價": "---", "建議進場": "---", "建議退場": "---", "波段期間": "---"
         })
-    return final_results
+        
+    # 重新整理欄位順序以供 Streamlit 呈現
+    df_res = pd.DataFrame(final_results)
+    cols_order = ["預估上漲率", "開盤防護標準", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"]
+    return df_res[cols_order].to_dict('records')
 
 # AI 深度分析
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
