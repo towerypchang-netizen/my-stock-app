@@ -509,7 +509,6 @@ def get_macro_history_trends():
 
     combined = pd.DataFrame(res_dict).ffill().bfill()
     
-    # 🎯 核心修復：如果美債殖利率落在 0-10 區間（例如 4.25%），自動乘以 10 放大至 42.5，以便與原油對齊於右側 Y 軸
     if "美10年債殖利率" in combined.columns:
         if combined["美10年債殖利率"].mean() < 10:
             combined["美10年債殖利率(對齊放大)"] = combined["美10年債殖利率"] * 10
@@ -989,7 +988,7 @@ if stock_id and str(stock_id).strip() != "":
             st.info("無法計算 KD 線數據。")
 
     with tab_macro_chart:
-        # 📊 規格放大完美對比版
+        # 📊 精簡圖例標籤版 (美10年債殖利率 (x10))
         macro_hist = get_macro_history_trends()
         
         fig_macro = make_subplots(specs=[[{"secondary_y": True}]])
@@ -1002,7 +1001,7 @@ if stock_id and str(stock_id).strip() != "":
         
         if "美10年債殖利率(對齊放大)" in macro_hist.columns:
             fig_macro.add_trace(
-                go.Scatter(x=macro_hist.index, y=macro_hist["美10年債殖利率(對齊放大)"], name="美10年債殖利率 (×10倍縮放對齊)", line=dict(color="#1890ff", width=2, dash="dash")),
+                go.Scatter(x=macro_hist.index, y=macro_hist["美10年債殖利率(對齊放大)"], name="美10年債殖利率 (x10)", line=dict(color="#1890ff", width=2, dash="dash")),
                 secondary_y=True
             )
             
@@ -1015,7 +1014,7 @@ if stock_id and str(stock_id).strip() != "":
         fig_macro.update_layout(
             height=360,
             margin=dict(l=10, r=10, t=20, b=40),
-            legend=dict(orientation="h", y=-0.2, x=0.05)
+            legend=dict(orientation="h", y=-0.2, x=0.1)
         )
         fig_macro.update_yaxes(title_text="費城半導體指數", secondary_y=False)
         fig_macro.update_yaxes(title_text="美債殖利率(對齊) / 原油(美元)", secondary_y=True)
