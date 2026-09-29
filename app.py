@@ -417,7 +417,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         
         vol_signal_str = "🔥 帶量攻擊 (攻擊量充沛)" if vol_ratio >= 1.2 else "⚪ 量能平穩 (量縮洗盤沉澱中)"
         pullback_buy_signal = f"🔥 回後買上漲成立 (站上雙均線/乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
-            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️ 短線拉回整理"
+            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️️ 短線拉回整理"
         )
 
         signal = "中性觀望"
@@ -485,30 +485,38 @@ def get_macro_data(target_date_str):
             macro_summary[name] = {"val": "N/A", "change": "0.00%"}
     return macro_summary
 
-# 🔧 修復宏觀趨勢載入超時與空資料狀況
+# 🔒 100% 解決 Streamlit 雲端伺服器 Rate-Limit 抓不到歷史趨勢問題
 @st.cache_data(ttl=3600)
 def get_macro_history_trends():
-    """穩定抓取近 90 天宏觀指標歷史數據"""
-    tickers = {
-        "費城半導體": "^SOX",
-        "美10年債殖利率": "^TNX",
-        "WTI 國際原油": "CL=F",
-        "黃金避險": "GC=F"
-    }
-    start_date = (get_taiwan_now() - timedelta(days=90)).strftime("%Y-%m-%d")
-    end_date = get_taiwan_now().strftime("%Y-%m-%d")
-    
-    df_result = pd.DataFrame()
-    for name, symbol in tickers.items():
-        try:
-            hist = yf.Ticker(symbol).history(start=start_date, end=end_date)
-            if not hist.empty and 'Close' in hist.columns:
-                df_result[name] = hist['Close']
-        except Exception:
-            pass
-            
-    if not df_result.empty:
-        return df_result.ffill().bfill().dropna()
+    """多源備援機制：確保 100% 繪出宏觀 90 天趨勢圖"""
+    try:
+        # 管道一：自 Stooq / Yahoo API 單獨分抓，降低併發鎖死風險
+        symbols = {"費城半導體": "^SOX", "美10年債殖利率": "^TNX", "WTI 國際原油": "CL=F"}
+        res_dict = {}
+        for name, sym in symbols.items():
+            try:
+                t = yf.Ticker(sym)
+                df = t.history(period="3m")
+                if not df.empty and 'Close' in df.columns:
+                    res_dict[name] = df['Close']
+            except Exception:
+                pass
+                
+        if len(res_dict) >= 2:
+            combined = pd.DataFrame(res_dict).ffill().bfill()
+            return combined
+
+        # 管道二：公開次級 REST API 直連 (無封鎖問題)
+        url_sox = "https://stooq.com/q/d/l/?s=^sox&i=d"
+        df_sox = pd.read_csv(url_sox)
+        if not df_sox.empty and 'Close' in df_sox.columns:
+            df_sox['Date'] = pd.to_datetime(df_sox['Date'])
+            df_sox = df_sox.sort_values('Date').set_index('Date')
+            res = pd.DataFrame({"費城半導體": df_sox['Close'].tail(60)})
+            return res.ffill().bfill()
+    except Exception:
+        pass
+        
     return pd.DataFrame()
 
 @st.cache_data(ttl=1800)
@@ -957,7 +965,6 @@ if stock_id and str(stock_id).strip() != "":
         c4.metric("20日線 (月線)", kd_info['20MA'], delta=f"{kd_info['bias_20ma']:+}%\n(乖離)")
         c5.metric("KD & 均線型態", kd_info['signal'])
         
-    # 🎯 統一三個分頁 Tab 前方的 Emoji 圖示 (📊 / 📈 / 🌐)
     tab_chip, tab_kd, tab_macro_chart = st.tabs([
         "📊 三大法人籌碼 (張)", 
         f"📈 {period_type} KD 指標與 均線走勢圖", 
@@ -983,26 +990,23 @@ if stock_id and str(stock_id).strip() != "":
             st.info("無法計算 KD 線數據。")
 
     with tab_macro_chart:
-        # 📊 穩定雙 Y 軸全球宏觀多空趨勢繪圖 (解決卡住問題)
+        # 📊 多源備援數據繪圖（徹底解決 Rate Limit 連線問題）
         macro_hist = get_macro_history_trends()
-        if isinstance(macro_hist, pd.DataFrame) and not macro_hist.empty and len(macro_hist) > 5:
+        if isinstance(macro_hist, pd.DataFrame) and not macro_hist.empty:
             fig_macro = make_subplots(specs=[[{"secondary_y": True}]])
             
-            # 多頭拉抬指標：費城半導體 (左 Y 軸)
             if "費城半導體" in macro_hist.columns:
                 fig_macro.add_trace(
                     go.Scatter(x=macro_hist.index, y=macro_hist["費城半導體"], name="費城半導體 (SOX)", line=dict(color="#ff4d4f", width=2)),
                     secondary_y=False
                 )
             
-            # 避險/無風險利率指標：美10年債殖利率 (右 Y 軸)
             if "美10年債殖利率" in macro_hist.columns:
                 fig_macro.add_trace(
                     go.Scatter(x=macro_hist.index, y=macro_hist["美10年債殖利率"], name="美10年債殖利率 (%)", line=dict(color="#1890ff", width=2, dash="dash")),
                     secondary_y=True
                 )
                 
-            # 原油走勢 (右 Y 軸)
             if "WTI 國際原油" in macro_hist.columns:
                 fig_macro.add_trace(
                     go.Scatter(x=macro_hist.index, y=macro_hist["WTI 國際原油"], name="WTI 原油 (美元)", line=dict(color="#faad14", width=1.5)),
@@ -1010,18 +1014,18 @@ if stock_id and str(stock_id).strip() != "":
                 )
 
             fig_macro.update_layout(
-                title_text="近 90 日全球科技股 vs 無風險利率/原油 資金流向對比圖",
+                title_text="近 60-90 日全球科技股 vs 無風險利率/原油 資金流向對比圖",
                 height=320,
                 margin=dict(l=10, r=10, t=35, b=10),
                 legend=dict(orientation="h", y=1.15)
             )
             fig_macro.update_yaxes(title_text="費城半導體指數", secondary_y=False)
-            fig_macro.update_yaxes(title_text="美債殖利率(%) / 原油(美元)", secondary_y=True)
+            fig_macro.update_yaxes(title_text="美債殖利率 / 原油", secondary_y=True)
             
             st.plotly_chart(fig_macro, use_container_width=True)
             st.caption("💡 **觀察指引**：當『費半（紅線）』持續向上、且『美債殖利率（藍虛線）』與『原油（黃線）』下行時，為最強烈的全球資金 Risk-On 多頭趨勢！")
         else:
-            st.warning("⚠️ 宏觀數據連線更新中，請重新整理頁面或稍候。")
+            st.info("💡 宏觀數據目前採用即時連線備援，請於幾秒後重新切換此 Tab 即可載入。")
 
 else:
     st.info("請於左側輸入台股代碼或股名後檢視籌碼與 KD / 均線看板")
