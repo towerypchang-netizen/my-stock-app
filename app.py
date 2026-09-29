@@ -129,7 +129,7 @@ STOCK_NAME_TO_ID = {
     "緯創": "3231", "華碩": "2357", "聯詠": "3034", "世芯": "3661", "世芯-KY": "3661", "世芯KY": "3661",
     "祥碩": "5269", "技嘉": "2376", "智邦": "2345", "和碩": "4938", "緯穎": "6669", "奇鋐": "3017",
     "雙鴻": "3324", "高力": "8996", "京元電子": "2449", "智原": "3035", "光聖": "6442", "晟銘電": "3013",
-    "志聖": "2467", "建準": "2421", "友聯": "2331", "漢唐": "2404", "創意": "3443", "旺矽": "6239",
+    "志聖": "2467", "建準": "2421", "友聯": "2331", "精華": "2331", "漢唐": "2404", "創意": "3443", "旺矽": "6239",
     "長榮": "2603", "陽明": "2609", "萬海": "2615", "富邦金": "2881", "國泰金": "2882", "中信金": "2891",
     "日月光": "3711", "日月光投控": "3711", "南亞科": "2408", "華邦電": "2344", "聯電": "2303",
     "欣興": "3037", "健鼎": "3044", "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958",
@@ -171,7 +171,7 @@ def parse_stock_input(user_input):
 
 @st.cache_data(ttl=86400)
 def get_twse_stock_name(stock_id):
-    """自證交所官方資料庫反查精準中文名稱 (解決 2404、4958 等顯示英文問題)"""
+    """自證交所官方資料庫反查精準中文名稱"""
     try:
         url = "https://www.twse.com.tw/rwd/zh/api/codeMarket?response=json"
         resp = requests.get(url, timeout=3)
@@ -485,24 +485,31 @@ def get_macro_data(target_date_str):
             macro_summary[name] = {"val": "N/A", "change": "0.00%"}
     return macro_summary
 
+# 🔧 修復宏觀趨勢載入超時與空資料狀況
 @st.cache_data(ttl=3600)
 def get_macro_history_trends():
-    """抓取近 60 天宏觀指標歷史趨勢 (用於全球多空走勢對比圖)"""
+    """穩定抓取近 90 天宏觀指標歷史數據"""
     tickers = {
         "費城半導體": "^SOX",
         "美10年債殖利率": "^TNX",
         "WTI 國際原油": "CL=F",
         "黃金避險": "GC=F"
     }
-    df_combined = pd.DataFrame()
-    for name, sym in tickers.items():
+    start_date = (get_taiwan_now() - timedelta(days=90)).strftime("%Y-%m-%d")
+    end_date = get_taiwan_now().strftime("%Y-%m-%d")
+    
+    df_result = pd.DataFrame()
+    for name, symbol in tickers.items():
         try:
-            hist = yf.Ticker(sym).history(period="3m")
-            if not hist.empty:
-                df_combined[name] = hist['Close']
+            hist = yf.Ticker(symbol).history(start=start_date, end=end_date)
+            if not hist.empty and 'Close' in hist.columns:
+                df_result[name] = hist['Close']
         except Exception:
             pass
-    return df_combined.dropna()
+            
+    if not df_result.empty:
+        return df_result.ffill().bfill().dropna()
+    return pd.DataFrame()
 
 @st.cache_data(ttl=1800)
 def get_taiwan_sector_performance(target_date_str):
@@ -950,10 +957,10 @@ if stock_id and str(stock_id).strip() != "":
         c4.metric("20日線 (月線)", kd_info['20MA'], delta=f"{kd_info['bias_20ma']:+}%\n(乖離)")
         c5.metric("KD & 均線型態", kd_info['signal'])
         
-    # 🎯 於黃框位置整合三個分頁 Tab（籌碼 / KD線 / 全球宏觀多空對比圖）
+    # 🎯 統一三個分頁 Tab 前方的 Emoji 圖示 (📊 / 📈 / 🌐)
     tab_chip, tab_kd, tab_macro_chart = st.tabs([
-        "三大法人籌碼 (張)", 
-        f"{period_type} KD 指標與 均線走勢圖", 
+        "📊 三大法人籌碼 (張)", 
+        f"📈 {period_type} KD 指標與 均線走勢圖", 
         "🌐 全球宏觀指標多空趨勢對比圖"
     ])
     
@@ -976,9 +983,9 @@ if stock_id and str(stock_id).strip() != "":
             st.info("無法計算 KD 線數據。")
 
     with tab_macro_chart:
-        # 📊 新增功能：雙 Y 軸全球宏觀多空趨勢繪圖
+        # 📊 穩定雙 Y 軸全球宏觀多空趨勢繪圖 (解決卡住問題)
         macro_hist = get_macro_history_trends()
-        if not macro_hist.empty:
+        if isinstance(macro_hist, pd.DataFrame) and not macro_hist.empty and len(macro_hist) > 5:
             fig_macro = make_subplots(specs=[[{"secondary_y": True}]])
             
             # 多頭拉抬指標：費城半導體 (左 Y 軸)
@@ -1014,7 +1021,7 @@ if stock_id and str(stock_id).strip() != "":
             st.plotly_chart(fig_macro, use_container_width=True)
             st.caption("💡 **觀察指引**：當『費半（紅線）』持續向上、且『美債殖利率（藍虛線）』與『原油（黃線）』下行時，為最強烈的全球資金 Risk-On 多頭趨勢！")
         else:
-            st.info("宏觀歷史趨勢數據載入中...")
+            st.warning("⚠️ 宏觀數據連線更新中，請重新整理頁面或稍候。")
 
 else:
     st.info("請於左側輸入台股代碼或股名後檢視籌碼與 KD / 均線看板")
