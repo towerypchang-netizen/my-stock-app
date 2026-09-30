@@ -147,7 +147,7 @@ STOCK_NAME_TO_ID = {
     "欣興": "3037", "健鼎": "3044", "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958",
     "臻鼎KY": "4958", "聯茂": "6213", "金像電": "2368", "台光電": "2383", "華通": "2313",
     "群創": "3481", "友達": "2409", "力積電": "6770", "威盛": "2388", "宏碁": "2353",
-    "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260", "萬潤": "6187"
+    "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260", "萬潤": "6187", "辛耘": "3583", "泰碩": "3338"
 }
 
 STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
@@ -156,9 +156,9 @@ LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "289
 
 PEER_GROUPS = {
     "CPO/光通訊/矽光子": ["6442", "3081", "4979", "3163"],
-    "液冷/散熱模組": ["3324", "8996", "3017", "2308", "3013"],
+    "液冷/散熱模組": ["3324", "8996", "3017", "2308", "3013", "3338"],
     "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
-    "晶圓代工/半導體/設備": ["2330", "2303", "6770", "3711", "2449", "2467", "2404", "6187"],
+    "晶圓代工/半導體/設備": ["2330", "2303", "6770", "3711", "2449", "2467", "2404", "6187", "3583"],
     "IC 設計/ASIC": ["2454", "3034", "3661", "5269", "3443", "6643", "2388", "3035"],
     "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356", "2421"],
     "記憶體/模組": ["3260", "2408", "2344"],
@@ -197,13 +197,11 @@ def get_twse_stock_name(stock_id):
     return None
 
 def get_stock_display_name(raw_input, stock_id):
-    """徹底修正雙重括號問題"""
+    """徹底修正雙重括號問題，回傳乾淨格式」"""
     if not stock_id:
         return "未指定"
     
     clean_input = str(raw_input).strip()
-    
-    # 提取純中文或文字名稱（排除數字與括號）
     pure_name = re.sub(r'[\(\)\d\s]', '', clean_input)
     
     if pure_name and pure_name != stock_id:
@@ -232,7 +230,7 @@ def get_taiwan_now():
 
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
-        columns=["預估上漲率", "開盤防護標準", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"],
+        columns=["預估上漲率", "開盤防護標準", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"],
         data=[["--%", "---", "---", "---", "---", "---", "---", "---", "---"] for _ in range(3)]
     )
 
@@ -284,7 +282,7 @@ def diagnose_premarket_intelligence(macro_data, target_date_str):
     except Exception:
         return {
             "summary": "盤前總經與美股走勢平穩，維持科技權值與熱門題材輪動。",
-            "focus_sectors": ["AI 伺服器", "PCB", "半導體"],
+            "focus_sectors": ["AI 伺服器", "PCB", "半導體設備"],
             "avoid_sectors": []
         }
 
@@ -558,7 +556,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 終極整合：同時支援【上市 TWSE】與【上櫃 TPEX】三大法人歷史數據
+# 🔒 上市 TWSE 與 上櫃 TPEX 雙源三大法人歷史數據自動解析
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -613,7 +611,7 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 管道二：證交所 (TWSE) 與 櫃買中心 (TPEX) 官方 Open API 自動交叉比對
+    # 管道二：證交所與櫃買中心 Open API 比對
     try:
         records = []
         curr_dt = target_dt
@@ -623,7 +621,7 @@ def get_stock_chip(stock_id, target_date_str):
             d_str = curr_dt.strftime('%Y%m%d')
             found = False
             
-            # 1. 先抓櫃買中心 TPEX (針對 6187 萬潤等上櫃個股)
+            # 1. 抓櫃買中心 TPEX (針對上櫃股票如萬潤 6187)
             try:
                 tpex_url = f"https://www.tpex.org.tw/web/stock/333/333_result.php?l=zh-tw&o=json&se=AL&t=D&d={d_tw}"
                 resp_tpex = requests.get(tpex_url, timeout=2)
@@ -747,9 +745,9 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         "大盤環境：" + str(macro_data) + "\n"
         + premarket_focus_str + "\n"
         + premarket_avoid_str + "\n\n"
-        "請廣泛挑選 30 檔具備波段攻擊潛力、熱門且實質成交量高的台股標的名單，預估上漲率請給予 68%-88% 之間的數值。\n"
+        "請廣泛挑選 30 檔具備波段攻擊潛力（優先挑選 KD 黃金交叉或攻擊量能充沛者）的熱門台股標的名單，預估上漲率請給予 68%-88% 之間的數值。\n"
         "請回傳 JSON 陣列格式如：\n"
-        '[{"預估上漲率":"78%","族群":"半導體","股名":"南亞科","股號":"2408","波段期間":"5-10天"}]\n'
+        '[{"預估上漲率":"78%","族群":"半導體設備","股名":"萬潤","股號":"6187","波段期間":"5-10天"}]\n'
         "不要包含 Markdown 標記。"
     )
     res_raw = call_gemini_with_retry(prompt_select)
@@ -767,16 +765,18 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         if valid and real_p:
             p_low = round(real_p * 0.985, 1)
             p_high = round(real_p * 1.005, 1)
+            target_p = round(real_p * 1.08, 1)
+            
             item["當前實價"] = f"{real_p:.2f}"
             item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
-            item["建議退場"] = f"{round(real_p * 1.08, 2):.2f}"
-            item["開盤防護標準"] = f"開盤價 ≥ {real_p:.2f}"
+            item["開盤防護標準"] = f"開盤價 ≥ {real_p:.2f} (若開高>2%觀望)"
+            item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即獲利落袋)"
             
             tw_name = get_twse_stock_name(stock_id) or STOCK_ID_TO_NAME.get(stock_id, item.get("股名"))
             item["股名"] = tw_name
             
             if stock_id in LARGE_CAP_STOCKS:
-                item["波段期間"] = "5-10天 (權值股階梯墊高)"
+                item["波段期間"] = "5-10天 (權值階梯墊高)"
             else:
                 if "波段期間" not in item: item["波段期間"] = "5-10天"
                 
@@ -792,16 +792,18 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             if valid and real_p:
                 p_low = round(real_p * 0.985, 1)
                 p_high = round(real_p * 1.005, 1)
+                target_p = round(real_p * 1.08, 1)
+                
                 item["當前實價"] = f"{real_p:.2f}"
                 item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
-                item["建議退場"] = f"{round(real_p * 1.08, 2):.2f}"
-                item["開盤防護標準"] = f"開盤價 ≥ {real_p:.2f}"
+                item["開盤防護標準"] = f"開盤價 ≥ {real_p:.2f} (若開高>2%觀望)"
+                item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即獲利落袋)"
                 
                 tw_name = get_twse_stock_name(stock_id) or STOCK_ID_TO_NAME.get(stock_id, item.get("股名"))
                 item["股名"] = tw_name
                 
                 if stock_id in LARGE_CAP_STOCKS:
-                    item["波段期間"] = "5-10天 (權值股階梯墊高)"
+                    item["波段期間"] = "5-10天 (權值階梯墊高)"
                 else:
                     if "波段期間" not in item: item["波段期間"] = "5-10天"
                 final_results.append(item)
@@ -810,11 +812,11 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     while len(final_results) < 3:
         final_results.append({
             "預估上漲率": "--%", "開盤防護標準": "---", "族群": "行情整理中", "股名": "無符合標的",
-            "股號": "----", "當前實價": "---", "建議進場": "---", "建議退場": "---", "波段期間": "---"
+            "股號": "----", "當前實價": "---", "建議進場": "---", "波段停利/防護提示": "---", "波段期間": "---"
         })
         
     df_res = pd.DataFrame(final_results)
-    cols_order = ["預估上漲率", "開盤防護標準", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"]
+    cols_order = ["預估上漲率", "開盤防護標準", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"]
     return df_res[cols_order].to_dict('records')
 
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
@@ -832,6 +834,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     
     if p_info:
         real_price = p_info["real_price"]
+        prev_close = p_info["prev_close"]
         price_info_str = f"當前真實市場成交價：{real_price} 元 ({cap_type_str})"
         p_low = round(real_price * 0.985, 1)
         p_high = round(real_price * 1.005, 1)
@@ -840,7 +843,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         calc_price_str = f"【系統統一計算數據】：建議買進區間：{p_low}元 ~ {p_high}元，預估進場均價中間值：{p_mid}元，波段停利目標價：{target_p}元。"
     else:
         price_info_str = "即時股價：需參考市場現價"
-        p_low, p_high, p_mid, target_p = "---", "---", "---", "---"
+        p_low, p_high, p_mid, target_p, prev_close = "---", "---", "---", "---", "---"
         calc_price_str = ""
 
     chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "無最新籌碼數據"
@@ -856,7 +859,6 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         kd_str = ma_str = vol_str = pattern_str = "技術數據不足"
     
     vol_hint = "當前成交量尚未爆發，若量能不及 1.2 倍，建議於『建議進場區間下限』逢低掛單佈局，切勿開高追價。" if vol_ratio < 1.2 else "成交量順利放大，具備攻擊量能！"
-    
     premarket_context = f"【08:00 盤前情報動態備忘】：聚焦族群 {st.session_state.premarket_focus} / 避險族群 {st.session_state.premarket_avoid}"
 
     prompt = (
@@ -864,7 +866,10 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "分析標的：" + str(stock_input) + " (代碼: " + str(stock_id) + ")，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
         + calc_price_str + "\n"
         + premarket_context + "\n"
-        "【開盤紀律鐵則】：若當日開盤價低於前日收盤價（跳空開低），代表盤中弱勢，一律視為不滿足進場條件！\n"
+        "【開盤與停利實戰鐵則】：\n"
+        "1. 若當日開盤價低於前日收盤價（跳空低開），代表盤中弱勢，一律視為不滿足進場條件！\n"
+        "2. 若開盤跳空開高 > +2.0%，代表市場熱度過高，切勿在開盤第一時間追高，應等待拉回至建議區間下限再佈局。\n"
+        "3. 盤中若衝高觸及或超越『波段停利目標價』(" + str(target_p) + "元)，必須執行動態停利或設定移動停利鎖定獲利，防止衝高回落。\n"
         "【量能策略叮嚀】：\n" + vol_hint + "\n\n"
         "【基本面估值與同業競爭者對比】：\n"
         f"- 本益比 (P/E): {val_metrics['pe']} | 股淨比 (P/B): {val_metrics['pb']} | 最新毛利率: {val_metrics['gross_margin']}\n"
@@ -879,7 +884,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "- " + pattern_str + "\n\n"
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
         "=== 第一部分：【實戰結論摘要】 ===\n"
-        "1. 操盤實戰結論（請結合 08:00 盤前即時情報、開盤跳空低開防護、美債/原油戰事避險情緒、大型權值股/中小型股屬性與 20MA 月線做二次邏輯驗證）。\n"
+        "1. 操盤實戰結論（請結合 08:00 盤前即時情報、開盤跳空防護、開高不追高紀律、波段停利目標與 20MA 月線做二次邏輯驗證）。\n"
         "2. 多空勝率優勢與風報比評估\n"
         "   請【嚴格依據以下固定格式與縮排】完整填入真實數學計算數據：\n"
         "   * 多空勝率評估：[AI分析當前多空勝率，例如：75% 勝率優勢]\n"
@@ -889,7 +894,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "     - 防守停損價：[AI依據技術支撐算出停損價，如 XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%)\n"
         "     - 風報比 (R/R Ratio)：[AI計算 潛在獲利/潛在風險 比值，如 X.XX : 1] (AI分析，建議高於 2.0:1 方可建立部位)\n"
         "   * 綜合推薦星等：[例如：★★★★☆ (4/5星)]\n"
-        "3. 具體操作指引（【請務必強調：若開盤價 < 昨收價(跳空低開)則不建倉，並包含進場區間 " + f"{p_low} 元 ~ {p_high} 元" + "】與目標價 " + f"{target_p} 元" + "，以及明確的『預估波段持有天數』】）。\n\n"
+        "3. 具體操作指引（【請務必強調：進場區間 " + f"{p_low} 元 ~ {p_high} 元" + "、目標價 " + f"{target_p} 元" + "，並附上『開高 > 2% 觀望與盤中達標即時落袋』叮嚀與『預估波段持有天數』】）。\n\n"
         "=== 第二部分：【深度分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢總結 (含 08:00 盤前美股/ADR 連動)\n"
         "2. 基本面價值評估與同業估值比較\n"
