@@ -197,17 +197,17 @@ def get_twse_stock_name(stock_id):
     return None
 
 def get_stock_display_name(raw_input, stock_id):
-    """修復重複括號問題，100% 強制顯示乾淨的中文股名與格式"""
+    """徹底修正雙重括號問題"""
     if not stock_id:
         return "未指定"
     
     clean_input = str(raw_input).strip()
     
-    # 處理輸入中包含中文的情況
-    if not clean_input.isdigit() and len(clean_input) > 0:
-        c_name = re.sub(r'[\(\)\d\s]', '', clean_input)
-        if c_name:
-            return f"{c_name} ({stock_id})"
+    # 提取純中文或文字名稱（排除數字與括號）
+    pure_name = re.sub(r'[\(\)\d\s]', '', clean_input)
+    
+    if pure_name and pure_name != stock_id:
+        return f"{pure_name} ({stock_id})"
 
     if stock_id in STOCK_ID_TO_NAME:
         return f"{STOCK_ID_TO_NAME[stock_id]} ({stock_id})"
@@ -558,7 +558,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 終極整合修復：同時支援【上市 TWSE】與【上櫃 TPEX (如萬潤6187)】真實三大法人買賣超資料
+# 🔒 終極整合：同時支援【上市 TWSE】與【上櫃 TPEX】三大法人歷史數據
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -568,7 +568,7 @@ def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=45)
     
-    # 管道一：FinMind 官方資料庫（自動過濾與加總）
+    # 管道一：FinMind 官方 API
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
@@ -613,7 +613,7 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 管道二：證交所 (TWSE) 與 櫃買中心 (TPEX) 官方 Open API 直連
+    # 管道二：證交所 (TWSE) 與 櫃買中心 (TPEX) 官方 Open API 自動交叉比對
     try:
         records = []
         curr_dt = target_dt
@@ -621,41 +621,20 @@ def get_stock_chip(stock_id, target_date_str):
         while len(records) < 5 and days_searched < 25:
             d_tw = f"{curr_dt.year - 1911}/{curr_dt.strftime('%m/%d')}"
             d_str = curr_dt.strftime('%Y%m%d')
-            
-            # 1. 優先試抓櫃買中心 TPEX (針對上櫃股票如 6187 萬潤)
-            tpex_url = f"https://www.tpex.org.tw/web/stock/333/333_result.php?l=zh-tw&o=json&se=AL&t=D&d={d_tw}"
-            resp_tpex = requests.get(tpex_url, timeout=3)
             found = False
-            if resp_tpex.status_code == 200 and 'aaData' in resp_tpex.json():
-                jdata = resp_tpex.json()['aaData']
-                for row in jdata:
-                    if len(row) >= 11 and row[0].strip() == clean_stock_id:
-                        f_val = int(str(row[7]).replace(',', '')) // 1000
-                        i_val = int(str(row[8]).replace(',', '')) // 1000
-                        d_val = int(str(row[9]).replace(',', '')) // 1000
-                        tot = int(str(row[10]).replace(',', '')) // 1000
-                        records.append({
-                            "日期": curr_dt.strftime("%Y-%m-%d"),
-                            "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                            "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                            "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                            "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                        })
-                        found = True
-                        break
-
-            # 2. 若上櫃找不到，試抓證交所 TWSE (針對上市股票)
-            if not found:
-                twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&date={d_str}"
-                resp_twse = requests.get(twse_url, timeout=3)
-                if resp_twse.status_code == 200 and 'data' in resp_twse.json():
-                    jdata = resp_twse.json()['data']
+            
+            # 1. 先抓櫃買中心 TPEX (針對 6187 萬潤等上櫃個股)
+            try:
+                tpex_url = f"https://www.tpex.org.tw/web/stock/333/333_result.php?l=zh-tw&o=json&se=AL&t=D&d={d_tw}"
+                resp_tpex = requests.get(tpex_url, timeout=2)
+                if resp_tpex.status_code == 200 and 'aaData' in resp_tpex.json():
+                    jdata = resp_tpex.json()['aaData']
                     for row in jdata:
-                        if len(row) >= 11 and row[0].strip() == clean_stock_id:
-                            f_val = int(str(row[4]).replace(',', '')) // 1000
-                            i_val = int(str(row[7]).replace(',', '')) // 1000
-                            d_val = int(str(row[10]).replace(',', '')) // 1000
-                            tot = f_val + i_val + d_val
+                        if len(row) >= 11 and str(row[0]).strip() == clean_stock_id:
+                            f_val = int(str(row[7]).replace(',', '')) // 1000
+                            i_val = int(str(row[8]).replace(',', '')) // 1000
+                            d_val = int(str(row[9]).replace(',', '')) // 1000
+                            tot = int(str(row[10]).replace(',', '')) // 1000
                             records.append({
                                 "日期": curr_dt.strftime("%Y-%m-%d"),
                                 "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
@@ -663,7 +642,35 @@ def get_stock_chip(stock_id, target_date_str):
                                 "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
                                 "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
                             })
+                            found = True
                             break
+            except Exception:
+                pass
+
+            # 2. 上櫃找不到再抓證交所 TWSE (上市個股)
+            if not found:
+                try:
+                    twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&date={d_str}"
+                    resp_twse = requests.get(twse_url, timeout=2)
+                    if resp_twse.status_code == 200 and 'data' in resp_twse.json():
+                        jdata = resp_twse.json()['data']
+                        for row in jdata:
+                            if len(row) >= 11 and str(row[0]).strip() == clean_stock_id:
+                                f_val = int(str(row[4]).replace(',', '')) // 1000
+                                i_val = int(str(row[7]).replace(',', '')) // 1000
+                                d_val = int(str(row[10]).replace(',', '')) // 1000
+                                tot = f_val + i_val + d_val
+                                records.append({
+                                    "日期": curr_dt.strftime("%Y-%m-%d"),
+                                    "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
+                                    "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
+                                    "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
+                                    "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
+                                })
+                                break
+                except Exception:
+                    pass
+
             curr_dt -= timedelta(days=1)
             days_searched += 1
             
