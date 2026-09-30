@@ -77,6 +77,18 @@ st.markdown(
         margin-top: -2px !important;
         margin-bottom: -2px !important;
     }
+
+    /* 🎯 專用 CSS：將「執行 08:00 盤前情報即時診斷」按鈕樣式改為藍色 */
+    div.stButton > button[key="btn_premarket_diagnose"] {
+        background-color: #1890ff !important;
+        color: #ffffff !important;
+        border-color: #1890ff !important;
+        font-weight: bold !important;
+    }
+    div.stButton > button[key="btn_premarket_diagnose"]:hover {
+        background-color: #40a9ff !important;
+        border-color: #40a9ff !important;
+    }
     
     div[data-testid="stVerticalBlock"] > div {
         gap: 0.4rem !important;
@@ -485,7 +497,6 @@ def get_macro_data(target_date_str):
             macro_summary[name] = {"val": "N/A", "change": "0.00%"}
     return macro_summary
 
-# 🔒 放大 20 倍視覺優化：將美債殖利率乘以 20，對齊 80~100 區間
 @st.cache_data(ttl=1800)
 def get_macro_history_trends():
     tickers = {"費城半導體": "^SOX", "美10年債殖利率": "^TNX", "WTI 國際原油": "CL=F"}
@@ -509,12 +520,11 @@ def get_macro_history_trends():
 
     combined = pd.DataFrame(res_dict).ffill().bfill()
     
-    # 🎯 核心修復：放大 20 倍（讓 4.2%~5.0% 轉為 84~100），完美融入右 Y 軸位階
     if "美10年債殖利率" in combined.columns:
         if combined["美10年債殖利率"].mean() < 10:
             combined["美10年債殖利率(20倍)"] = combined["美10年債殖利率"] * 20
         else:
-            combined["美10年債殖利率(20倍)"] = combined["美10年債殖利率"] * 2  # 若原生已放大10倍，補乘2倍
+            combined["美10年債殖利率(20倍)"] = combined["美10年債殖利率"] * 2
 
     return combined
 
@@ -547,7 +557,6 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 100% 官方真實籌碼滾動 5 日對齊邏輯
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -557,7 +566,6 @@ def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=35)
     
-    # 管道一：FinMind 官方台股資料庫
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
@@ -602,7 +610,6 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 管道二：證交所/櫃買中心官方 Open API
     try:
         records = []
         curr_dt = target_dt
@@ -636,7 +643,6 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 獨立過濾函數
 def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True):
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
@@ -684,7 +690,6 @@ def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=
         
     return False, None
 
-# 生成選股
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
@@ -773,7 +778,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     cols_order = ["預估上漲率", "開盤防護標準", "族群", "股名", "股號", "當前實價", "建議進場", "建議退場", "波段期間"]
     return df_res[cols_order].to_dict('records')
 
-# AI 深度分析
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
     capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
@@ -878,7 +882,9 @@ macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
 st.sidebar.markdown("### 📰 盤前情報動態注入 (08:00-08:30)")
-if st.sidebar.button("⚡ 執行 08:00 盤前情報即時診斷", type="secondary", use_container_width=True):
+
+# 🎯 關鍵改動：加上 key="btn_premarket_diagnose"，配合自訂 CSS 呈現質感藍色按鈕
+if st.sidebar.button("⚡ 執行 08:00 盤前情報即時診斷", type="primary", key="btn_premarket_diagnose", use_container_width=True):
     with st.spinner("🤖 正在聯網掃描美股ADR、費半、油價與盤前即時新聞..."):
         try:
             p_data = diagnose_premarket_intelligence(macro_data, target_date_str)
@@ -989,7 +995,6 @@ if stock_id and str(stock_id).strip() != "":
             st.info("無法計算 KD 線數據。")
 
     with tab_macro_chart:
-        # 📊 藍色實線 + 20倍極致對比版
         macro_hist = get_macro_history_trends()
         
         fig_macro = make_subplots(specs=[[{"secondary_y": True}]])
@@ -1002,7 +1007,7 @@ if stock_id and str(stock_id).strip() != "":
         
         if "美10年債殖利率(20倍)" in macro_hist.columns:
             fig_macro.add_trace(
-                go.Scatter(x=macro_hist.index, y=macro_hist["美10年債殖利率(20倍)"], name="美10年債殖利率 (x20)", line=dict(color="#1890ff", width=2.5)), # 改為實線 (無 dash)
+                go.Scatter(x=macro_hist.index, y=macro_hist["美10年債殖利率(20倍)"], name="美10年債殖利率 (x20)", line=dict(color="#1890ff", width=2.5)),
                 secondary_y=True
             )
             
