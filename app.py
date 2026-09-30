@@ -485,7 +485,7 @@ def get_macro_data(target_date_str):
             macro_summary[name] = {"val": "N/A", "change": "0.00%"}
     return macro_summary
 
-# 🔒 100% 繪圖保證：自動進行對齊放大，徹底解決美債殖利率一條直線問題
+# 🔒 放大 20 倍視覺優化：將美債殖利率乘以 20，對齊 80~100 區間
 @st.cache_data(ttl=1800)
 def get_macro_history_trends():
     tickers = {"費城半導體": "^SOX", "美10年債殖利率": "^TNX", "WTI 國際原油": "CL=F"}
@@ -509,11 +509,12 @@ def get_macro_history_trends():
 
     combined = pd.DataFrame(res_dict).ffill().bfill()
     
+    # 🎯 核心修復：放大 20 倍（讓 4.2%~5.0% 轉為 84~100），完美融入右 Y 軸位階
     if "美10年債殖利率" in combined.columns:
         if combined["美10年債殖利率"].mean() < 10:
-            combined["美10年債殖利率(對齊放大)"] = combined["美10年債殖利率"] * 10
+            combined["美10年債殖利率(20倍)"] = combined["美10年債殖利率"] * 20
         else:
-            combined["美10年債殖利率(對齊放大)"] = combined["美10年債殖利率"]
+            combined["美10年債殖利率(20倍)"] = combined["美10年債殖利率"] * 2  # 若原生已放大10倍，補乘2倍
 
     return combined
 
@@ -988,7 +989,7 @@ if stock_id and str(stock_id).strip() != "":
             st.info("無法計算 KD 線數據。")
 
     with tab_macro_chart:
-        # 📊 精簡圖例標籤版 (美10年債殖利率 (x10))
+        # 📊 藍色實線 + 20倍極致對比版
         macro_hist = get_macro_history_trends()
         
         fig_macro = make_subplots(specs=[[{"secondary_y": True}]])
@@ -999,9 +1000,9 @@ if stock_id and str(stock_id).strip() != "":
                 secondary_y=False
             )
         
-        if "美10年債殖利率(對齊放大)" in macro_hist.columns:
+        if "美10年債殖利率(20倍)" in macro_hist.columns:
             fig_macro.add_trace(
-                go.Scatter(x=macro_hist.index, y=macro_hist["美10年債殖利率(對齊放大)"], name="美10年債殖利率 (x10)", line=dict(color="#1890ff", width=2, dash="dash")),
+                go.Scatter(x=macro_hist.index, y=macro_hist["美10年債殖利率(20倍)"], name="美10年債殖利率 (x20)", line=dict(color="#1890ff", width=2.5)), # 改為實線 (無 dash)
                 secondary_y=True
             )
             
@@ -1017,10 +1018,10 @@ if stock_id and str(stock_id).strip() != "":
             legend=dict(orientation="h", y=-0.2, x=0.1)
         )
         fig_macro.update_yaxes(title_text="費城半導體指數", secondary_y=False)
-        fig_macro.update_yaxes(title_text="美債殖利率(對齊) / 原油(美元)", secondary_y=True)
+        fig_macro.update_yaxes(title_text="美債殖利率(x20) / 原油(美元)", secondary_y=True)
         
         st.plotly_chart(fig_macro, use_container_width=True)
-        st.caption("💡 **觀察指引**：藍虛線（美債殖利率）已自動放大 10 倍以對齊右邊 Y 軸刻度！當『費半（紅線）』向上、且『美債殖利率（藍虛線）』與『原油（黃線）』回落時，為全球資金 Risk-On 偏多趨勢！")
+        st.caption("💡 **觀察指引**：藍實線（美債殖利率）已放大 20 倍且改為實線呈現！當『費半（紅線）』向上、且『美債殖利率（藍線）』與『原油（黃線）』趨勢向下回落時，為全球資金 Risk-On 偏多趨勢！")
 
 else:
     st.info("請於左側輸入台股代碼或股名後檢視籌碼與 KD / 均線看板")
