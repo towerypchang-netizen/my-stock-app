@@ -558,7 +558,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 【100% 官方真實籌碼解析器】直連證交所與 FinMind，嚴格防杜估算數據
+# 🔒 防封鎖與穩定度強化籌碼獲取邏輯
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -568,27 +568,75 @@ def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=35)
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Referer': 'https://www.twse.com.tw/zh/page/trading/fund/T86.html'
-    }
+    # 管道 1：FinMind 優先（不帶爬蟲標頭以避開 Cloud 阻擋）
+    try:
+        url = "https://api.finmindtrade.com/api/v4/data"
+        params = {
+            "dataset": "TaiwanStockInstitutionalInvestorsBuySell",
+            "data_id": clean_stock_id,
+            "start_date": start_dt.strftime("%Y-%m-%d"),
+            "end_date": target_date_str
+        }
+        if FINMIND_TOKEN:
+            params["token"] = FINMIND_TOKEN
+            
+        resp = requests.get(url, params=params, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("msg") == "success" and len(data.get("data", [])) > 0:
+                raw_data = data["data"]
+                daily_dict = {}
+                for row in raw_data:
+                    d = row.get("date")
+                    name = str(row.get("name", "")).lower()
+                    buy = row.get("buy", 0)
+                    sell = row.get("sell", 0)
+                    diff = row.get("buy_sell", buy - sell)
+                    
+                    if d not in daily_dict:
+                        daily_dict[d] = {"外資": 0, "投信": 0, "自營商": 0}
+                        
+                    if "foreign" in name or "外資" in name:
+                        daily_dict[d]["外資"] += diff
+                    elif "investment" in name or "trust" in name or "投信" in name:
+                        daily_dict[d]["投信"] += diff
+                    elif "dealer" in name or "自營" in name:
+                        daily_dict[d]["自營商"] += diff
 
-    # 管道 1：證交所 TWSE 官方每日個股買賣超 (上市股如 2317 鴻海)
+                records = []
+                for d in sorted(daily_dict.keys()):
+                    f_val = round(daily_dict[d]["外資"] / 1000)
+                    i_val = round(daily_dict[d]["投信"] / 1000)
+                    d_val = round(daily_dict[d]["自營商"] / 1000)
+                    tot = f_val + i_val + d_val
+                    records.append({
+                        "日期": d,
+                        "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
+                        "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
+                        "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
+                        "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
+                    })
+                    
+                if len(records) >= 1:
+                    return pd.DataFrame(records).tail(5)
+    except Exception:
+        pass
+
+    # 管道 2：證交所與櫃買 API 備援嘗試
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         records = []
         curr_dt = target_dt
         days_searched = 0
-        while len(records) < 5 and days_searched < 20:
+        while len(records) < 5 and days_searched < 15:
             d_str = curr_dt.strftime('%Y%m%d')
             twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&date={d_str}"
-            resp_twse = requests.get(twse_url, headers=headers, timeout=2)
+            resp_twse = requests.get(twse_url, headers=headers, timeout=1.5)
             if resp_twse.status_code == 200:
                 jdata = resp_twse.json()
                 if jdata.get('stat') == 'OK' and 'data' in jdata:
                     for row in jdata['data']:
                         if len(row) >= 11 and str(row[0]).strip() == clean_stock_id:
-                            # 欄位解析：4=外資, 7=投信, 10=自營商
                             f_val = int(str(row[4]).replace(',', '')) // 1000
                             i_val = int(str(row[7]).replace(',', '')) // 1000
                             d_val = int(str(row[10]).replace(',', '')) // 1000
@@ -607,94 +655,6 @@ def get_stock_chip(stock_id, target_date_str):
         if records:
             res_df = pd.DataFrame(records)
             return res_df.iloc[::-1].reset_index(drop=True)
-    except Exception:
-        pass
-
-    # 管道 2：櫃買中心 TPEX 官方每日買賣超 (上櫃股如 6187 萬潤)
-    try:
-        records = []
-        curr_dt = target_dt
-        days_searched = 0
-        while len(records) < 5 and days_searched < 20:
-            d_tw = f"{curr_dt.year - 1911}/{curr_dt.strftime('%m/%d')}"
-            tpex_url = f"https://www.tpex.org.tw/web/stock/333/333_result.php?l=zh-tw&o=json&se=AL&t=D&d={d_tw}"
-            resp_tpex = requests.get(tpex_url, headers=headers, timeout=2)
-            if resp_tpex.status_code == 200:
-                jdata = resp_tpex.json()
-                if 'aaData' in jdata:
-                    for row in jdata['aaData']:
-                        if len(row) >= 11 and str(row[0]).strip() == clean_stock_id:
-                            f_val = int(str(row[7]).replace(',', '')) // 1000
-                            i_val = int(str(row[8]).replace(',', '')) // 1000
-                            d_val = int(str(row[9]).replace(',', '')) // 1000
-                            tot = int(str(row[10]).replace(',', '')) // 1000
-                            records.append({
-                                "日期": curr_dt.strftime("%Y-%m-%d"),
-                                "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                                "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                                "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                                "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                            })
-                            break
-            curr_dt -= timedelta(days=1)
-            days_searched += 1
-            
-        if records:
-            res_df = pd.DataFrame(records)
-            return res_df.iloc[::-1].reset_index(drop=True)
-    except Exception:
-        pass
-
-    # 管道 3：FinMind API 官方資料庫連線
-    try:
-        url = "https://api.finmindtrade.com/api/v4/data"
-        params = {
-            "dataset": "TaiwanStockInstitutionalInvestorsBuySell",
-            "data_id": clean_stock_id,
-            "start_date": start_dt.strftime("%Y-%m-%d"),
-            "end_date": target_date_str
-        }
-        if FINMIND_TOKEN:
-            params["token"] = FINMIND_TOKEN
-            
-        resp = requests.get(url, params=params, timeout=3)
-        data = resp.json()
-        if data.get("msg") == "success" and len(data.get("data", [])) > 0:
-            raw_data = data["data"]
-            daily_dict = {}
-            for row in raw_data:
-                d = row.get("date")
-                name = str(row.get("name", "")).lower()
-                buy = row.get("buy", 0)
-                sell = row.get("sell", 0)
-                diff = row.get("buy_sell", buy - sell)
-                
-                if d not in daily_dict:
-                    daily_dict[d] = {"外資": 0, "投信": 0, "自營商": 0}
-                    
-                if "foreign" in name or "外資" in name:
-                    daily_dict[d]["外資"] += diff
-                elif "investment" in name or "trust" in name or "投信" in name:
-                    daily_dict[d]["投信"] += diff
-                elif "dealer" in name or "自營" in name:
-                    daily_dict[d]["自營商"] += diff
-
-            records = []
-            for d in sorted(daily_dict.keys()):
-                f_val = round(daily_dict[d]["外資"] / 1000)
-                i_val = round(daily_dict[d]["投信"] / 1000)
-                d_val = round(daily_dict[d]["自營商"] / 1000)
-                tot = f_val + i_val + d_val
-                records.append({
-                    "日期": d,
-                    "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                    "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                    "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                    "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                })
-                
-            if len(records) >= 1:
-                return pd.DataFrame(records).tail(5)
     except Exception:
         pass
 
@@ -990,7 +950,7 @@ if stock_id and str(stock_id).strip() != "":
         if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
             st.dataframe(chip_df, hide_index=True, use_container_width=True)
         else:
-            st.warning("尚無三大法人籌碼紀錄。")
+            st.warning("交易所 API 暫時阻擋或更新中，請稍後重試。")
             
     with tab_kd:
         if kd_df is not None and not kd_df.empty:
