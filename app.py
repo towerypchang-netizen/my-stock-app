@@ -429,7 +429,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         
         vol_signal_str = "🔥 帶量攻擊" if vol_ratio >= 1.2 else "⚪ 量能平穩"
         pullback_buy_signal = f"🔥 回後買上漲成立 (乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
-            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️️ 短線拉回整理"
+            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️ 短線拉回整理"
         )
 
         signal = "中性觀望"
@@ -557,7 +557,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 100% 真實數據解析邏輯（直連 FinMind 與 證交所/櫃買 官方 API，絕不模擬）
+# 🔒 專利修復：僅抓取「截至昨天為止」的真實 5 個交易日籌碼數據 (100% 避開今日未公布問題)
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -565,16 +565,17 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame()
         
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=45) # 撈取過去45天真實資料
+    end_dt = target_dt - timedelta(days=1)  # 強制上限設為昨天 (T-1)，絕不請求尚未公布的今天數據
+    start_dt = end_dt - timedelta(days=35)   # 向前涵蓋 35 天確保跨假日足夠 5 個交易日
     
-    # 管道 1：FinMind API 精準真實解析
+    # 管道 1：FinMind API 真實數據解析 (截至昨天)
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
             "dataset": "TaiwanStockInstitutionalInvestorsBuySell",
             "data_id": clean_stock_id,
             "start_date": start_dt.strftime("%Y-%m-%d"),
-            "end_date": target_date_str
+            "end_date": end_dt.strftime("%Y-%m-%d")
         }
         if FINMIND_TOKEN:
             params["token"] = FINMIND_TOKEN
@@ -595,7 +596,6 @@ def get_stock_chip(stock_id, target_date_str):
                     if d not in daily_dict:
                         daily_dict[d] = {"外資": 0, "投信": 0, "自營商": 0}
                         
-                    # 精準對應官方三大法人名稱
                     if name in ["Foreign_Investor", "外陸資買賣超(不含外資自營商)"]:
                         daily_dict[d]["外資"] += diff
                     elif name in ["Investment_Trust", "投信買賣超"]:
@@ -605,13 +605,11 @@ def get_stock_chip(stock_id, target_date_str):
 
                 records = []
                 for d in sorted(daily_dict.keys()):
-                    # 將股數轉換為「張數」 (1張 = 1000股)
                     f_val = round(daily_dict[d]["外資"] / 1000)
                     i_val = round(daily_dict[d]["投信"] / 1000)
                     d_val = round(daily_dict[d]["自營商"] / 1000)
                     tot = f_val + i_val + d_val
                     
-                    # 避免加入無成交金額的非交易日
                     if f_val != 0 or i_val != 0 or d_val != 0:
                         records.append({
                             "日期": d,
@@ -626,7 +624,7 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 管道 2：證交所 (TWSE) 官方 JSON API 直接爬取 (上市股票真實備援)
+    # 管道 2：證交所 (TWSE) 官方 JSON API 直接爬取 (上市股票真實備援，同樣從昨天開始倒推)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
@@ -634,7 +632,7 @@ def get_stock_chip(stock_id, target_date_str):
     }
     try:
         records = []
-        curr_dt = target_dt
+        curr_dt = end_dt
         days_searched = 0
         while len(records) < 5 and days_searched < 12:
             d_str = curr_dt.strftime('%Y%m%d')
@@ -957,9 +955,9 @@ if stock_id and str(stock_id).strip() != "":
     with tab_chip:
         if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
             st.dataframe(chip_df, hide_index=True, use_container_width=True)
-            st.caption("💡 資料來源：證券交易所/FinMind API 官方盤後真實買賣超統計（單位：張）。")
+            st.caption("💡 資料來源：證券交易所/FinMind API 近 5 個已結算交易日官方真實籌碼數據（單位：張）。（當日盤後籌碼於 15:00 更新）")
         else:
-            st.warning("當前時段盤後數據更新中，或交易所 API 連線壅塞，請稍後重試。")
+            st.warning("籌碼 API 正在更新中或連線忙碌，請點擊下方按鈕重新刷取。")
             if st.button("🔄 重新載入籌碼資料"):
                 st.cache_data.clear()
                 st.rerun()
