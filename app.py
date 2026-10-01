@@ -428,7 +428,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         
         vol_signal_str = "🔥 帶量攻擊" if vol_ratio >= 1.2 else "⚪ 量能平穩"
         pullback_buy_signal = f"🔥 回後買上漲成立 (乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
-            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️ 短線拉回整理"
+            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️️ 短線拉回整理"
         )
 
         signal = "中性觀望"
@@ -1013,7 +1013,7 @@ if stock_id and str(stock_id).strip() != "":
             
         if "WTI 國際原油" in macro_hist.columns:
             fig_macro.add_trace(
-                go.Scatter(x=macro_hist.index, y=macro_hist["WTI 原油 (美元)", line=dict(color="#faad14", width=2)),
+                go.Scatter(x=macro_hist.index, y=macro_hist["WTI 國際原油"], name="WTI 原油 (美元)", line=dict(color="#faad14", width=2)),
                 secondary_y=True
             )
 
