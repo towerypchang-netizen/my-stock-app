@@ -186,7 +186,7 @@ def get_twse_stock_name(stock_id):
     """自證交所與櫃買中心官方資料庫反查精準中文名稱"""
     try:
         url = "https://www.twse.com.tw/rwd/zh/api/codeMarket?response=json"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
         resp = requests.get(url, headers=headers, timeout=2)
         if resp.status_code == 200:
             data = resp.json()
@@ -568,7 +568,7 @@ def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=35)
     
-    # 管道 1：FinMind 優先（不帶爬蟲標頭以避開 Cloud 阻擋）
+    # 管道 1：FinMind 優先
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
@@ -622,8 +622,12 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 管道 2：證交所與櫃買 API 備援嘗試
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # 管道 2：證交所與櫃買 API 備援嘗試（優化 Headers 防鎖）
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Referer': 'https://www.twse.com.tw/zh/trading/foreign/t86.html'
+    }
     try:
         records = []
         curr_dt = target_dt
@@ -951,6 +955,9 @@ if stock_id and str(stock_id).strip() != "":
             st.dataframe(chip_df, hide_index=True, use_container_width=True)
         else:
             st.warning("交易所 API 暫時阻擋或更新中，請稍後重試。")
+            if st.button("🔄 重新載入籌碼資料"):
+                st.cache_data.clear()
+                st.rerun()
             
     with tab_kd:
         if kd_df is not None and not kd_df.empty:
