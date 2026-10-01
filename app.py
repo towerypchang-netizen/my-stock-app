@@ -78,7 +78,6 @@ st.markdown(
         margin-bottom: -2px !important;
     }
 
-    /* 專用 CSS：將「執行 08:00 盤前情報即時診斷」按鈕樣式改為藍色 */
     div.stButton > button[key="btn_premarket_diagnose"] {
         background-color: #1890ff !important;
         color: #ffffff !important;
@@ -430,7 +429,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         
         vol_signal_str = "🔥 帶量攻擊" if vol_ratio >= 1.2 else "⚪ 量能平穩"
         pullback_buy_signal = f"🔥 回後買上漲成立 (乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
-            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️ 短線拉回整理"
+            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️️ 短線拉回整理"
         )
 
         signal = "中性觀望"
@@ -558,7 +557,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 終極三管道修復：三大法人籌碼解析邏輯 (FinMind -> yfinance -> 證交所)
+# 🔒 100% 真實數據解析邏輯（直連 FinMind 與 證交所/櫃買 官方 API，絕不模擬）
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -566,9 +565,9 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame()
         
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=60) # 拉長至60天確保跨假日仍有數據
+    start_dt = target_dt - timedelta(days=45) # 撈取過去45天真實資料
     
-    # 管道 1：FinMind 優先 (使用 Token 抓取 60 天並精選最新 5 個交易日)
+    # 管道 1：FinMind API 精準真實解析
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
@@ -588,7 +587,7 @@ def get_stock_chip(stock_id, target_date_str):
                 daily_dict = {}
                 for row in raw_data:
                     d = row.get("date")
-                    name = str(row.get("name", "")).strip().lower()
+                    name = str(row.get("name", "")).strip()
                     buy = row.get("buy", 0)
                     sell = row.get("sell", 0)
                     diff = row.get("buy_sell", buy - sell)
@@ -596,61 +595,72 @@ def get_stock_chip(stock_id, target_date_str):
                     if d not in daily_dict:
                         daily_dict[d] = {"外資": 0, "投信": 0, "自營商": 0}
                         
-                    if "foreign" in name or "外資" in name:
+                    # 精準對應官方三大法人名稱
+                    if name in ["Foreign_Investor", "外陸資買賣超(不含外資自營商)"]:
                         daily_dict[d]["外資"] += diff
-                    elif "investment" in name or "trust" in name or "投信" in name:
+                    elif name in ["Investment_Trust", "投信買賣超"]:
                         daily_dict[d]["投信"] += diff
-                    elif "dealer" in name or "自營" in name:
+                    elif name in ["Dealer_Self", "Dealer_Hedging", "自營商買賣超(自行買賣)", "自營商買賣超(避險)"]:
                         daily_dict[d]["自營商"] += diff
 
                 records = []
                 for d in sorted(daily_dict.keys()):
+                    # 將股數轉換為「張數」 (1張 = 1000股)
                     f_val = round(daily_dict[d]["外資"] / 1000)
                     i_val = round(daily_dict[d]["投信"] / 1000)
                     d_val = round(daily_dict[d]["自營商"] / 1000)
                     tot = f_val + i_val + d_val
-                    records.append({
-                        "日期": d,
-                        "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                        "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                        "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                        "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                    })
+                    
+                    # 避免加入無成交金額的非交易日
+                    if f_val != 0 or i_val != 0 or d_val != 0:
+                        records.append({
+                            "日期": d,
+                            "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
+                            "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
+                            "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
+                            "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
+                        })
                     
                 if len(records) >= 1:
                     return pd.DataFrame(records).tail(5)
     except Exception:
         pass
 
-    # 管道 2：yfinance 防火牆穿透備援 (當 FinMind/證交所 API 受阻時 100% 保障數據產出)
+    # 管道 2：證交所 (TWSE) 官方 JSON API 直接爬取 (上市股票真實備援)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Referer': 'https://www.twse.com.tw/zh/trading/foreign/t86.html'
+    }
     try:
-        t_sym = clean_stock_id + ".TW"
-        yf_df = yf.Ticker(t_sym).history(period="10d")
-        if yf_df.empty:
-            t_sym = clean_stock_id + ".TWO"
-            yf_df = yf.Ticker(t_sym).history(period="10d")
+        records = []
+        curr_dt = target_dt
+        days_searched = 0
+        while len(records) < 5 and days_searched < 12:
+            d_str = curr_dt.strftime('%Y%m%d')
+            twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&date={d_str}"
+            resp_twse = requests.get(twse_url, headers=headers, timeout=2.0)
+            if resp_twse.status_code == 200:
+                jdata = resp_twse.json()
+                if jdata.get('stat') == 'OK' and 'data' in jdata:
+                    for row in jdata['data']:
+                        if len(row) >= 11 and str(row[0]).strip() == clean_stock_id:
+                            f_val = int(str(row[4]).replace(',', '')) // 1000
+                            i_val = int(str(row[7]).replace(',', '')) // 1000
+                            d_val = int(str(row[10]).replace(',', '')) // 1000
+                            tot = f_val + i_val + d_val
+                            records.append({
+                                "日期": curr_dt.strftime("%Y-%m-%d"),
+                                "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
+                                "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
+                                "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
+                                "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
+                            })
+                            break
+            curr_dt -= timedelta(days=1)
+            days_searched += 1
             
-        if not yf_df.empty and len(yf_df) >= 3:
-            records = []
-            for i in range(min(5, len(yf_df))):
-                idx = -1 - i
-                row = yf_df.iloc[idx]
-                d_str = yf_df.index[idx].strftime("%Y-%m-%d")
-                vol_k = int(row['Volume'] // 1000)
-                
-                # 依量價變化模擬法人合理佈局比重數據 (防完全無資料)
-                f_val = int(vol_k * 0.22) if row['Close'] >= row['Open'] else int(-vol_k * 0.18)
-                i_val = int(vol_k * 0.08) if row['Close'] >= row['Open'] else int(-vol_k * 0.05)
-                d_val = int(vol_k * 0.04) if row['Close'] >= row['Open'] else int(-vol_k * 0.03)
-                tot = f_val + i_val + d_val
-                
-                records.append({
-                    "日期": d_str,
-                    "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                    "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                    "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                    "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                })
+        if records:
             res_df = pd.DataFrame(records)
             return res_df.iloc[::-1].reset_index(drop=True)
     except Exception:
@@ -947,10 +957,11 @@ if stock_id and str(stock_id).strip() != "":
     with tab_chip:
         if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
             st.dataframe(chip_df, hide_index=True, use_container_width=True)
+            st.caption("💡 資料來源：證券交易所/FinMind API 官方盤後真實買賣超統計（單位：張）。")
         else:
-            st.warning("交易所與數據 API 暫時更新中，請點擊下方按鈕重新載入。")
+            st.warning("當前時段盤後數據更新中，或交易所 API 連線壅塞，請稍後重試。")
             if st.button("🔄 重新載入籌碼資料"):
-                st.cache_data.clear() # 強制清除快取
+                st.cache_data.clear()
                 st.rerun()
             
     with tab_kd:
