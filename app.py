@@ -558,7 +558,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 防封鎖與穩定度強化籌碼獲取邏輯
+# 🔒 全面優化：三大法人籌碼解析邏輯（強力支援 FinMind API 與證交所）
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -568,7 +568,7 @@ def get_stock_chip(stock_id, target_date_str):
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=35)
     
-    # 管道 1：FinMind 優先
+    # 管道 1：FinMind 優先（強化多種欄位命名比對模式）
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
@@ -588,7 +588,10 @@ def get_stock_chip(stock_id, target_date_str):
                 daily_dict = {}
                 for row in raw_data:
                     d = row.get("date")
-                    name = str(row.get("name", "")).lower()
+                    name = str(row.get("name", "")).strip()
+                    name_lower = name.lower()
+                    
+                    # 取出買賣張數差額
                     buy = row.get("buy", 0)
                     sell = row.get("sell", 0)
                     diff = row.get("buy_sell", buy - sell)
@@ -596,11 +599,12 @@ def get_stock_chip(stock_id, target_date_str):
                     if d not in daily_dict:
                         daily_dict[d] = {"外資": 0, "投信": 0, "自營商": 0}
                         
-                    if "foreign" in name or "外資" in name:
+                    # 相容各種中英文名稱 (Foreign, Investment Trust, Dealer)
+                    if "foreign" in name_lower or "外資" in name:
                         daily_dict[d]["外資"] += diff
-                    elif "investment" in name or "trust" in name or "投信" in name:
+                    elif "investment" in name_lower or "trust" in name_lower or "投信" in name:
                         daily_dict[d]["投信"] += diff
-                    elif "dealer" in name or "自營" in name:
+                    elif "dealer" in name_lower or "自營" in name:
                         daily_dict[d]["自營商"] += diff
 
                 records = []
@@ -622,7 +626,7 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 管道 2：證交所與櫃買 API 備援嘗試（優化 Headers 防鎖）
+    # 管道 2：證交所 T86 備援嘗試（完整偽裝 Header 防止 Cloud 封鎖）
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
