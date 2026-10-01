@@ -186,7 +186,7 @@ def get_twse_stock_name(stock_id):
     """自證交所與櫃買中心官方資料庫反查精準中文名稱"""
     try:
         url = "https://www.twse.com.tw/rwd/zh/api/codeMarket?response=json"
-        resp = requests.get(url, timeout=3)
+        resp = requests.get(url, timeout=2)
         if resp.status_code == 200:
             data = resp.json()
             for row in data.get('data', []):
@@ -197,7 +197,6 @@ def get_twse_stock_name(stock_id):
     return None
 
 def get_stock_display_name(raw_input, stock_id):
-    """徹底修正雙重括號問題，回傳乾淨格式」"""
     if not stock_id:
         return "未指定"
     
@@ -237,7 +236,7 @@ if "daily_picks" not in st.session_state:
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
 
-def call_gemini_with_retry(prompt, max_retries=3):
+def call_gemini_with_retry(prompt, max_retries=2):
     if not GEMINI_API_KEY:
         raise ValueError("Secrets 中未找到有效的 GEMINI_API_KEY，請檢查 Secrets 設定。")
         
@@ -254,7 +253,7 @@ def call_gemini_with_retry(prompt, max_retries=3):
                 return response.text
         except Exception as e:
             last_err = str(e)
-            time.sleep(1.5)
+            time.sleep(1.0)
 
     raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
@@ -263,9 +262,8 @@ def diagnose_premarket_intelligence(macro_data, target_date_str):
     請作為華爾街資深盤前情報官與台股策略總監，基準日期：{target_date_str}。
     當前全球宏觀指標：{macro_data}。
 
-    請針對昨夜美股（費半、輝達、台積電 ADR）、美債殖利率、原油與近期台股盤前市場焦點進行盤前戰情診斷。
-    請特別注意當天高檔獲利賣壓族群，避免誤選弱勢族群。
-    請回傳 JSON 格式如下：
+    請針對昨夜美股、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
+    請回傳 JSON 格式：
     {{
       "summary": "簡短 100 字盤前重點摘要...",
       "focus_sectors": ["族群A", "族群B"],
@@ -343,6 +341,7 @@ def get_peer_comparison(stock_id):
         
     return f"所屬同業族群：[{g_name}]\n" + "\n".join(records)
 
+@st.cache_data(ttl=600)
 def get_realtime_tw_price_info(stock_id):
     try:
         clean_id = parse_stock_input(stock_id)
@@ -368,14 +367,15 @@ def get_realtime_tw_price_info(stock_id):
         pass
     return None
 
+@st.cache_data(ttl=1800)
 def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
     try:
         clean_id = parse_stock_input(stock_id)
         ticker = yf.Ticker(clean_id + ".TW")
-        df = ticker.history(period="1y")
+        df = ticker.history(period="6mo")
         if df.empty:
             ticker = yf.Ticker(clean_id + ".TWO")
-            df = ticker.history(period="1y")
+            df = ticker.history(period="6mo")
             
         if df.empty or len(df) < 20:
             return None, "數據不足"
@@ -426,8 +426,8 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         is_above_5ma = latest_close >= latest_5ma
         is_above_20ma = latest_close >= latest_20ma
         
-        vol_signal_str = "🔥 帶量攻擊 (攻擊量充沛)" if vol_ratio >= 1.2 else "⚪ 量能平穩 (量縮洗盤沉澱中)"
-        pullback_buy_signal = f"🔥 回後買上漲成立 (站上雙均線/乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
+        vol_signal_str = "🔥 帶量攻擊" if vol_ratio >= 1.2 else "⚪ 量能平穩"
+        pullback_buy_signal = f"🔥 回後買上漲成立 (乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
             "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️ 短線拉回整理"
         )
 
@@ -460,7 +460,7 @@ def get_stock_revenue_data(stock_id):
         params = {"dataset": "TaiwanStockMonthRevenue", "data_id": clean_stock_id}
         if FINMIND_TOKEN:
             params["token"] = FINMIND_TOKEN
-        resp = requests.get(url, params=params, timeout=3)
+        resp = requests.get(url, params=params, timeout=2)
         data = resp.json()
         if data.get("msg") == "success" and len(data.get("data", [])) > 0:
             df = pd.DataFrame(data["data"])
@@ -537,7 +537,7 @@ def get_taiwan_sector_performance(target_date_str):
         parameter["token"] = FINMIND_TOKEN
 
     try:
-        resp = requests.get(url, params=parameter, timeout=4)
+        resp = requests.get(url, params=parameter, timeout=3)
         data = resp.json()
         if data.get("msg") == "success" and len(data.get("data", [])) > 0:
             df = pd.DataFrame(data["data"])
@@ -556,7 +556,6 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-# 🔒 上市 TWSE 與 上櫃 TPEX 雙源三大法人歷史數據自動解析
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
@@ -564,7 +563,7 @@ def get_stock_chip(stock_id, target_date_str):
         return pd.DataFrame()
         
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=45)
+    start_dt = target_dt - timedelta(days=30)
     
     # 管道一：FinMind 官方 API
     try:
@@ -578,7 +577,7 @@ def get_stock_chip(stock_id, target_date_str):
         if FINMIND_TOKEN:
             params["token"] = FINMIND_TOKEN
             
-        resp = requests.get(url, params=params, timeout=5)
+        resp = requests.get(url, params=params, timeout=3)
         data = resp.json()
         if data.get("msg") == "success" and len(data.get("data", [])) > 0:
             raw_df = pd.DataFrame(data["data"])
@@ -611,121 +610,30 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 管道二：證交所與櫃買中心 Open API 比對
-    try:
-        records = []
-        curr_dt = target_dt
-        days_searched = 0
-        while len(records) < 5 and days_searched < 25:
-            d_tw = f"{curr_dt.year - 1911}/{curr_dt.strftime('%m/%d')}"
-            d_str = curr_dt.strftime('%Y%m%d')
-            found = False
-            
-            # 1. 抓櫃買中心 TPEX (針對上櫃股票如萬潤 6187)
-            try:
-                tpex_url = f"https://www.tpex.org.tw/web/stock/333/333_result.php?l=zh-tw&o=json&se=AL&t=D&d={d_tw}"
-                resp_tpex = requests.get(tpex_url, timeout=2)
-                if resp_tpex.status_code == 200 and 'aaData' in resp_tpex.json():
-                    jdata = resp_tpex.json()['aaData']
-                    for row in jdata:
-                        if len(row) >= 11 and str(row[0]).strip() == clean_stock_id:
-                            f_val = int(str(row[7]).replace(',', '')) // 1000
-                            i_val = int(str(row[8]).replace(',', '')) // 1000
-                            d_val = int(str(row[9]).replace(',', '')) // 1000
-                            tot = int(str(row[10]).replace(',', '')) // 1000
-                            records.append({
-                                "日期": curr_dt.strftime("%Y-%m-%d"),
-                                "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                                "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                                "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                                "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                            })
-                            found = True
-                            break
-            except Exception:
-                pass
-
-            # 2. 上櫃找不到再抓證交所 TWSE (上市個股)
-            if not found:
-                try:
-                    twse_url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&date={d_str}"
-                    resp_twse = requests.get(twse_url, timeout=2)
-                    if resp_twse.status_code == 200 and 'data' in resp_twse.json():
-                        jdata = resp_twse.json()['data']
-                        for row in jdata:
-                            if len(row) >= 11 and str(row[0]).strip() == clean_stock_id:
-                                f_val = int(str(row[4]).replace(',', '')) // 1000
-                                i_val = int(str(row[7]).replace(',', '')) // 1000
-                                d_val = int(str(row[10]).replace(',', '')) // 1000
-                                tot = f_val + i_val + d_val
-                                records.append({
-                                    "日期": curr_dt.strftime("%Y-%m-%d"),
-                                    "外資": f"+{f_val:,}" if f_val > 0 else f"{f_val:,}",
-                                    "投信": f"+{i_val:,}" if i_val > 0 else f"{i_val:,}",
-                                    "自營商": f"+{d_val:,}" if d_val > 0 else f"{d_val:,}",
-                                    "三大法人合計": f"+{tot:,}" if tot > 0 else f"{tot:,}"
-                                })
-                                break
-                except Exception:
-                    pass
-
-            curr_dt -= timedelta(days=1)
-            days_searched += 1
-            
-        if records:
-            res_df = pd.DataFrame(records)
-            return res_df.iloc[::-1].reset_index(drop=True)
-    except Exception:
-        pass
-
     return pd.DataFrame()
 
-def is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True):
+# ⚡ 超高速輕量個股過濾機制 (大幅縮短運算時間)
+def is_valid_stock_fast(stock_id, min_price, max_price):
+    p_info = get_realtime_tw_price_info(stock_id)
+    if not p_info:
+        return False, None
+        
+    real_p = p_info["real_price"]
+    if p_info["is_gap_down"]: 
+        return False, None
+        
+    if min_price > 0 and real_p < min_price: 
+        return False, None
+    if max_price > 0 and real_p > max_price: 
+        return False, None
+        
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
-        k_val = kd_info.get("K", 50)
-        d_val = kd_info.get("D", 50)
         kd_signal = kd_info.get("signal", "")
-        is_above_5ma = kd_info.get("is_above_5ma", True)
-        is_big_black_k = kd_info.get("is_big_black_k", False)
-        
-        if is_big_black_k or "死亡" in kd_signal:
-            return False, None
-            
-        if not is_above_5ma or (k_val < d_val and "低檔超賣" not in kd_signal):
+        if "死亡" in kd_signal or kd_info.get("is_big_black_k", False):
             return False, None
 
-        if strict_mode and "中性" in kd_signal:
-            return False, None
-
-    chip_df = get_stock_chip(stock_id, target_date_str)
-    if isinstance(chip_df, pd.DataFrame) and not chip_df.empty and len(chip_df) >= 3:
-        try:
-            recent_tot = []
-            for idx in range(len(chip_df)-3, len(chip_df)):
-                row = chip_df.iloc[idx]
-                tot_val = int(str(row.get('三大法人合計', '0')).replace(',', '').replace('+', ''))
-                recent_tot.append(tot_val)
-                
-            latest_chip = chip_df.iloc[-1]
-            f_buy = int(str(latest_chip.get('外資', '0')).replace(',', '').replace('+', ''))
-            i_buy = int(str(latest_chip.get('投信', '0')).replace(',', '').replace('+', ''))
-            d_buy = int(str(latest_chip.get('自營商', '0')).replace(',', '').replace('+', ''))
-
-            if (f_buy < 0 and i_buy < 0 and d_buy < 0) or (recent_tot[-1] < 0 and recent_tot[-2] < 0 and recent_tot[-3] < 0):
-                return False, None
-        except Exception:
-            pass
-
-    p_info = get_realtime_tw_price_info(stock_id)
-    if p_info:
-        real_p = p_info["real_price"]
-        if p_info["is_gap_down"]: return False, None
-        if min_price > 0 and real_p < min_price: return False, None
-        if max_price > 0 and real_p > max_price: return False, None
-        return True, real_p
-        
-    return False, None
+    return True, real_p
 
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
@@ -735,17 +643,16 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     price_limit_str = f"【硬性股價區間限制】：{', '.join(cond_list)}" if cond_list else "股價不限"
     sector_limit_str = f"【指定產業限制】：必須嚴格從「{custom_sector.strip()}」相關個股挑選" if custom_sector and custom_sector.strip() != "" else "【指定產業限制】：AI 自主推薦熱門主流"
 
-    premarket_focus_str = f"【08:00 盤前即時利多/聚焦族群 (第一優先權重)】：{st.session_state.premarket_focus}" if st.session_state.premarket_focus else ""
-    premarket_avoid_str = f"【08:00 盤前即時利空/避險族群 (絕對禁止挑選)】：{st.session_state.premarket_avoid}" if st.session_state.premarket_avoid else ""
+    premarket_focus_str = f"【08:00 盤前即時利多/聚焦族群】：{st.session_state.premarket_focus}" if st.session_state.premarket_focus else ""
 
+    # 精簡候選數至 10 檔（大幅降低運算耗時）
     prompt_select = (
         "請作為頂級華爾街台股選股操盤手，基準日期：" + str(target_date_str) + "。\n"
         "價格條件：" + price_limit_str + "。\n"
         "族群條件：" + sector_limit_str + "。\n"
         "大盤環境：" + str(macro_data) + "\n"
-        + premarket_focus_str + "\n"
-        + premarket_avoid_str + "\n\n"
-        "請廣泛挑選 30 檔具備波段攻擊潛力（優先挑選 KD 黃金交叉或攻擊量能充沛者）的熱門台股標的名單，預估上漲率請給予 68%-88% 之間的數值。\n"
+        + premarket_focus_str + "\n\n"
+        "請精選 10 檔最具備波段攻擊潛力、多頭型態且成交量充沛的台股標的名單，預估上漲率請給予 68%-88% 之間的數值。\n"
         "請回傳 JSON 陣列格式如：\n"
         '[{"預估上漲率":"78%","族群":"半導體設備","股名":"萬潤","股號":"6187","波段期間":"5-10天"}]\n'
         "不要包含 Markdown 標記。"
@@ -761,7 +668,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         stock_id = parse_stock_input(item.get("股號"))
         if not stock_id: continue
         
-        valid, real_p = is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=True)
+        valid, real_p = is_valid_stock_fast(stock_id, min_price, max_price)
         if valid and real_p:
             p_low = round(real_p * 0.985, 1)
             p_high = round(real_p * 1.005, 1)
@@ -769,7 +676,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             
             item["當前實價"] = f"{real_p:.2f}"
             item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
-            item["開盤防護標準"] = f"開盤價 ≥ {real_p:.2f} (若開高>2%觀望)"
+            item["開盤防護標準"] = f"開盤價 ≥ {real_p:.2f} (開高>2%觀望)"
             item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即獲利落袋)"
             
             tw_name = get_twse_stock_name(stock_id) or STOCK_ID_TO_NAME.get(stock_id, item.get("股名"))
@@ -782,32 +689,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
                 
             final_results.append(item)
         if len(final_results) >= 3: break
-
-    if len(final_results) < 3:
-        for item in picks:
-            stock_id = parse_stock_input(item.get("股號"))
-            if any(x.get("股號") == item.get("股號") for x in final_results): continue
-            
-            valid, real_p = is_valid_stock(stock_id, target_date_str, min_price, max_price, strict_mode=False)
-            if valid and real_p:
-                p_low = round(real_p * 0.985, 1)
-                p_high = round(real_p * 1.005, 1)
-                target_p = round(real_p * 1.08, 1)
-                
-                item["當前實價"] = f"{real_p:.2f}"
-                item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
-                item["開盤防護標準"] = f"開盤價 ≥ {real_p:.2f} (若開高>2%觀望)"
-                item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即獲利落袋)"
-                
-                tw_name = get_twse_stock_name(stock_id) or STOCK_ID_TO_NAME.get(stock_id, item.get("股名"))
-                item["股名"] = tw_name
-                
-                if stock_id in LARGE_CAP_STOCKS:
-                    item["波段期間"] = "5-10天 (權值階梯墊高)"
-                else:
-                    if "波段期間" not in item: item["波段期間"] = "5-10天"
-                final_results.append(item)
-            if len(final_results) >= 3: break
 
     while len(final_results) < 3:
         final_results.append({
@@ -834,7 +715,6 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     
     if p_info:
         real_price = p_info["real_price"]
-        prev_close = p_info["prev_close"]
         price_info_str = f"當前真實市場成交價：{real_price} 元 ({cap_type_str})"
         p_low = round(real_price * 0.985, 1)
         p_high = round(real_price * 1.005, 1)
@@ -843,7 +723,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         calc_price_str = f"【系統統一計算數據】：建議買進區間：{p_low}元 ~ {p_high}元，預估進場均價中間值：{p_mid}元，波段停利目標價：{target_p}元。"
     else:
         price_info_str = "即時股價：需參考市場現價"
-        p_low, p_high, p_mid, target_p, prev_close = "---", "---", "---", "---", "---"
+        p_low, p_high, p_mid, target_p = "---", "---", "---", "---"
         calc_price_str = ""
 
     chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "無最新籌碼數據"
@@ -955,7 +835,7 @@ min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
 if st.sidebar.button("🚀 產生今日AI預估上漲率最高前三檔", type="primary", use_container_width=True):
-    with st.spinner("🤖 AI 結合 08:00 盤前情報掃描台股中..."):
+    with st.spinner("🤖 極速掃描符合多頭型態之標的中..."):
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
@@ -998,7 +878,7 @@ for name, info in macro_data.items():
 
 st.divider()
 
-# 主看板標題（修正重複括號）
+# 主看板標題
 st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與 {period_type} KD / 雙均線 綜合分析看板")
 
 if stock_id and str(stock_id).strip() != "":
