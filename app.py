@@ -498,6 +498,7 @@ def get_macro_data(target_date_str):
             macro_summary[name] = {"val": "N/A", "change": "0.00%"}
     return macro_summary
 
+# 🔒 全球宏觀趨勢：100% 直抓 Yahoo Finance 真實數據，不含任何假數據
 @st.cache_data(ttl=1800)
 def get_macro_history_trends():
     tickers = {"費城半導體": "^SOX", "美10年債殖利率": "^TNX", "WTI 國際原油": "CL=F"}
@@ -510,14 +511,6 @@ def get_macro_history_trends():
                 res_dict[name] = df['Close']
         except Exception:
             pass
-
-    dates = pd.date_range(end=get_taiwan_now(), periods=40, freq='B')
-    if "費城半導體" not in res_dict:
-        res_dict["費城半導體"] = pd.Series([12200 + i * 10 for i in range(40)], index=dates)
-    if "美10年債殖利率" not in res_dict:
-        res_dict["美10年債殖利率"] = pd.Series([4.20 + (i % 5) * 0.02 for i in range(40)], index=dates)
-    if "WTI 國際原油" not in res_dict:
-        res_dict["WTI 國際原油"] = pd.Series([75.0 + (i % 7) * 0.5 for i in range(40)], index=dates)
 
     combined = pd.DataFrame(res_dict).ffill().bfill()
     
@@ -574,7 +567,7 @@ def get_stock_chip(stock_id, target_date_str):
         url = f"https://fubon-ebrokerdj.fbs.com.tw/z/zc/zcl/zcl.djhtm?a={clean_stock_id}&b=3"
         resp = requests.get(url, headers=headers, timeout=5)
         if resp.status_code == 200:
-            resp.encoding = 'big5' # 嘉實網頁通常為 Big5 編碼
+            resp.encoding = 'big5'
             soup = BeautifulSoup(resp.text, 'html.parser')
             table = soup.find('table', class_='t01')
             if table:
@@ -582,7 +575,6 @@ def get_stock_chip(stock_id, target_date_str):
                 records = []
                 for r in rows:
                     cols = [td.text.strip() for td in r.find_all('td')]
-                    # 解析包含民國年日期的資料列 (例如 115/09/30)
                     if len(cols) >= 5 and '/' in cols[0]:
                         date_raw = cols[0]
                         try:
@@ -614,7 +606,6 @@ def get_stock_chip(stock_id, target_date_str):
 
                 if records:
                     df = pd.DataFrame(records)
-                    # 依日期遞增排序，並取最新 5 個交易日
                     df = df.sort_values(by="日期", ascending=True).tail(5).reset_index(drop=True)
                     return df
     except Exception:
