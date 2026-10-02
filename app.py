@@ -392,24 +392,24 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         df['5MA'] = df['Close'].rolling(window=5).mean().round(2)
         df['20MA'] = df['Close'].rolling(window=20).mean().round(2)
         
-        # 1. 新增布林通道 (Bollinger Bands, N=20, K=2)
+        # 1. 布林通道 (Bollinger Bands, N=20, K=2)
         std_20 = df['Close'].rolling(window=20).std()
         df['BB_Upper'] = (df['20MA'] + (std_20 * 2)).round(2)
         df['BB_Lower'] = (df['20MA'] - (std_20 * 2)).round(2)
 
-        # 2. 新增 RSI (14日)
+        # 2. RSI (14日)
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         df['RSI'] = (100 - (100 / (1 + rs))).round(2)
 
-        # 3. 新增 MACD (12, 26, 9)
+        # 3. MACD (12, 26, 9)
         ema12 = df['Close'].ewm(span=12, adjust=False).mean()
         ema26 = df['Close'].ewm(span=26, adjust=False).mean()
         df['DIF'] = (ema12 - ema26).round(2)
         df['MACD_Signal'] = df['DIF'].ewm(span=9, adjust=False).mean().round(2)
-        df['MACD_Hist'] = ((df['DIF'] - df['MACD_Signal']) * 2).round(2) # 台股慣用乘 2
+        df['MACD_Hist'] = ((df['DIF'] - df['MACD_Signal']) * 2).round(2)
 
         # 量能邏輯
         df['5VolMA'] = df['Volume'].rolling(window=5).mean()
@@ -965,8 +965,8 @@ for name, info in macro_data.items():
 
 st.divider()
 
-# 主看板標題更新
-st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與進階技術指標 (KD/均線/MACD/RSI/布林通道) 綜合分析看板")
+# 精簡後的看板標題（修正：移除冗長括號）
+st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與進階技術指標綜合分析看板")
 
 if stock_id and str(stock_id).strip() != "":
     chip_df = get_stock_chip(stock_id, target_date_str)
@@ -998,20 +998,20 @@ if stock_id and str(stock_id).strip() != "":
             
     with tab_kd:
         if kd_df is not None and not kd_df.empty:
-            # 使用 3 層子圖展示：主圖(收盤價與布林通道) / 次圖一(KD & RSI) / 次圖二(MACD)
+            # 修正：加大 vertical_spacing (0.08)，並獨立佈局 Legend 位置，解決標題疊加擠在一起的問題
             fig = make_subplots(
                 rows=3, cols=1, 
                 shared_xaxes=True, 
-                vertical_spacing=0.04,
+                vertical_spacing=0.08,
                 row_heights=[0.5, 0.25, 0.25],
                 subplot_titles=(f"主圖：收盤價與布林通道 (20MA)", "次圖一：KD 指標 & RSI (14)", "次圖二：MACD 動能柱與 DIF/MACD 軌道")
             )
             
             # 1. 主圖：收盤價 + 布林通道上下軌
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['Close'], mode='lines', name='收盤價', line=dict(color='#ffffff', width=2)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Upper'], mode='lines', name='布林上軌 (壓力)', line=dict(color='#ff7875', width=1, dash='dash')), row=1, col=1)
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['20MA'], mode='lines', name='布林中軌 (20MA)', line=dict(color='#ffc069', width=1.5)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Lower'], mode='lines', name='布林下軌 (支撐)', line=dict(color='#95de64', width=1, dash='dash')), row=1, col=1)
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Upper'], mode='lines', name='布林上軌', line=dict(color='#ff7875', width=1, dash='dash')), row=1, col=1)
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['20MA'], mode='lines', name='布林中軌', line=dict(color='#ffc069', width=1.5)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Lower'], mode='lines', name='布林下軌', line=dict(color='#95de64', width=1, dash='dash')), row=1, col=1)
 
             # 2. 次圖一：KD 與 RSI
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['K'], mode='lines', name='K 值', line=dict(color='#ff4d4f', width=1.5)), row=2, col=1)
@@ -1022,14 +1022,15 @@ if stock_id and str(stock_id).strip() != "":
 
             # 3. 次圖二：MACD
             colors_macd = ['#ff4d4f' if val >= 0 else '#52c41a' for val in kd_df['MACD_Hist']]
-            fig.add_trace(go.Bar(x=kd_df.index, y=kd_df['MACD_Hist'], name='MACD 柱狀圖', marker_color=colors_macd), row=3, col=1)
+            fig.add_trace(go.Bar(x=kd_df.index, y=kd_df['MACD_Hist'], name='MACD 柱狀', marker_color=colors_macd), row=3, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['DIF'], mode='lines', name='DIF (快線)', line=dict(color='#faad14', width=1)), row=3, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['MACD_Signal'], mode='lines', name='MACD (慢線)', line=dict(color='#13c2c2', width=1)), row=3, col=1)
 
+            # 調整整體佈局：加大頂部與圖例間距，避免文字重疊
             fig.update_layout(
-                height=520, 
-                margin=dict(l=10, r=10, t=30, b=10), 
-                legend=dict(orientation="h", y=1.08, x=0),
+                height=560, 
+                margin=dict(l=10, r=10, t=50, b=10), 
+                legend=dict(orientation="h", y=1.12, x=0),
                 template="plotly_dark"
             )
             st.plotly_chart(fig, use_container_width=True)
