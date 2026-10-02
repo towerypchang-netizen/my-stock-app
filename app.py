@@ -965,7 +965,7 @@ for name, info in macro_data.items():
 
 st.divider()
 
-# 精簡後的看板標題
+# 看板標題
 st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與進階技術指標綜合分析看板")
 
 if stock_id and str(stock_id).strip() != "":
@@ -980,7 +980,7 @@ if stock_id and str(stock_id).strip() != "":
         c4.metric("20日線 (月線)", kd_info['20MA'], delta=f"{kd_info['bias_20ma']:+}%\n(乖離)")
         c5.metric("KD & 均線型態", kd_info['signal'])
         
-    # 分頁標題精簡為 "📈 進階技術指標"
+    # 依要求精簡分頁標題為 "📈 進階技術指標"
     tab_chip, tab_kd, tab_macro_chart = st.tabs([
         "📊 三大法人籌碼 (張)", 
         "📈 進階技術指標", 
@@ -999,41 +999,46 @@ if stock_id and str(stock_id).strip() != "":
             
     with tab_kd:
         if kd_df is not None and not kd_df.empty:
-            # 加大 vertical_spacing 至 0.09，避免子圖間距擁擠
+            # 依要求：刪除「主圖：/次圖：」前綴，直接顯示技術指標名稱
             fig = make_subplots(
                 rows=3, cols=1, 
                 shared_xaxes=True, 
                 vertical_spacing=0.09,
                 row_heights=[0.5, 0.25, 0.25],
-                subplot_titles=(f"主圖：收盤價與布林通道 (20MA)", "次圖一：KD 指標 & RSI (14)", "次圖二：MACD 動能柱與 DIF/MACD 軌道")
+                subplot_titles=("收盤價與布林通道 (20MA)", "KD 指標 & RSI (14)", "MACD 動能柱與 DIF/MACD 軌道")
             )
             
-            # 1. 主圖：收盤價 + 布林通道上下軌
+            # 1. 布林通道
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['Close'], mode='lines', name='收盤價', line=dict(color='#ffffff', width=2)), row=1, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Upper'], mode='lines', name='布林上軌', line=dict(color='#ff7875', width=1, dash='dash')), row=1, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['20MA'], mode='lines', name='布林中軌', line=dict(color='#ffc069', width=1.5)), row=1, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Lower'], mode='lines', name='布林下軌', line=dict(color='#95de64', width=1, dash='dash')), row=1, col=1)
 
-            # 2. 次圖一：KD 與 RSI
+            # 2. KD 與 RSI
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['K'], mode='lines', name='K 值', line=dict(color='#ff4d4f', width=1.5)), row=2, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['D'], mode='lines', name='D 值', line=dict(color='#1890ff', width=1.5)), row=2, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['RSI'], mode='lines', name='RSI', line=dict(color='#b37feb', width=1.5, dash='dot')), row=2, col=1)
             fig.add_hline(y=80, line_dash="dash", line_color="gray", row=2, col=1)
             fig.add_hline(y=20, line_dash="dash", line_color="gray", row=2, col=1)
 
-            # 3. 次圖二：MACD
+            # 3. MACD
             colors_macd = ['#ff4d4f' if val >= 0 else '#52c41a' for val in kd_df['MACD_Hist']]
             fig.add_trace(go.Bar(x=kd_df.index, y=kd_df['MACD_Hist'], name='MACD 柱狀', marker_color=colors_macd), row=3, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['DIF'], mode='lines', name='DIF (快線)', line=dict(color='#faad14', width=1)), row=3, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['MACD_Signal'], mode='lines', name='MACD (慢線)', line=dict(color='#13c2c2', width=1)), row=3, col=1)
 
-            # 核心修正：將圖例 (Legend) 移動至圖表底部 (y=-0.15)，徹底解開頂部標題重疊
+            # 修正 1：佈局圖例放置於最下方 (y=-0.15) 避免重疊
             fig.update_layout(
                 height=600, 
-                margin=dict(l=10, r=10, t=60, b=60), 
+                margin=dict(l=10, r=10, t=50, b=60), 
                 legend=dict(orientation="h", y=-0.15, x=0),
                 template="plotly_dark"
             )
+
+            # 修正 2：依要求調整子圖標題字型大小與頁籤選單文字一致 (13px)
+            for annotation in fig['layout']['annotations']:
+                annotation.update(font=dict(size=13, color='#e0e0e0'))
+
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("無法計算技術指標數據。")
