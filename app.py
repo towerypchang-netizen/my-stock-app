@@ -965,7 +965,7 @@ for name, info in macro_data.items():
 
 st.divider()
 
-# 精簡後的看板標題（修正：移除冗長括號）
+# 精簡後的看板標題
 st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與進階技術指標綜合分析看板")
 
 if stock_id and str(stock_id).strip() != "":
@@ -980,9 +980,10 @@ if stock_id and str(stock_id).strip() != "":
         c4.metric("20日線 (月線)", kd_info['20MA'], delta=f"{kd_info['bias_20ma']:+}%\n(乖離)")
         c5.metric("KD & 均線型態", kd_info['signal'])
         
+    # 分頁標題精簡為 "📈 進階技術指標"
     tab_chip, tab_kd, tab_macro_chart = st.tabs([
         "📊 三大法人籌碼 (張)", 
-        f"📈 {period_type} 進階技術指標與布林通道 (KD/均線/MACD/RSI)", 
+        "📈 進階技術指標", 
         "🌐 全球宏觀指標多空趨勢對比圖"
     ])
     
@@ -998,11 +999,11 @@ if stock_id and str(stock_id).strip() != "":
             
     with tab_kd:
         if kd_df is not None and not kd_df.empty:
-            # 修正：加大 vertical_spacing (0.08)，並獨立佈局 Legend 位置，解決標題疊加擠在一起的問題
+            # 加大 vertical_spacing 至 0.09，避免子圖間距擁擠
             fig = make_subplots(
                 rows=3, cols=1, 
                 shared_xaxes=True, 
-                vertical_spacing=0.08,
+                vertical_spacing=0.09,
                 row_heights=[0.5, 0.25, 0.25],
                 subplot_titles=(f"主圖：收盤價與布林通道 (20MA)", "次圖一：KD 指標 & RSI (14)", "次圖二：MACD 動能柱與 DIF/MACD 軌道")
             )
@@ -1026,11 +1027,11 @@ if stock_id and str(stock_id).strip() != "":
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['DIF'], mode='lines', name='DIF (快線)', line=dict(color='#faad14', width=1)), row=3, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['MACD_Signal'], mode='lines', name='MACD (慢線)', line=dict(color='#13c2c2', width=1)), row=3, col=1)
 
-            # 調整整體佈局：加大頂部與圖例間距，避免文字重疊
+            # 核心修正：將圖例 (Legend) 移動至圖表底部 (y=-0.15)，徹底解開頂部標題重疊
             fig.update_layout(
-                height=560, 
-                margin=dict(l=10, r=10, t=50, b=10), 
-                legend=dict(orientation="h", y=1.12, x=0),
+                height=600, 
+                margin=dict(l=10, r=10, t=60, b=60), 
+                legend=dict(orientation="h", y=-0.15, x=0),
                 template="plotly_dark"
             )
             st.plotly_chart(fig, use_container_width=True)
