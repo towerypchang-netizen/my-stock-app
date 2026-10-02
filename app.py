@@ -1013,7 +1013,7 @@ if stock_id and str(stock_id).strip() != "":
         fig_macro.update_yaxes(title_text="美債殖利率(x20) / 原油(美元)", secondary_y=True)
         
         st.plotly_chart(fig_macro, use_container_width=True)
-        st.caption("💡 **觀察指引**：藍實線（美債殖利率）已放大 20 倍且改為實線呈現！當『費半（紅線）』向上、且『美債殖利率（藍線）』與『原油（黃線）』趨勢向下回落時，為全球資金 Risk-On 偏多趨勢！")
+        st.caption("💡 **觀察指引**：當『費半（紅線）』向上、『美債殖利率（藍線）』&『原油（黃線）』趨勢向下，三大指標同時成立時，為全球資金 Risk-On 偏多趨勢，資金《極大機率》會大規模匯入全球股票市場，特別是科技比重高的美股與台股！")
 
 else:
     st.info("請於左側輸入台股代碼或股名後檢視籌碼與 KD / 均線看板")
