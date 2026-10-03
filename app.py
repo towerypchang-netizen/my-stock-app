@@ -827,7 +827,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         
     df_res = pd.DataFrame(final_results)
     # 移除「開盤防護標準」欄位
-    cols_order = ["預估上漲率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"]
+    cols_order = ["上漲機率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"]
     return df_res[cols_order].to_dict('records')
 
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
