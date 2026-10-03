@@ -949,7 +949,7 @@ min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
 # 整合兩大按鈕為單一核心執行按鈕
-if st.sidebar.button("⚡ 執行最新情報分析並AI預測上漲率最高前三檔", type="primary", key="btn_combined_diagnose", use_container_width=True):
+if st.sidebar.button("⚡ AI執行最新情報分析預測上漲機率最高前三檔", type="primary", key="btn_combined_diagnose", use_container_width=True):
     with st.spinner("🤖 第一階段：正在掃描美股ADR、費半、油價與最新產業情報..."):
         try:
             p_data = diagnose_premarket_intelligence(macro_data, target_date_str)
