@@ -232,7 +232,7 @@ def get_taiwan_now():
 # 移除「開盤防護標準」欄位
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
-        columns=["預估上漲率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"],
+        columns=["上漲機率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"],
         data=[["--%", "---", "---", "---", "---", "---", "---", "---"] for _ in range(3)]
     )
 
@@ -751,7 +751,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         "族群條件：" + sector_limit_str + "。\n"
         "大盤環境：" + str(macro_data) + "\n"
         + premarket_focus_str + "\n\n"
-        "請精選 10 檔最具備波段攻擊潛力、多頭型態且成交量充沛的台股標的名單，預估上漲率請給予 68%-88% 之間的數值。\n"
+        "請精選 10 檔最具備波段攻擊潛力、多頭型態且成交量充沛的台股標的名單，上漲機率請給予 68%-88% 之間的數值。\n"
         "【重要規格要求】：『族群』名稱請參考 Yahoo 股市風格分類，且長度【嚴格限制在 6 個全形中文簡短字數以內】（如：半導體設備、液冷散熱、CPO光通訊、PCB載板）。\n"
         "請回傳 JSON 陣列格式如：\n"
         '[{"上漲機率":"78%","族群":"半導體設備","股名":"萬潤","股號":"6187","波段期間":"5-10天"}]\n'
@@ -935,7 +935,7 @@ st.sidebar.markdown(
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
-st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲率最高前三檔")
+st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲機率最高前三檔")
 
 st.sidebar.markdown("**指定產業族群或題材 (選填)**")
 custom_sector = st.sidebar.text_input("輸入族群或題材", value="", placeholder="例如: 記憶體、PCB、半導體...", label_visibility="collapsed")
