@@ -754,7 +754,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         "請精選 10 檔最具備波段攻擊潛力、多頭型態且成交量充沛的台股標的名單，預估上漲率請給予 68%-88% 之間的數值。\n"
         "【重要規格要求】：『族群』名稱請參考 Yahoo 股市風格分類，且長度【嚴格限制在 6 個全形中文簡短字數以內】（如：半導體設備、液冷散熱、CPO光通訊、PCB載板）。\n"
         "請回傳 JSON 陣列格式如：\n"
-        '[{"預估上漲率":"78%","族群":"半導體設備","股名":"萬潤","股號":"6187","波段期間":"5-10天"}]\n'
+        '[{"上漲機率":"78%","族群":"半導體設備","股名":"萬潤","股號":"6187","波段期間":"5-10天"}]\n'
         "不要包含 Markdown 標記。"
     )
     
@@ -809,7 +809,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             target_p = round(real_p * 1.08, 1)
             tw_name = STOCK_ID_TO_NAME.get(f_id, "強勢個股")
             final_results.append({
-                "預估上漲率": "76%",
+                "上漲機率": "76%",
                 "族群": "主流AI權值"[:6],
                 "股名": tw_name,
                 "股號": f_id,
@@ -821,7 +821,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
 
     while len(final_results) < 3:
         final_results.append({
-            "預估上漲率": "70%", "族群": "熱門主流", "股名": "台積電",
+            "上漲機率": "70%", "族群": "熱門主流", "股名": "台積電",
             "股號": "2330", "當前實價": "---", "建議進場": "---", "波段停利/防護提示": "---", "波段期間": "5-10天"
         })
         
@@ -949,7 +949,7 @@ min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
 # 整合兩大按鈕為單一核心執行按鈕
-if st.sidebar.button("⚡ AI執行最新情報分析預測上漲機率最高前三檔", type="primary", key="btn_combined_diagnose", use_container_width=True):
+if st.sidebar.button("⚡ AI 執行最新情報分析預測上漲機率最高前三檔", type="primary", key="btn_combined_diagnose", use_container_width=True):
     with st.spinner("🤖 第一階段：正在掃描美股ADR、費半、油價與最新產業情報..."):
         try:
             p_data = diagnose_premarket_intelligence(macro_data, target_date_str)
