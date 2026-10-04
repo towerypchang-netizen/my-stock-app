@@ -229,10 +229,10 @@ GEMINI_API_KEY = clean_key(st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_AP
 def get_taiwan_now():
     return datetime.utcnow() + timedelta(hours=8)
 
-# 側邊欄表格變數 (移除「開盤防護標準」欄位)
+# 側邊欄表格變數 (「預估上漲率」修改為「上漲率」)
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
-        columns=["預估上漲率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"],
+        columns=["上漲率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"],
         data=[["--%", "---", "---", "---", "---", "---", "---", "---"] for _ in range(3)]
     )
 
@@ -301,7 +301,7 @@ def get_stock_news(stock_id):
             return "\n".join(titles)
     except Exception:
         pass
-    return "尚無最新市場新聞資料"
+    return "無重大新聞"
 
 def get_stock_valuation_metrics(stock_id):
     clean_id = parse_stock_input(stock_id)
@@ -753,7 +753,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         "請精選 10 檔最具備波段攻擊潛力、多頭型態且成交量充沛的台股標的名單，預估上漲率請給予 68%-88% 之間的數值。\n"
         "【重要規格要求】：『族群』名稱請參考 Yahoo 股市風格分類，且長度【嚴格限制在 6 個全形中文簡短字數以內】（如：半導體設備、液冷散熱、CPO光通訊、PCB載板）。\n"
         "請回傳 JSON 陣列格式如：\n"
-        '[{"預估上漲率":"78%","族群":"半導體設備","股名":"萬潤","股號":"6187","波段期間":"5-10天"}]\n'
+        '[{"上漲率":"78%","族群":"半導體設備","股名":"萬潤","股號":"6187","波段期間":"5-10天"}]\n'
         "不要包含 Markdown 標記。"
     )
     
@@ -781,6 +781,8 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             raw_sector = str(item.get("族群", "主流題材")).strip()
             item["族群"] = raw_sector[:6]
             
+            # 欄位改為「上漲率」
+            item["上漲率"] = item.get("上漲率", item.get("預估上漲率", "78%"))
             item["當前實價"] = f"{real_p:.2f}"
             item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
             item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即落袋)"
@@ -808,7 +810,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             target_p = round(real_p * 1.08, 1)
             tw_name = STOCK_ID_TO_NAME.get(f_id, "強勢個股")
             final_results.append({
-                "預估上漲率": "76%",
+                "上漲率": "76%",
                 "族群": "主流AI權值"[:6],
                 "股名": tw_name,
                 "股號": f_id,
@@ -820,12 +822,12 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
 
     while len(final_results) < 3:
         final_results.append({
-            "預估上漲率": "70%", "族群": "熱門主流", "股名": "台積電",
+            "上漲率": "70%", "族群": "熱門主流", "股名": "台積電",
             "股號": "2330", "當前實價": "---", "建議進場": "---", "波段停利/防護提示": "---", "波段期間": "5-10天"
         })
         
     df_res = pd.DataFrame(final_results)
-    cols_order = ["預估上漲率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"]
+    cols_order = ["上漲率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"]
     return df_res[cols_order].to_dict('records')
 
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
@@ -917,7 +919,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "=== 第二部分：【全維度詳細分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢：詳細解析費半、美債殖利率、原油、VIX與盤前焦點新聞連動，並結合系統「全球宏觀指標多空趨勢對比圖」（費半 vs 美債殖利率x20 vs 原油）進行多空資金流向與 Risk-On/Risk-Off 狀態的深層圖表解說。\n"
         "2. 基本面價值評估與同業估值比較：依據最新本益比、股淨比、毛利率與同業競爭者數據，結合該個股與所屬族群近期 12 小時內的重大新聞與產業情報進行價值診斷。\n"
-        "3. 新聞輿論與法人獲利預估背離診斷：對比近期市場新聞利多/利空訊息，診斷是否存在「利多不漲」、「利空不跌」或法人預估獲利與實際股價走勢背離之情況。\n"
+        "3. 重大新聞及輿論現況與法人獲利預估背離診斷：檢視 24 小時內發生的重大新聞與輿論現況，若 24 小時內無重大新聞，必須明確顯示「無重大新聞」；並診斷是否存在「利多不漲」、「利空不跌」或法人預估獲利與實際股價走勢背離之情況。\n"
         "4. 三大法人籌碼流向與基本面月營收連動分析：交叉比對近期外資、投信、自營商買賣超張數與最新月營收 MoM/YoY 趨勢，診斷籌碼是法人鎖碼拉抬還是逢高出貨。\n"
         "5. 5MA/20MA月線多頭格局與量價關係診斷：結合當前成交量放大倍數與 20MA 月線乖離率，深度剖析當前量價結構（如帶量攻擊、量縮整理或回後買上漲）。\n"
         "6. 各項進階技術性指標綜合圖表解說：針對系統看板中的三層圖表進行綜合性技術診斷：\n"
@@ -961,8 +963,8 @@ with p_col2: max_price_input = st.number_input("最高價", min_value=0, value=N
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
-# 整合兩大按鈕為單一核心執行按鈕
-if st.sidebar.button("⚡ 執行最新情報分析並AI預測上漲率最高前三檔", type="primary", key="btn_combined_diagnose", use_container_width=True):
+# 按鈕名稱更新為「AI 執行最新情報分析預測上漲機率最高前三檔」
+if st.sidebar.button("AI 執行最新情報分析預測上漲機率最高前三檔", type="primary", key="btn_combined_diagnose", use_container_width=True):
     with st.spinner("🤖 第一階段：正在掃描美股ADR、費半、油價與最新產業情報..."):
         try:
             p_data = diagnose_premarket_intelligence(macro_data, target_date_str)
