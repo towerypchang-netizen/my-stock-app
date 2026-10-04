@@ -1112,7 +1112,7 @@ if stock_id and str(stock_id).strip() != "":
             
         if "WTI 國際原油" in macro_hist.columns:
             fig_macro.add_trace(
-                go.Scatter(x=macro_hist.index, y=macro_hist["WTI 原油 (美元)", line=dict(color="#faad14", width=2)],
+                go.Scatter(x=macro_hist.index, y=macro_hist["WTI 國際原油"], name="WTI 原油 (美元)", line=dict(color="#faad14", width=2)),
                 secondary_y=True
             )
 
