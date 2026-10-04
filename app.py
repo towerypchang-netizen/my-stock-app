@@ -229,7 +229,6 @@ GEMINI_API_KEY = clean_key(st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_AP
 def get_taiwan_now():
     return datetime.utcnow() + timedelta(hours=8)
 
-# 側邊欄表格變數 (「預估上漲率」修改為「上漲率」)
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
         columns=["上漲率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"],
@@ -372,7 +371,6 @@ def get_realtime_tw_price_info(stock_id):
 
 @st.cache_data(ttl=1800)
 def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
-    """計算 KD、雙均線、MACD、RSI 與布林通道，並加上完整安全補空防護 (.fillna(0))"""
     try:
         clean_id = parse_stock_input(stock_id)
         ticker = yf.Ticker(clean_id + ".TW")
@@ -389,30 +387,25 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
                 'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
             }).dropna()
 
-        # 基礎均線
         df['5MA'] = df['Close'].rolling(window=5).mean().round(2).fillna(df['Close'])
         df['20MA'] = df['Close'].rolling(window=20).mean().round(2).fillna(df['Close'])
         
-        # 1. 布林通道 (Bollinger Bands, N=20, K=2)
         std_20 = df['Close'].rolling(window=20).std().fillna(0)
         df['BB_Upper'] = (df['20MA'] + (std_20 * 2)).round(2)
         df['BB_Lower'] = (df['20MA'] - (std_20 * 2)).round(2)
 
-        # 2. RSI (14日)
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean().fillna(0)
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean().fillna(0)
         rs = gain / (loss.replace(0, 1e-6))
         df['RSI'] = (100 - (100 / (1 + rs))).round(2).fillna(50)
 
-        # 3. MACD (12, 26, 9)
         ema12 = df['Close'].ewm(span=12, adjust=False).mean()
         ema26 = df['Close'].ewm(span=26, adjust=False).mean()
         df['DIF'] = (ema12 - ema26).round(2).fillna(0)
         df['MACD_Signal'] = df['DIF'].ewm(span=9, adjust=False).mean().round(2).fillna(0)
         df['MACD_Hist'] = ((df['DIF'] - df['MACD_Signal']) * 2).round(2).fillna(0)
 
-        # 量能邏輯
         df['5VolMA'] = df['Volume'].rolling(window=5).mean().fillna(df['Volume'])
         latest_vol = df['Volume'].iloc[-1]
         latest_vol_ma = df['5VolMA'].iloc[-1] if not pd.isna(df['5VolMA'].iloc[-1]) and df['5VolMA'].iloc[-1] > 0 else 1
@@ -421,7 +414,6 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         last_body = (df['Close'].iloc[-1] - df['Open'].iloc[-1]) / df['Open'].iloc[-1]
         is_big_black_k = (last_body < -0.035) and (vol_ratio > 1.5)
 
-        # KD 指標計算
         low_n = df['Low'].rolling(window=n).min().fillna(df['Low'])
         high_n = df['High'].rolling(window=n).max().fillna(df['High'])
         denom = (high_n - low_n).replace(0, 1e-6)
@@ -707,7 +699,6 @@ def get_stock_chip(stock_id, target_date_str):
 
     return pd.DataFrame()
 
-# 超高速輕量個股過濾機制
 def is_valid_stock_fast(stock_id, min_price, max_price):
     p_info = get_realtime_tw_price_info(stock_id)
     if not p_info:
@@ -777,11 +768,9 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             p_high = round(real_p * 1.005, 1)
             target_p = round(real_p * 1.08, 1)
             
-            # 限制族群名稱最長 6 個中文全形字
             raw_sector = str(item.get("族群", "主流題材")).strip()
             item["族群"] = raw_sector[:6]
             
-            # 欄位改為「上漲率」
             item["上漲率"] = item.get("上漲率", item.get("預估上漲率", "78%"))
             item["當前實價"] = f"{real_p:.2f}"
             item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
@@ -798,7 +787,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             final_results.append(item)
         if len(final_results) >= 3: break
 
-    # Fallback 安全防護：若無條件或 AI 名單不足時，從強勢指標股中補齊，絕不留空白
     fallback_candidates = ["2330", "2317", "2382", "3231", "3017", "6187", "2454", "2308"]
     for f_id in fallback_candidates:
         if len(final_results) >= 3: break
@@ -830,9 +818,8 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     cols_order = ["上漲率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"]
     return df_res[cols_order].to_dict('records')
 
-def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital, target_date_str):
+def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital_mode, price_or_capital, target_date_str):
     stock_id = parse_stock_input(stock_input)
-    capital_str = f"{capital:,} 元" if capital and capital > 0 else "未限定金額"
     p_info = get_realtime_tw_price_info(stock_id)
     rev_str = get_stock_revenue_data(stock_id)
     
@@ -852,6 +839,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         target_p = round(real_price * 1.08, 1)
         calc_price_str = f"【系統統一計算數據】：建議買進區間：{p_low}元 ~ {p_high}元，預估進場均價中間值：{p_mid}元，波段停利目標價：{target_p}元。"
     else:
+        real_price = 100.0
         price_info_str = "即時股價：需參考市場現價"
         p_low, p_high, p_mid, target_p = "---", "---", "---", "---"
         calc_price_str = ""
@@ -876,10 +864,53 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     vol_hint = "當前成交量尚未爆發，若量能不及 1.2 倍，建議於『建議進場區間下限』逢低掛單佈局，切勿開高追價。" if vol_ratio < 1.2 else "成交量順利放大，具備攻擊量能！"
     premarket_context = f"【最新情報動態】：聚焦族群 {st.session_state.premarket_focus} / 避險族群 {st.session_state.premarket_avoid} | 摘要: {st.session_state.premarket_summary}"
 
+    # 依據持有狀態切換不同的 Prompt 語境
+    if capital_mode == "既有持股處置 (已套牢/持有中)":
+        cost_price = price_or_capital if price_or_capital and price_or_capital > 0 else real_price
+        unrealized_pct = round(((real_price - cost_price) / cost_price) * 100, 2)
+        position_context = (
+            f"【使用者既有持股狀態】：持有狀態為『既有持股處置』。\n"
+            f"- 歷史買進成本價：{cost_price} 元 / 當前最新現價：{real_price} 元\n"
+            f"- 當前帳面未實現損益：{unrealized_pct}%"
+        )
+        mode_instruction = (
+            "=== 第一部分：【既有持股處置與停損/解套脫手指令】 ===\n"
+            "1. 【核心脫手賣點與解套目標試算】：\n"
+            f"   * 當前買進成本價：{cost_price} 元 | 當前市場現價：{real_price} 元 (未實現損益: {unrealized_pct}%)\n"
+            "   * 建議逢高減碼 / 反彈解套脫手目標價：[AI依據上方壓力位與20MA算出的目標價，例如：XX.X 元]\n"
+            "   * 建議關鍵防守 / 停損換股價位：[AI依據下方支撐位算出的停損價，例如：XX.X 元]\n"
+            "   * 脫手時機與處置建議：[例如：若反彈至 XX 元遇到 20MA 壓力建議先解套減碼 50%，若跌破 XX 元則需果斷停損換股]\n"
+            "2. 【持股風報比與轉折勝率評估】：\n"
+            "   * 止跌反彈勝率評估：[AI分析當前技術面止跌反彈勝率]\n"
+            "   * 處置建議星等：[例如：★★★☆☆ (觀望等反彈)]\n"
+            "3. 【既有持股操盤指引】：（明確針對目前套牢狀況，給予具體的『分批解套』或『破位停損』時間點與價格指令）。\n"
+        )
+    else:
+        capital_str = f"{price_or_capital:,} 元" if price_or_capital and price_or_capital > 0 else "未限定金額"
+        position_context = f"【使用者既有持股狀態】：全新佈局 (預計建立部位金額: {capital_str})"
+        mode_instruction = (
+            "=== 第一部分：【實戰操盤指令與風報比試算】 ===\n"
+            "1. 【核心買賣點與預估獲利試算】：\n"
+            "   * 建議進場買進價位區間：" + f"{p_low} 元 ~ {p_high} 元" + " (中間值: " + f"{p_mid} 元" + ")\n"
+            "   * 波段停利脫手賣出目標價：" + f"{target_p} 元" + "\n"
+            "   * 預計潛在獲利金額與百分比：每股預估獲利 +" + f"{round(target_p - p_mid, 2)}" + " 元 (預估獲利空間：+" + f"{round((target_p - p_mid)/p_mid*100, 2)}" + "%)\n"
+            "2. 【多空勝率優勢與風報比評估】：\n"
+            "   請【嚴格依據以下固定格式與縮排】完整填入真實數據與AI防守計算：\n"
+            "   * 多空勝率評估：[AI分析當前多空勝率，例如：78% 勝率優勢]\n"
+            "   * 風險/報酬比 (R/R Ratio) 試算：\n"
+            "     - 預估進場均價：" + f"{p_mid} 元" + "\n"
+            "     - 波段目標價：" + f"{target_p} 元 (獲利空間：+{round(target_p - p_mid, 2)} 元 / +{round((target_p - p_mid)/p_mid*100, 2)}%)\n"
+            "     - 防守停損價：[AI依據技術支撐算出停損價，如 XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%)\n"
+            "     - 風報比 (R/R Ratio)：[AI計算 潛在獲利/潛在風險 比值，如 X.XX : 1] (建議高於 2.0:1 方可建立部位)\n"
+            "   * 綜合推薦星等：[例如：★★★★☆ (4/5星)]\n"
+            "3. 【極簡操盤實戰指引】：（明確強調進場買進區間、波段停利賣出目標價，附上『開高 > 2% 觀望與盤中達標即時落袋』叮嚀與『預估波段持有天數』）。\n"
+        )
+
     prompt = (
         "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期：" + str(target_date_str) + "。\n"
         "【嚴格實事求是鐵則】：所有分析必須 100% 依據以下給出的系統真實數據與即時情報進行深度邏輯推演，嚴禁憑空捏造不存在的歷史數字與新聞！\n\n"
-        "分析標的：" + str(stock_input) + " (代碼: " + str(stock_id) + ")，" + price_info_str + "，預計資金配置：" + capital_str + "。\n"
+        "分析標的：" + str(stock_input) + " (代碼: " + str(stock_id) + ")，" + price_info_str + "。\n"
+        + position_context + "\n"
         + calc_price_str + "\n"
         + premarket_context + "\n"
         "【當前全球宏觀數據看板】：\n" + str(macro_data) + "\n\n"
@@ -901,21 +932,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "- " + pattern_str + "\n"
         "- 進階指標現況：" + adv_tech_str + "\n\n"
         "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
-        "=== 第一部分：【實戰操盤指令與風報比試算】 ===\n"
-        "1. 【核心買賣點與預估獲利試算】：\n"
-        "   * 建議進場買進價位區間：" + f"{p_low} 元 ~ {p_high} 元" + " (中間值: " + f"{p_mid} 元" + ")\n"
-        "   * 波段停利脫手賣出目標價：" + f"{target_p} 元" + "\n"
-        "   * 預計潛在獲利金額與百分比：每股預估獲利 +" + f"{round(target_p - p_mid, 2)}" + " 元 (預估獲利空間：+" + f"{round((target_p - p_mid)/p_mid*100, 2)}" + "%)\n"
-        "2. 【多空勝率優勢與風報比評估】：\n"
-        "   請【嚴格依據以下固定格式與縮排】完整填入真實數據與AI防守計算：\n"
-        "   * 多空勝率評估：[AI分析當前多空勝率，例如：78% 勝率優勢]\n"
-        "   * 風險/報酬比 (R/R Ratio) 試算：\n"
-        "     - 預估進場均價：" + f"{p_mid} 元" + "\n"
-        "     - 波段目標價：" + f"{target_p} 元 (獲利空間：+{round(target_p - p_mid, 2)} 元 / +{round((target_p - p_mid)/p_mid*100, 2)}%)\n"
-        "     - 防守停損價：[AI依據技術支撐算出停損價，如 XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%)\n"
-        "     - 風報比 (R/R Ratio)：[AI計算 潛在獲利/潛在風險 比值，如 X.XX : 1] (建議高於 2.0:1 方可建立部位)\n"
-        "   * 綜合推薦星等：[例如：★★★★☆ (4/5星)]\n"
-        "3. 【極簡操盤實戰指引】：（明確強調進場買進區間、波段停利賣出目標價，附上『開高 > 2% 觀望與盤中達標即時落袋』叮嚀與『預估波段持有天數』）。\n\n"
+        + mode_instruction + "\n"
         "=== 第二部分：【全維度詳細分析報告內文】 ===\n"
         "1. 全球宏觀與科技大勢：詳細解析費半、美債殖利率、原油、VIX與盤前焦點新聞連動，並結合系統「全球宏觀指標多空趨勢對比圖」（費半 vs 美債殖利率x20 vs 原油）進行多空資金流向與 Risk-On/Risk-Off 狀態的深層圖表解說。\n"
         "2. 基本面價值評估與同業估值比較：依據最新本益比、股淨比、毛利率與同業競爭者數據，結合該個股與所屬族群近期 12 小時內的重大新聞與產業情報進行價值診斷。\n"
@@ -963,7 +980,6 @@ with p_col2: max_price_input = st.number_input("最高價", min_value=0, value=N
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
-# 按鈕名稱更新為「AI 執行最新情報分析預測上漲機率最高前三檔」
 if st.sidebar.button("AI 執行最新情報分析預測上漲機率最高前三檔", type="primary", key="btn_combined_diagnose", use_container_width=True):
     with st.spinner("🤖 第一階段：正在掃描美股ADR、費半、油價與最新產業情報..."):
         try:
@@ -1003,8 +1019,19 @@ stock_id = parse_stock_input(raw_stock_input)
 display_title = get_stock_display_name(raw_stock_input, stock_id)
 
 period_type = st.sidebar.radio("技術指標週期選擇", ["日線", "週線"], horizontal=True)
-capital_input = st.sidebar.number_input("預計進場金額 (新台幣元)", min_value=0, value=None, placeholder="請輸入金額", step=10000)
-capital = capital_input if capital_input is not None else 0
+
+# 新增持有狀態切換與動態金額提示
+capital_mode = st.sidebar.radio("持有狀態", ["全新佈局 (準備建立部位)", "既有持股處置 (已套牢/持有中)"], horizontal=False)
+
+if capital_mode == "既有持股處置 (已套牢/持有中)":
+    capital_label = "當初買進成本價 (每股幾元)"
+    capital_placeholder = "例如: 525 (每股成本)"
+else:
+    capital_label = "預計進場金額 (新台幣元)"
+    capital_placeholder = "例如: 100000 (總預算)"
+
+capital_input = st.sidebar.number_input(capital_label, min_value=0, value=None, placeholder=capital_placeholder, step=100)
+price_or_capital = capital_input if capital_input is not None else 0
 
 btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="primary", use_container_width=True)
 
@@ -1057,7 +1084,7 @@ if stock_id and str(stock_id).strip() != "":
                 shared_xaxes=True, 
                 vertical_spacing=0.09,
                 row_heights=[0.5, 0.25, 0.25],
-                subplot_titles=("收盤價與布林通道 (20MA)", "KD 指標 & RSI (14)", "MACD 動能柱與 DIF/MACD 軌道")
+                subplot_titles=("收盤價與布林通道 (20MA)", "KD 指爆 & RSI (14)", "MACD 動能柱與 DIF/MACD 軌道")
             )
             
             # 1. 布林通道
@@ -1138,12 +1165,12 @@ if btn_analyze_stock:
     else:
         chip_df = get_stock_chip(stock_id, target_date_str)
         _, kd_info = calculate_kd(stock_id, period_type=period_type)
-        with st.spinner(f"🤖 AI 結合最新情報檢析【風報比試算】、【同業估值】與【量能位階】..."):
+        with st.spinner(f"🤖 AI 結合最新情報檢析【既有持股處置/風報比試算】與【量能位階】..."):
             try:
                 report = ai_single_stock_analysis(
                     macro_data, sector_data, raw_stock_input, 
                     chip_data=chip_df, kd_info=kd_info, period_type=period_type, 
-                    capital=capital, target_date_str=target_date_str
+                    capital_mode=capital_mode, price_or_capital=price_or_capital, target_date_str=target_date_str
                 )
                 st.subheader(f"🤖 Gemini AI 全維度詳細分析報告 ({display_title})")
                 st.markdown(report)
