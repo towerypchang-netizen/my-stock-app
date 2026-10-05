@@ -1008,7 +1008,8 @@ st.sidebar.divider()
 st.sidebar.markdown("### ⚙ 個股詳細分析與技術指標設定")
 
 raw_stock_input = st.sidebar.text_input(
-    "輸入台股代碼或股名", value="", horizontal=True,
+    "輸入台股代碼或股名", 
+    value="", 
     placeholder="例如: 2330 或 鴻海",
     help="如只看三大法人籌碼與進階技術指標看板，輸入股號或股名後直接按 Enter"
 )
