@@ -1021,9 +1021,9 @@ display_title = get_stock_display_name(raw_stock_input, stock_id)
 period_type = st.sidebar.radio("技術指標週期選擇", ["日線", "週線"], horizontal=True)
 
 # 新增持有狀態切換與動態金額提示
-capital_mode = st.sidebar.radio("持有狀態", ["全新佈局 (準備建立部位)", "既有持股處置 (已套牢/持有中)"], horizontal=False)
+capital_mode = st.sidebar.radio("持有狀態", ["準備買進", "既有持股 (已套牢/持有中)"], horizontal=False)
 
-if capital_mode == "既有持股處置 (已套牢/持有中)":
+if capital_mode == "既有持股 (已套牢/持有中)":
     capital_label = "當初買進成本價 (每股幾元)"
     capital_placeholder = "例如: 525 (每股成本)"
 else:
