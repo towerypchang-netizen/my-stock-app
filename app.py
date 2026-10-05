@@ -37,7 +37,7 @@ def check_password():
             if st.button("確認登入", type="primary", use_container_width=True):
                 # 取得 Secrets 中設定的多組 A 組與 B 組清單
                 allowed_emails = st.secrets.get("ALLOWED_EMAILS", ["tower.yp.chang@gmail.com", "sherryhsu6155@gmail.com", "ha71850tw@gmail.com", "b12212219@gmail.com"])
-                allowed_passwords = st.secrets.get("ALLOWED_PASSWORDS", ["615588"], "085978")
+                allowed_passwords = st.secrets.get("ALLOWED_PASSWORDS", ["615588", "085978"])
                 
                 # 清除前後空格並轉小寫比對
                 clean_email = user_email.strip().lower()
