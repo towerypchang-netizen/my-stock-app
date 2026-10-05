@@ -475,7 +475,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         
         vol_signal_str = "🔥 帶量攻擊" if vol_ratio >= 1.2 else "⚪ 量能平穩"
         pullback_buy_signal = f"🔥 回後買上漲成立 (乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
-            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️ 短線拉回整理"
+            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️️ 短線拉回整理"
         )
 
         signal = "中性觀望"
@@ -1195,7 +1195,14 @@ if btn_analyze_stock:
     else:
         chip_df = get_stock_chip(stock_id, target_date_str)
         _, kd_info = calculate_kd(stock_id, period_type=period_type)
-        with st.spinner(f"🤖 AI 結合最新情報檢析【既有持股處置/風報比試算】與【量能位階】..."):
+        
+        # 動態判定等待動畫提示文字
+        if capital_mode == "既有持股 (已套牢/持有中)":
+            sp_text = "🤖 AI 結合最新情報檢析【既有持股套牢解套/停損脫手策略】與【量能位階】..."
+        else:
+            sp_text = "🤖 AI 結合最新情報檢析【實戰操盤買賣點/風報比試算】與【量能位階】..."
+            
+        with st.spinner(sp_text):
             try:
                 report = ai_single_stock_analysis(
                     macro_data, sector_data, raw_stock_input, 
