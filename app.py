@@ -16,7 +16,7 @@ from google import genai
 st.set_page_config(page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide")
 
 # ==============================================================================
-# 🔒 簡單密碼驗證鎖機制
+# 🔒 雙重身分認證機制 (A組 Email + B組 密碼雙重比對)
 # ==============================================================================
 def check_password():
     if "authenticated" not in st.session_state:
@@ -26,16 +26,34 @@ def check_password():
         st.markdown("<br><br>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.subheader("🔒 AI 股票分析系統存取認證")
-            user_password = st.text_input("請輸入存取密碼：", type="password")
+            st.subheader("🔒 AI 股票分析系統雙重身分認證")
+            
+            # 輸入欄位 A：使用者 Email
+            user_email = st.text_input("請輸入授權 Email (A組)：", placeholder="例如: xxxxx@gmail.com")
+            
+            # 輸入欄位 B：存取密碼
+            user_password = st.text_input("請輸入存取密碼 (B組)：", type="password")
+            
             if st.button("確認登入", type="primary", use_container_width=True):
-                correct_password = st.secrets.get("APP_PASSWORD", "615588")
-                if user_password == correct_password:
+                # 取得 Secrets 中設定的多組 A 組與 B 組清單
+                allowed_emails = st.secrets.get("ALLOWED_EMAILS", ["tower.yp.chang@gmail.com", "sherryhsu6155@gmail.com", "ha71850tw@gmail.com", "b12212219@gmail.com"])
+                allowed_passwords = st.secrets.get("ALLOWED_PASSWORDS", ["615588"])
+                
+                # 清除前後空格並轉小寫比對
+                clean_email = user_email.strip().lower()
+                clean_password = user_password.strip()
+                
+                # 轉為小寫的授權 Email 清單
+                allowed_emails_clean = [e.strip().lower() for e in allowed_emails]
+                
+                # 雙重條件比對：Email 必須在 A 組，且 密碼必須在 B 組
+                if clean_email in allowed_emails_clean and clean_password in allowed_passwords:
                     st.session_state.authenticated = True
-                    st.success("密碼正確，登入成功！")
+                    st.success("雙重驗證成功，正在進入系統...")
+                    time.sleep(0.5)
                     st.rerun()
                 else:
-                    st.error("密碼錯誤，請重新輸入！")
+                    st.error("驗證失敗！Email 或密碼不符合授權紀錄，請重新確認！")
         return False
     return True
 
@@ -1020,7 +1038,6 @@ display_title = get_stock_display_name(raw_stock_input, stock_id)
 
 period_type = st.sidebar.radio("技術指標週期選擇", ["日線", "週線"], horizontal=True)
 
-# 新增持有狀態切換與動態金額提示
 capital_mode = st.sidebar.radio("持有狀態", ["準備買進", "既有持股 (已套牢/持有中)"], horizontal=True)
 
 if capital_mode == "既有持股 (已套牢/持有中)":
@@ -1084,7 +1101,7 @@ if stock_id and str(stock_id).strip() != "":
                 shared_xaxes=True, 
                 vertical_spacing=0.09,
                 row_heights=[0.5, 0.25, 0.25],
-                subplot_titles=("收盤價與布林通道 (20MA)", "KD 指爆 & RSI (14)", "MACD 動能柱與 DIF/MACD 軌道")
+                subplot_titles=("收盤價與布林通道 (20MA)", "KD 指標 & RSI (14)", "MACD 動能柱與 DIF/MACD 軌道")
             )
             
             # 1. 布林通道
