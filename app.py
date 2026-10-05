@@ -12,11 +12,11 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from google import genai
 
-# è¨­å®šç¶²é æ¨™é¡Œèˆ‡å¯¬ç‰ˆä½ˆå±€
-st.set_page_config(page_title="AI å…¨çƒå®è§€èˆ‡å°è‚¡ Top-Down ç­–ç•¥åˆ†æç³»çµ±", layout="wide")
+# ³]©wºô­¶¼ĞÃD»P¼eª©§G§½
+st.set_page_config(page_title="AI ¥ş²y§»Æ[»P¥xªÑ Top-Down µ¦²¤¤ÀªR¨t²Î", layout="wide")
 
 # ==============================================================================
-# ğŸ”’ é›™é‡èº«åˆ†èªè­‰æ©Ÿåˆ¶ (Açµ„ Email + Bçµ„ å¯†ç¢¼é›™é‡æ¯”å°)
+# ?? Âù­«¨­¤À»{ÃÒ¾÷¨î (A²Õ Email + B²Õ ±K½XÂù­«¤ñ¹ï)
 # ==============================================================================
 def check_password():
     if "authenticated" not in st.session_state:
@@ -26,34 +26,34 @@ def check_password():
         st.markdown("<br><br>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.subheader("ğŸ”’ AI è‚¡ç¥¨åˆ†æç³»çµ±é›™é‡èº«åˆ†èªè­‰")
+            st.subheader("?? AI ªÑ²¼¤ÀªR¨t²ÎÂù­«¨­¤À»{ÃÒ")
             
-            # è¼¸å…¥æ¬„ä½ Aï¼šä½¿ç”¨è€… Email
-            user_email = st.text_input("è«‹è¼¸å…¥æˆæ¬Š Email (Açµ„)ï¼š", placeholder="ä¾‹å¦‚: xxxxx@gmail.com")
+            # ¿é¤JÄæ¦ì A¡G¨Ï¥ÎªÌ Email
+            user_email = st.text_input("½Ğ¿é¤J±ÂÅv Email (A²Õ)¡G", placeholder="¨Ò¦p: xxxxx@gmail.com")
             
-            # è¼¸å…¥æ¬„ä½ Bï¼šå­˜å–å¯†ç¢¼
-            user_password = st.text_input("è«‹è¼¸å…¥å­˜å–å¯†ç¢¼ (Bçµ„)ï¼š", type="password")
+            # ¿é¤JÄæ¦ì B¡G¦s¨ú±K½X
+            user_password = st.text_input("½Ğ¿é¤J¦s¨ú±K½X (B²Õ)¡G", type="password")
             
-            if st.button("ç¢ºèªç™»å…¥", type="primary", use_container_width=True):
-                # å–å¾— Secrets ä¸­è¨­å®šçš„å¤šçµ„ A çµ„èˆ‡ B çµ„æ¸…å–®
+            if st.button("½T»{µn¤J", type="primary", use_container_width=True):
+                # ¨ú±o Secrets ¤¤³]©wªº¦h²Õ A ²Õ»P B ²Õ²M³æ
                 allowed_emails = st.secrets.get("ALLOWED_EMAILS", ["tower.yp.chang@gmail.com", "sherryhsu6155@gmail.com", "ha71850tw@gmail.com", "b12212219@gmail.com"])
-                allowed_passwords = st.secrets.get("ALLOWED_PASSWORDS", ["615588"])
+                allowed_passwords = st.secrets.get("ALLOWED_PASSWORDS", ["615588", "085978"])
                 
-                # æ¸…é™¤å‰å¾Œç©ºæ ¼ä¸¦è½‰å°å¯«æ¯”å°
+                # ²M°£«e«áªÅ®æ¨ÃÂà¤p¼g¤ñ¹ï
                 clean_email = user_email.strip().lower()
                 clean_password = user_password.strip()
                 
-                # è½‰ç‚ºå°å¯«çš„æˆæ¬Š Email æ¸…å–®
+                # Âà¬°¤p¼gªº±ÂÅv Email ²M³æ
                 allowed_emails_clean = [e.strip().lower() for e in allowed_emails]
                 
-                # é›™é‡æ¢ä»¶æ¯”å°ï¼šEmail å¿…é ˆåœ¨ A çµ„ï¼Œä¸” å¯†ç¢¼å¿…é ˆåœ¨ B çµ„
+                # Âù­«±ø¥ó¤ñ¹ï¡GEmail ¥²¶·¦b A ²Õ¡A¥B ±K½X¥²¶·¦b B ²Õ
                 if clean_email in allowed_emails_clean and clean_password in allowed_passwords:
                     st.session_state.authenticated = True
-                    st.success("é›™é‡é©—è­‰æˆåŠŸï¼Œæ­£åœ¨é€²å…¥ç³»çµ±...")
+                    st.success("Âù­«ÅçÃÒ¦¨¥\¡A¥¿¦b¶i¤J¨t²Î...")
                     time.sleep(0.5)
                     st.rerun()
                 else:
-                    st.error("é©—è­‰å¤±æ•—ï¼Email æˆ–å¯†ç¢¼ä¸ç¬¦åˆæˆæ¬Šç´€éŒ„ï¼Œè«‹é‡æ–°ç¢ºèªï¼")
+                    st.error("ÅçÃÒ¥¢±Ñ¡IEmail ©Î±K½X¤£²Å¦X±ÂÅv¬ö¿ı¡A½Ğ­«·s½T»{¡I")
         return False
     return True
 
@@ -61,15 +61,15 @@ if not check_password():
     st.stop()
 # ==============================================================================
 
-# åˆå§‹åŒ– session state ç›¤å‰æƒ…å ±å‹•æ…‹è®Šæ•¸
+# ªì©l¤Æ session state ½L«e±¡³ø°ÊºAÅÜ¼Æ
 if "premarket_focus" not in st.session_state:
     st.session_state.premarket_focus = []
 if "premarket_avoid" not in st.session_state:
     st.session_state.premarket_avoid = []
 if "premarket_summary" not in st.session_state:
-    st.session_state.premarket_summary = "å°šæœªé€²è¡Œç›¤å‰æƒ…å ±è¨ºæ–·ï¼Œç³»çµ±å°‡æ¡ç”¨æ¨™æº– Top-Down ç­–ç•¥ã€‚"
+    st.session_state.premarket_summary = "©|¥¼¶i¦æ½L«e±¡³ø¶EÂ_¡A¨t²Î±N±Ä¥Î¼Ğ·Ç Top-Down µ¦²¤¡C"
 
-# è‡ªè¨‚ CSS
+# ¦Û­q CSS
 st.markdown(
     """
     <style>
@@ -153,19 +153,19 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# æ“´å……å¸¸ç”¨ä¸­æ–‡è‚¡åå­—å…¸
+# ÂX¥R±`¥Î¤¤¤åªÑ¦W¦r¨å
 STOCK_NAME_TO_ID = {
-    "å°ç©é›»": "2330", "é´»æµ·": "2317", "è¯ç™¼ç§‘": "2454", "å°é”é›»": "2308", "å»£é”": "2382",
-    "ç·¯å‰µ": "3231", "è¯ç¢©": "2357", "è¯è© ": "3034", "ä¸–èŠ¯": "3661", "ä¸–èŠ¯-KY": "3661", "ä¸–èŠ¯KY": "3661",
-    "ç¥¥ç¢©": "5269", "æŠ€å˜‰": "2376", "æ™ºé‚¦": "2345", "å’Œç¢©": "4938", "ç·¯ç©": "6669", "å¥‡é‹": "3017",
-    "é›™é´»": "3324", "é«˜åŠ›": "8996", "äº¬å…ƒé›»å­": "2449", "æ™ºåŸ": "3035", "å…‰è–": "6442", "æ™ŸéŠ˜é›»": "3013",
-    "å¿—è–": "2467", "å»ºæº–": "2421", "å‹è¯": "2331", "ç²¾è¯": "2331", "æ¼¢å”": "2404", "å‰µæ„": "3443", "æ—ºçŸ½": "6239",
-    "é•·æ¦®": "2603", "é™½æ˜": "2609", "è¬æµ·": "2615", "å¯Œé‚¦é‡‘": "2881", "åœ‹æ³°é‡‘": "2882", "ä¸­ä¿¡é‡‘": "2891",
-    "æ—¥æœˆå…‰": "3711", "æ—¥æœˆå…‰æŠ•æ§": "3711", "å—äºç§‘": "2408", "è¯é‚¦é›»": "2344", "è¯é›»": "2303",
-    "æ¬£èˆˆ": "3037", "å¥é¼": "3044", "M31": "6643", "m31": "6643", "è‡»é¼": "4958", "è‡»é¼-KY": "4958",
-    "è‡»é¼KY": "4958", "è¯èŒ‚": "6213", "é‡‘åƒé›»": "2368", "å°å…‰é›»": "2383", "è¯é€š": "2313",
-    "ç¾¤å‰µ": "3481", "å‹é”": "2409", "åŠ›ç©é›»": "6770", "å¨ç››": "2388", "å®ç¢": "2353",
-    "ä»å¯¶": "2324", "å…‰å¯¶ç§‘": "2301", "è‹±æ¥­é”": "2356", "å¨å‰›": "3260", "è¬æ½¤": "6187", "è¾›è€˜": "3583", "æ³°ç¢©": "3338"
+    "¥x¿n¹q": "2330", "ÂE®ü": "2317", "Ápµo¬ì": "2454", "¥x¹F¹q": "2308", "¼s¹F": "2382",
+    "½n³Ğ": "3231", "µØºÓ": "2357", "Ápµú": "3034", "¥@ªä": "3661", "¥@ªä-KY": "3661", "¥@ªäKY": "3661",
+    "²»ºÓ": "5269", "§Ş¹Å": "2376", "´¼¨¹": "2345", "©MºÓ": "4938", "½n¿o": "6669", "©_èb": "3017",
+    "ÂùÂE": "3324", "°ª¤O": "8996", "¨Ê¤¸¹q¤l": "2449", "´¼­ì": "3035", "¥ú¸t": "6442", "ÑÔ»Ê¹q": "3013",
+    "§Ó¸t": "2467", "«Ø·Ç": "2421", "¤ÍÁp": "2331", "ºëµØ": "2331", "º~­ğ": "2404", "³Ğ·N": "3443", "©ôª¿": "6239",
+    "ªøºa": "2603", "¶§©ú": "2609", "¸U®ü": "2615", "´I¨¹ª÷": "2881", "°ê®õª÷": "2882", "¤¤«Hª÷": "2891",
+    "¤é¤ë¥ú": "3711", "¤é¤ë¥ú§ë±±": "3711", "«n¨È¬ì": "2408", "µØ¨¹¹q": "2344", "Áp¹q": "2303",
+    "ªY¿³": "3037", "°·¹©": "3044", "M31": "6643", "m31": "6643", "¿²¹©": "4958", "¿²¹©-KY": "4958",
+    "¿²¹©KY": "4958", "Áp­Z": "6213", "ª÷¹³¹q": "2368", "¥x¥ú¹q": "2383", "µØ³q": "2313",
+    "¸s³Ğ": "3481", "¤Í¹F": "2409", "¤O¿n¹q": "6770", "«Â²±": "2388", "§»ùÖ": "2353",
+    "¤¯Ä_": "2324", "¥úÄ_¬ì": "2301", "­^·~¹F": "2356", "«Â­è": "3260", "¸U¼í": "6187", "¨¯¯Ğ": "3583", "®õºÓ": "3338"
 }
 
 STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
@@ -173,15 +173,15 @@ STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
 LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "2891", "3711", "2303"]
 
 PEER_GROUPS = {
-    "CPO/å…‰é€šè¨Š/çŸ½å…‰å­": ["6442", "3081", "4979", "3163"],
-    "æ¶²å†·/æ•£ç†±æ¨¡çµ„": ["3324", "8996", "3017", "2308", "3013", "3338"],
-    "PCB/éŠ…ç®”åŸºæ¿/è¼‰æ¿": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
-    "æ™¶åœ“ä»£å·¥/åŠå°é«”/è¨­å‚™": ["2330", "2303", "6770", "3711", "2449", "2467", "2404", "6187", "3583"],
-    "IC è¨­è¨ˆ/ASIC": ["2454", "3034", "3661", "5269", "3443", "6643", "2388", "3035"],
-    "AI ä¼ºæœå™¨/çµ„è£": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356", "2421"],
-    "è¨˜æ†¶é«”/æ¨¡çµ„": ["3260", "2408", "2344"],
-    "èˆªé‹": ["2603", "2609", "2615"],
-    "é‡‘æ§": ["2881", "2882", "2891"]
+    "CPO/¥ú³q°T/ª¿¥ú¤l": ["6442", "3081", "4979", "3163"],
+    "²G§N/´²¼ö¼Ò²Õ": ["3324", "8996", "3017", "2308", "3013", "3338"],
+    "PCB/»Éºä°òªO/¸üªO": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
+    "´¹¶ê¥N¤u/¥b¾ÉÅé/³]³Æ": ["2330", "2303", "6770", "3711", "2449", "2467", "2404", "6187", "3583"],
+    "IC ³]­p/ASIC": ["2454", "3034", "3661", "5269", "3443", "6643", "2388", "3035"],
+    "AI ¦øªA¾¹/²Õ¸Ë": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356", "2421"],
+    "°O¾ĞÅé/¼Ò²Õ": ["3260", "2408", "2344"],
+    "¯è¹B": ["2603", "2609", "2615"],
+    "ª÷±±": ["2881", "2882", "2891"]
 }
 
 def parse_stock_input(user_input):
@@ -201,7 +201,7 @@ def parse_stock_input(user_input):
 
 @st.cache_data(ttl=86400)
 def get_twse_stock_name(stock_id):
-    """è‡ªè­‰äº¤æ‰€èˆ‡æ«ƒè²·ä¸­å¿ƒå®˜æ–¹è³‡æ–™åº«åæŸ¥ç²¾æº–ä¸­æ–‡åç¨±"""
+    """¦ÛÃÒ¥æ©Ò»PÂd¶R¤¤¤ß©x¤è¸ê®Æ®w¤Ï¬dºë·Ç¤¤¤å¦WºÙ"""
     try:
         url = "https://www.twse.com.tw/rwd/zh/api/codeMarket?response=json"
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
@@ -216,9 +216,9 @@ def get_twse_stock_name(stock_id):
     return None
 
 def get_stock_display_name(raw_input, stock_id):
-    """å‚³å›ä¹¾æ·¨çš„ã€è‚¡å è‚¡è™Ÿã€æ ¼å¼"""
+    """¶Ç¦^°®²bªº¡yªÑ¦W ªÑ¸¹¡z®æ¦¡"""
     if not stock_id:
-        return "æœªæŒ‡å®š"
+        return "¥¼«ü©w"
     
     clean_input = str(raw_input).strip()
     pure_name = re.sub(r'[\(\)\d\s]', '', clean_input)
@@ -249,7 +249,7 @@ def get_taiwan_now():
 
 if "daily_picks" not in st.session_state:
     st.session_state.daily_picks = pd.DataFrame(
-        columns=["ä¸Šæ¼²ç‡", "æ—ç¾¤", "è‚¡å", "è‚¡è™Ÿ", "ç•¶å‰å¯¦åƒ¹", "å»ºè­°é€²å ´", "æ³¢æ®µåœåˆ©/é˜²è­·æç¤º", "æ³¢æ®µæœŸé–“"],
+        columns=["¤Wº¦²v", "±Ú¸s", "ªÑ¦W", "ªÑ¸¹", "·í«e¹ê»ù", "«ØÄ³¶i³õ", "ªi¬q°±§Q/¨¾Å@´£¥Ü", "ªi¬q´Á¶¡"],
         data=[["--%", "---", "---", "---", "---", "---", "---", "---"] for _ in range(3)]
     )
 
@@ -258,7 +258,7 @@ if "last_predict_time" not in st.session_state:
 
 def call_gemini_with_retry(prompt, max_retries=2):
     if not GEMINI_API_KEY:
-        raise ValueError("Secrets ä¸­æœªæ‰¾åˆ°æœ‰æ•ˆçš„ GEMINI_API_KEYï¼Œè«‹æª¢æŸ¥ Secrets è¨­å®šã€‚")
+        raise ValueError("Secrets ¤¤¥¼§ä¨ì¦³®Äªº GEMINI_API_KEY¡A½ĞÀË¬d Secrets ³]©w¡C")
         
     target_model = "gemini-3.6-flash"
     last_err = ""
@@ -275,21 +275,21 @@ def call_gemini_with_retry(prompt, max_retries=2):
             last_err = str(e)
             time.sleep(1.0)
 
-    raise ValueError(f"Gemini API å‘¼å«å¤±æ•— [{last_err}]")
+    raise ValueError(f"Gemini API ©I¥s¥¢±Ñ [{last_err}]")
 
 def diagnose_premarket_intelligence(macro_data, target_date_str):
     prompt_premarket = f"""
-    è«‹ä½œç‚ºè¯çˆ¾è¡—è³‡æ·±ç›¤å‰æƒ…å ±å®˜èˆ‡å°è‚¡ç­–ç•¥ç¸½ç›£ï¼ŒåŸºæº–æ—¥æœŸï¼š{target_date_str}ã€‚
-    ç•¶å‰å…¨çƒå®è§€æŒ‡æ¨™ï¼š{macro_data}ã€‚
+    ½Ğ§@¬°µØº¸µó¸ê²`½L«e±¡³ø©x»P¥xªÑµ¦²¤Á`ºÊ¡A°ò·Ç¤é´Á¡G{target_date_str}¡C
+    ·í«e¥ş²y§»Æ[«ü¼Ğ¡G{macro_data}¡C
 
-    è«‹é‡å°æ˜¨å¤œç¾è‚¡ã€ç¾å‚µæ®–åˆ©ç‡ã€åŸæ²¹èˆ‡è¿‘æœŸå°è‚¡ç›¤å‰ç„¦é»é€²è¡Œæˆ°æƒ…è¨ºæ–·ã€‚
-    è«‹å›å‚³ JSON æ ¼å¼ï¼š
+    ½Ğ°w¹ï¬Q©]¬üªÑ¡B¬ü¶Å´Ş§Q²v¡B­ìªo»Pªñ´Á¥xªÑ½L«eµJÂI¶i¦æ¾Ô±¡¶EÂ_¡C
+    ½Ğ¦^¶Ç JSON ®æ¦¡¡G
     {{
-      "summary": "ç°¡çŸ­ 100 å­—ç›¤å‰é‡é»æ‘˜è¦...",
-      "focus_sectors": ["æ—ç¾¤A", "æ—ç¾¤B"],
-      "avoid_sectors": ["æ—ç¾¤C"]
+      "summary": "Â²µu 100 ¦r½L«e­«ÂIºK­n...",
+      "focus_sectors": ["±Ú¸sA", "±Ú¸sB"],
+      "avoid_sectors": ["±Ú¸sC"]
     }}
-    ä¸è¦åŒ…å« Markdown å¤šé¤˜æ–‡å­—ã€‚
+    ¤£­n¥]§t Markdown ¦h¾l¤å¦r¡C
     """
     res_raw = call_gemini_with_retry(prompt_premarket)
     try:
@@ -299,8 +299,8 @@ def diagnose_premarket_intelligence(macro_data, target_date_str):
         return data
     except Exception:
         return {
-            "summary": "ç›¤å‰ç¸½ç¶“èˆ‡ç¾è‚¡èµ°å‹¢å¹³ç©©ï¼Œç¶­æŒç§‘æŠ€æ¬Šå€¼èˆ‡ç†±é–€é¡Œæè¼ªå‹•ã€‚",
-            "focus_sectors": ["AIä¼ºæœå™¨", "PCB", "åŠå°é«”è¨­å‚™"],
+            "summary": "½L«eÁ`¸g»P¬üªÑ¨«¶Õ¥­Ã­¡Aºû«ù¬ì§ŞÅv­È»P¼öªùÃD§÷½ü°Ê¡C",
+            "focus_sectors": ["AI¦øªA¾¹", "PCB", "¥b¾ÉÅé³]³Æ"],
             "avoid_sectors": []
         }
 
@@ -318,7 +318,7 @@ def get_stock_news(stock_id):
             return "\n".join(titles)
     except Exception:
         pass
-    return "ç„¡é‡å¤§æ–°è"
+    return "µL­«¤j·s»D"
 
 def get_stock_valuation_metrics(stock_id):
     clean_id = parse_stock_input(stock_id)
@@ -351,15 +351,15 @@ def get_peer_comparison(stock_id):
             break
             
     if not target_group:
-        return "åŒæ¥­æ¯”å°ï¼šç„¡ç‰¹å®šå°ç…§çµ„"
+        return "¦P·~¤ñ¹ï¡GµL¯S©w¹ï·Ó²Õ"
         
     g_name, members = target_group
     records = []
     for m_id in members[:4]:
         v = get_stock_valuation_metrics(m_id)
-        records.append(f"ã€{m_id}ã€‘æœ¬ç›Šæ¯”: {v['pe']} | è‚¡æ·¨æ¯”: {v['pb']} | æ¯›åˆ©ç‡: {v['gross_margin']}")
+        records.append(f"¡i{m_id}¡j¥»¯q¤ñ: {v['pe']} | ªÑ²b¤ñ: {v['pb']} | ¤ò§Q²v: {v['gross_margin']}")
         
-    return f"æ‰€å±¬åŒæ¥­æ—ç¾¤ï¼š[{g_name}]\n" + "\n".join(records)
+    return f"©ÒÄİ¦P·~±Ú¸s¡G[{g_name}]\n" + "\n".join(records)
 
 @st.cache_data(ttl=600)
 def get_realtime_tw_price_info(stock_id):
@@ -388,7 +388,7 @@ def get_realtime_tw_price_info(stock_id):
     return None
 
 @st.cache_data(ttl=1800)
-def calculate_kd(stock_id, period_type="æ—¥ç·š", n=9, m1=3, m2=3):
+def calculate_kd(stock_id, period_type="¤é½u", n=9, m1=3, m2=3):
     try:
         clean_id = parse_stock_input(stock_id)
         ticker = yf.Ticker(clean_id + ".TW")
@@ -398,9 +398,9 @@ def calculate_kd(stock_id, period_type="æ—¥ç·š", n=9, m1=3, m2=3):
             df = ticker.history(period="6mo")
             
         if df.empty or len(df) < 20:
-            return None, "æ•¸æ“šä¸è¶³"
+            return None, "¼Æ¾Ú¤£¨¬"
 
-        if period_type == "é€±ç·š":
+        if period_type == "¶g½u":
             df = df.resample('W').agg({
                 'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
             }).dropna()
@@ -463,20 +463,20 @@ def calculate_kd(stock_id, period_type="æ—¥ç·š", n=9, m1=3, m2=3):
         is_above_5ma = latest_close >= latest_5ma
         is_above_20ma = latest_close >= latest_20ma
         
-        vol_signal_str = "ğŸ”¥ å¸¶é‡æ”»æ“Š" if vol_ratio >= 1.2 else "âšª é‡èƒ½å¹³ç©©"
-        pullback_buy_signal = f"ğŸ”¥ å›å¾Œè²·ä¸Šæ¼²æˆç«‹ (ä¹–é›¢{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
-            "ğŸŸ¢ é›™å‡ç·šå¤šé ­ä¿è­·æŒç©©" if (is_above_5ma and is_above_20ma) else "âš ï¸ çŸ­ç·šæ‹‰å›æ•´ç†"
+        vol_signal_str = "?? ±a¶q§ğÀ»" if vol_ratio >= 1.2 else "? ¶q¯à¥­Ã­"
+        pullback_buy_signal = f"?? ¦^«á¶R¤Wº¦¦¨¥ß (¨ÄÂ÷{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
+            "?? Âù§¡½u¦hÀY«OÅ@«ùÃ­" if (is_above_5ma and is_above_20ma) else "?? µu½u©Ô¦^¾ã²z"
         )
 
-        signal = "ä¸­æ€§è§€æœ›"
+        signal = "¤¤©ÊÆ[±æ"
         if prev_k <= prev_d and latest_k > latest_d:
-            signal = "ğŸŸ¢ ä½æª”é»ƒé‡‘äº¤å‰" if latest_k <= 30 else "ğŸŸ¢ é»ƒé‡‘äº¤å‰"
+            signal = "?? §CÀÉ¶Àª÷¥æ¤e" if latest_k <= 30 else "?? ¶Àª÷¥æ¤e"
         elif prev_k >= prev_d and latest_k < latest_d:
-            signal = "ğŸ”´ é«˜æª”æ­»äº¡äº¤å‰" if latest_k >= 70 else "ğŸ”´ æ­»äº¡äº¤å‰"
+            signal = "?? °ªÀÉ¦º¤`¥æ¤e" if latest_k >= 70 else "?? ¦º¤`¥æ¤e"
         elif latest_k >= 80 and latest_d >= 80:
-            signal = "ğŸ”¥ é«˜æª”éˆåŒ–"
+            signal = "?? °ªÀÉ¶w¤Æ"
         elif latest_k <= 20 and latest_d <= 20:
-            signal = "â„ ä½æª”è¶…è³£"
+            signal = "? §CÀÉ¶W½æ"
 
         return df.tail(40), {
             "K": latest_k, "D": latest_d, "signal": signal,
@@ -507,17 +507,17 @@ def get_stock_revenue_data(stock_id):
         if data.get("msg") == "success" and len(data.get("data", [])) > 0:
             df = pd.DataFrame(data["data"])
             latest = df.iloc[-1]
-            return f"æœ€æ–°æœˆç‡Ÿæ”¶({latest.get('date', '')})ï¼šå–®æœˆ MoM {latest.get('revenue_month', 0):+.2f}%ï¼ŒYoY {latest.get('revenue_year', 0):+.2f}%"
+            return f"³Ì·s¤ëÀç¦¬({latest.get('date', '')})¡G³æ¤ë MoM {latest.get('revenue_month', 0):+.2f}%¡AYoY {latest.get('revenue_year', 0):+.2f}%"
     except Exception:
         pass
-    return "æœˆç‡Ÿæ”¶æ•¸æ“šï¼šç©©å®šæˆé•·ä¸­"
+    return "¤ëÀç¦¬¼Æ¾Ú¡GÃ­©w¦¨ªø¤¤"
 
 @st.cache_data(ttl=1800)
 def get_macro_data(target_date_str):
     macro_tickers = {
-        "è²»åŸåŠå°é«”": "^SOX", "å°ç£åŠ æ¬Š": "^TWII",
-        "ç¾10å¹´å‚µæ®–åˆ©ç‡": "^TNX", "WTI åœ‹éš›åŸæ²¹": "CL=F",
-        "VIX ææ…ŒæŒ‡æ•¸": "^VIX", "é»ƒé‡‘é¿éšª": "GC=F"
+        "¶O«°¥b¾ÉÅé": "^SOX", "¥xÆW¥[Åv": "^TWII",
+        "¬ü10¦~¶Å´Ş§Q²v": "^TNX", "WTI °ê»Ú­ìªo": "CL=F",
+        "VIX ®£·W«ü¼Æ": "^VIX", "¶Àª÷Á×ÀI": "GC=F"
     }
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
     start_dt = target_dt - timedelta(days=10)
@@ -533,14 +533,14 @@ def get_macro_data(target_date_str):
                 unit = "%" if symbol == "^TNX" else ""
                 macro_summary[name] = {"val": f"{latest:.2f}{unit}", "change": f"{change:+.2f}%"}
             else:
-                macro_summary[name] = {"val": "æ›´æ–°ä¸­", "change": "0.00%"}
+                macro_summary[name] = {"val": "§ó·s¤¤", "change": "0.00%"}
         except Exception:
             macro_summary[name] = {"val": "N/A", "change": "0.00%"}
     return macro_summary
 
 @st.cache_data(ttl=1800)
 def get_macro_history_trends():
-    tickers = {"è²»åŸåŠå°é«”": "^SOX", "ç¾10å¹´å‚µæ®–åˆ©ç‡": "^TNX", "WTI åœ‹éš›åŸæ²¹": "CL=F"}
+    tickers = {"¶O«°¥b¾ÉÅé": "^SOX", "¬ü10¦~¶Å´Ş§Q²v": "^TNX", "WTI °ê»Ú­ìªo": "CL=F"}
     res_dict = {}
     
     for name, sym in tickers.items():
@@ -552,20 +552,20 @@ def get_macro_history_trends():
             pass
 
     dates = pd.date_range(end=get_taiwan_now(), periods=40, freq='B')
-    if "è²»åŸåŠå°é«”" not in res_dict:
-        res_dict["è²»åŸåŠå°é«”"] = pd.Series([12200 + i * 10 for i in range(40)], index=dates)
-    if "ç¾10å¹´å‚µæ®–åˆ©ç‡" not in res_dict:
-        res_dict["ç¾10å¹´å‚µæ®–åˆ©ç‡"] = pd.Series([4.20 + (i % 5) * 0.02 for i in range(40)], index=dates)
-    if "WTI åœ‹éš›åŸæ²¹" not in res_dict:
-        res_dict["WTI åœ‹éš›åŸæ²¹"] = pd.Series([75.0 + (i % 7) * 0.5 for i in range(40)], index=dates)
+    if "¶O«°¥b¾ÉÅé" not in res_dict:
+        res_dict["¶O«°¥b¾ÉÅé"] = pd.Series([12200 + i * 10 for i in range(40)], index=dates)
+    if "¬ü10¦~¶Å´Ş§Q²v" not in res_dict:
+        res_dict["¬ü10¦~¶Å´Ş§Q²v"] = pd.Series([4.20 + (i % 5) * 0.02 for i in range(40)], index=dates)
+    if "WTI °ê»Ú­ìªo" not in res_dict:
+        res_dict["WTI °ê»Ú­ìªo"] = pd.Series([75.0 + (i % 7) * 0.5 for i in range(40)], index=dates)
 
     combined = pd.DataFrame(res_dict).ffill().bfill()
     
-    if "ç¾10å¹´å‚µæ®–åˆ©ç‡" in combined.columns:
-        if combined["ç¾10å¹´å‚µæ®–åˆ©ç‡"].mean() < 10:
-            combined["ç¾10å¹´å‚µæ®–åˆ©ç‡(20å€)"] = combined["ç¾10å¹´å‚µæ®–åˆ©ç‡"] * 20
+    if "¬ü10¦~¶Å´Ş§Q²v" in combined.columns:
+        if combined["¬ü10¦~¶Å´Ş§Q²v"].mean() < 10:
+            combined["¬ü10¦~¶Å´Ş§Q²v(20­¿)"] = combined["¬ü10¦~¶Å´Ş§Q²v"] * 20
         else:
-            combined["ç¾10å¹´å‚µæ®–åˆ©ç‡(20å€)"] = combined["ç¾10å¹´å‚µæ®–åˆ©ç‡"] * 2
+            combined["¬ü10¦~¶Å´Ş§Q²v(20­¿)"] = combined["¬ü10¦~¶Å´Ş§Q²v"] * 2
 
     return combined
 
@@ -591,12 +591,12 @@ def get_taiwan_sector_performance(target_date_str):
             top_sectors = change_pct.sort_values(ascending=False).head(3).to_dict()
             bottom_sectors = change_pct.sort_values().head(3).to_dict()
             return {
-                "é ˜æ¼²å¼·å‹¢ç”¢æ¥­": {k: f"{v:+.2f}%" for k, v in top_sectors.items()},
-                "é ˜è·Œå¼±å‹¢ç”¢æ¥­": {k: f"{v:+.2f}%" for k, v in bottom_sectors.items()}
+                "»âº¦±j¶Õ²£·~": {k: f"{v:+.2f}%" for k, v in top_sectors.items()},
+                "»â¶^®z¶Õ²£·~": {k: f"{v:+.2f}%" for k, v in bottom_sectors.items()}
             }
     except Exception:
         pass
-    return "é¡è‚¡æ•¸æ“šæ›´æ–°ä¸­"
+    return "ÃşªÑ¼Æ¾Ú§ó·s¤¤"
 
 @st.cache_data(ttl=1800)
 def get_stock_chip(stock_id, target_date_str):
@@ -642,16 +642,16 @@ def get_stock_chip(stock_id, target_date_str):
                         tot_val = parse_num(cols[4])
 
                         records.append({
-                            "æ—¥æœŸ": date_fmt,
-                            "å¤–è³‡": f"{f_val:+,}",
-                            "æŠ•ä¿¡": f"{i_val:+,}",
-                            "è‡ªç‡Ÿå•†": f"{d_val:+,}",
-                            "ä¸‰å¤§æ³•äººåˆè¨ˆ": f"{tot_val:+,}"
+                            "¤é´Á": date_fmt,
+                            "¥~¸ê": f"{f_val:+,}",
+                            "§ë«H": f"{i_val:+,}",
+                            "¦ÛÀç°Ó": f"{d_val:+,}",
+                            "¤T¤jªk¤H¦X­p": f"{tot_val:+,}"
                         })
 
                 if records:
                     df = pd.DataFrame(records)
-                    df = df.sort_values(by="æ—¥æœŸ", ascending=True).tail(5).reset_index(drop=True)
+                    df = df.sort_values(by="¤é´Á", ascending=True).tail(5).reset_index(drop=True)
                     return df
     except Exception:
         pass
@@ -685,29 +685,29 @@ def get_stock_chip(stock_id, target_date_str):
                     diff = row.get("buy_sell", buy - sell)
 
                     if d not in daily_dict:
-                        daily_dict[d] = {"å¤–è³‡": 0, "æŠ•ä¿¡": 0, "è‡ªç‡Ÿå•†": 0}
+                        daily_dict[d] = {"¥~¸ê": 0, "§ë«H": 0, "¦ÛÀç°Ó": 0}
 
-                    if "Foreign" in name or "å¤–" in name:
-                        daily_dict[d]["å¤–è³‡"] += diff
-                    elif "Investment" in name or "æŠ•" in name:
-                        daily_dict[d]["æŠ•ä¿¡"] += diff
-                    elif "Dealer" in name or "è‡ª" in name:
-                        daily_dict[d]["è‡ªç‡Ÿå•†"] += diff
+                    if "Foreign" in name or "¥~" in name:
+                        daily_dict[d]["¥~¸ê"] += diff
+                    elif "Investment" in name or "§ë" in name:
+                        daily_dict[d]["§ë«H"] += diff
+                    elif "Dealer" in name or "¦Û" in name:
+                        daily_dict[d]["¦ÛÀç°Ó"] += diff
 
                 records = []
                 for d in sorted(daily_dict.keys()):
-                    f_val = round(daily_dict[d]["å¤–è³‡"] / 1000)
-                    i_val = round(daily_dict[d]["æŠ•ä¿¡"] / 1000)
-                    d_val = round(daily_dict[d]["è‡ªç‡Ÿå•†"] / 1000)
+                    f_val = round(daily_dict[d]["¥~¸ê"] / 1000)
+                    i_val = round(daily_dict[d]["§ë«H"] / 1000)
+                    d_val = round(daily_dict[d]["¦ÛÀç°Ó"] / 1000)
                     tot = f_val + i_val + d_val
 
                     if f_val != 0 or i_val != 0 or d_val != 0:
                         records.append({
-                            "æ—¥æœŸ": d,
-                            "å¤–è³‡": f"{f_val:+,}",
-                            "æŠ•ä¿¡": f"{i_val:+,}",
-                            "è‡ªç‡Ÿå•†": f"{d_val:+,}",
-                            "ä¸‰å¤§æ³•äººåˆè¨ˆ": f"{tot:+,}"
+                            "¤é´Á": d,
+                            "¥~¸ê": f"{f_val:+,}",
+                            "§ë«H": f"{i_val:+,}",
+                            "¦ÛÀç°Ó": f"{d_val:+,}",
+                            "¤T¤jªk¤H¦X­p": f"{tot:+,}"
                         })
 
                 if len(records) >= 1:
@@ -731,39 +731,39 @@ def is_valid_stock_fast(stock_id, min_price, max_price):
     if max_price > 0 and real_p > max_price: 
         return False, None
         
-    _, kd_info = calculate_kd(stock_id, period_type="æ—¥ç·š")
+    _, kd_info = calculate_kd(stock_id, period_type="¤é½u")
     if isinstance(kd_info, dict):
         kd_signal = kd_info.get("signal", "")
-        if "æ­»äº¡" in kd_signal or kd_info.get("is_big_black_k", False):
+        if "¦º¤`" in kd_signal or kd_info.get("is_big_black_k", False):
             return False, None
 
     return True, real_p
 
 def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
     cond_list = []
-    if min_price > 0: cond_list.append(f"æœ€ä½ä¸å¾—ä½æ–¼ {min_price} å…ƒ")
-    if max_price > 0: cond_list.append(f"æœ€é«˜ä¸å¾—è¶…é {max_price} å…ƒ")
+    if min_price > 0: cond_list.append(f"³Ì§C¤£±o§C©ó {min_price} ¤¸")
+    if max_price > 0: cond_list.append(f"³Ì°ª¤£±o¶W¹L {max_price} ¤¸")
         
-    price_limit_str = f"ã€ç¡¬æ€§è‚¡åƒ¹å€é–“é™åˆ¶ã€‘ï¼š{', '.join(cond_list)}" if cond_list else "è‚¡åƒ¹ä¸é™"
+    price_limit_str = f"¡iµw©ÊªÑ»ù°Ï¶¡­­¨î¡j¡G{', '.join(cond_list)}" if cond_list else "ªÑ»ù¤£­­"
     
     if custom_sector and custom_sector.strip() != "":
-        sector_limit_str = f"ã€æŒ‡å®šç”¢æ¥­é™åˆ¶ã€‘ï¼šå¿…é ˆåš´æ ¼å¾ã€Œ{custom_sector.strip()}ã€ç›¸é—œå€‹è‚¡æŒ‘é¸"
+        sector_limit_str = f"¡i«ü©w²£·~­­¨î¡j¡G¥²¶·ÄY®æ±q¡u{custom_sector.strip()}¡v¬ÛÃö­ÓªÑ¬D¿ï"
     else:
-        sector_limit_str = "ã€æŒ‡å®šç”¢æ¥­é™åˆ¶ã€‘ï¼šç„¡é™åˆ¶ï¼ˆæˆæ¬Š AI å°å…¨å°è‚¡é€²è¡Œå…¨ç¶­åº¦åˆ†æï¼Œè‡ªä¸»æŒ‘é¸å…¨å¸‚å ´å¤šé ­å‹æ…‹æœ€å¼·ä¹‹ç†±é–€ä¸»æµæ¨™çš„ï¼‰"
+        sector_limit_str = "¡i«ü©w²£·~­­¨î¡j¡GµL­­¨î¡]±ÂÅv AI ¹ï¥ş¥xªÑ¶i¦æ¥şºû«×¤ÀªR¡A¦Û¥D¬D¿ï¥ş¥«³õ¦hÀY«¬ºA³Ì±j¤§¼öªù¥D¬y¼Ğªº¡^"
 
-    premarket_focus_str = f"ã€08:00 ç›¤å‰å³æ™‚åˆ©å¤š/èšç„¦æ—ç¾¤ã€‘ï¼š{st.session_state.premarket_focus}" if st.session_state.premarket_focus else ""
+    premarket_focus_str = f"¡i08:00 ½L«e§Y®É§Q¦h/»EµJ±Ú¸s¡j¡G{st.session_state.premarket_focus}" if st.session_state.premarket_focus else ""
 
     prompt_select = (
-        "è«‹ä½œç‚ºé ‚ç´šè¯çˆ¾è¡—å°è‚¡é¸è‚¡æ“ç›¤æ‰‹ï¼ŒåŸºæº–æ—¥æœŸï¼š" + str(target_date_str) + "ã€‚\n"
-        "åƒ¹æ ¼æ¢ä»¶ï¼š" + price_limit_str + "ã€‚\n"
-        "æ—ç¾¤æ¢ä»¶ï¼š" + sector_limit_str + "ã€‚\n"
-        "å¤§ç›¤ç’°å¢ƒï¼š" + str(macro_data) + "\n"
+        "½Ğ§@¬°³»¯ÅµØº¸µó¥xªÑ¿ïªÑ¾Ş½L¤â¡A°ò·Ç¤é´Á¡G" + str(target_date_str) + "¡C\n"
+        "»ù®æ±ø¥ó¡G" + price_limit_str + "¡C\n"
+        "±Ú¸s±ø¥ó¡G" + sector_limit_str + "¡C\n"
+        "¤j½LÀô¹Ò¡G" + str(macro_data) + "\n"
         + premarket_focus_str + "\n\n"
-        "è«‹ç²¾é¸ 10 æª”æœ€å…·å‚™æ³¢æ®µæ”»æ“Šæ½›åŠ›ã€å¤šé ­å‹æ…‹ä¸”æˆäº¤é‡å……æ²›çš„å°è‚¡æ¨™çš„åå–®ï¼Œé ä¼°ä¸Šæ¼²ç‡è«‹çµ¦äºˆ 68%-88% ä¹‹é–“çš„æ•¸å€¼ã€‚\n"
-        "ã€é‡è¦è¦æ ¼è¦æ±‚ã€‘ï¼šã€æ—ç¾¤ã€åç¨±è«‹åƒè€ƒ Yahoo è‚¡å¸‚é¢¨æ ¼åˆ†é¡ï¼Œä¸”é•·åº¦ã€åš´æ ¼é™åˆ¶åœ¨ 6 å€‹å…¨å½¢ä¸­æ–‡ç°¡çŸ­å­—æ•¸ä»¥å…§ã€‘ï¼ˆå¦‚ï¼šåŠå°é«”è¨­å‚™ã€æ¶²å†·æ•£ç†±ã€CPOå…‰é€šè¨Šã€PCBè¼‰æ¿ï¼‰ã€‚\n"
-        "è«‹å›å‚³ JSON é™£åˆ—æ ¼å¼å¦‚ï¼š\n"
-        '[{"ä¸Šæ¼²ç‡":"78%","æ—ç¾¤":"åŠå°é«”è¨­å‚™","è‚¡å":"è¬æ½¤","è‚¡è™Ÿ":"6187","æ³¢æ®µæœŸé–“":"5-10å¤©"}]\n'
-        "ä¸è¦åŒ…å« Markdown æ¨™è¨˜ã€‚"
+        "½Ğºë¿ï 10 ÀÉ³Ì¨ã³Æªi¬q§ğÀ»¼ç¤O¡B¦hÀY«¬ºA¥B¦¨¥æ¶q¥R¨Kªº¥xªÑ¼Ğªº¦W³æ¡A¹w¦ô¤Wº¦²v½Ğµ¹¤© 68%-88% ¤§¶¡ªº¼Æ­È¡C\n"
+        "¡i­«­n³W®æ­n¨D¡j¡G¡y±Ú¸s¡z¦WºÙ½Ğ°Ñ¦Ò Yahoo ªÑ¥«­·®æ¤ÀÃş¡A¥Bªø«×¡iÄY®æ­­¨î¦b 6 ­Ó¥ş§Î¤¤¤åÂ²µu¦r¼Æ¥H¤º¡j¡]¦p¡G¥b¾ÉÅé³]³Æ¡B²G§N´²¼ö¡BCPO¥ú³q°T¡BPCB¸üªO¡^¡C\n"
+        "½Ğ¦^¶Ç JSON °}¦C®æ¦¡¦p¡G\n"
+        '[{"¤Wº¦²v":"78%","±Ú¸s":"¥b¾ÉÅé³]³Æ","ªÑ¦W":"¸U¼í","ªÑ¸¹":"6187","ªi¬q´Á¶¡":"5-10¤Ñ"}]\n'
+        "¤£­n¥]§t Markdown ¼Ğ°O¡C"
     )
     
     try:
@@ -777,7 +777,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     final_results = []
     
     for item in picks:
-        stock_id = parse_stock_input(item.get("è‚¡è™Ÿ"))
+        stock_id = parse_stock_input(item.get("ªÑ¸¹"))
         if not stock_id: continue
         
         valid, real_p = is_valid_stock_fast(stock_id, min_price, max_price)
@@ -786,21 +786,21 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             p_high = round(real_p * 1.005, 1)
             target_p = round(real_p * 1.08, 1)
             
-            raw_sector = str(item.get("æ—ç¾¤", "ä¸»æµé¡Œæ")).strip()
-            item["æ—ç¾¤"] = raw_sector[:6]
+            raw_sector = str(item.get("±Ú¸s", "¥D¬yÃD§÷")).strip()
+            item["±Ú¸s"] = raw_sector[:6]
             
-            item["ä¸Šæ¼²ç‡"] = item.get("ä¸Šæ¼²ç‡", item.get("é ä¼°ä¸Šæ¼²ç‡", "78%"))
-            item["ç•¶å‰å¯¦åƒ¹"] = f"{real_p:.2f}"
-            item["å»ºè­°é€²å ´"] = f"{p_low:.1f}-{p_high:.1f}"
-            item["æ³¢æ®µåœåˆ©/é˜²è­·æç¤º"] = f"ç›®æ¨™ {target_p:.1f} (é”æ¨™å³è½è¢‹)"
+            item["¤Wº¦²v"] = item.get("¤Wº¦²v", item.get("¹w¦ô¤Wº¦²v", "78%"))
+            item["·í«e¹ê»ù"] = f"{real_p:.2f}"
+            item["«ØÄ³¶i³õ"] = f"{p_low:.1f}-{p_high:.1f}"
+            item["ªi¬q°±§Q/¨¾Å@´£¥Ü"] = f"¥Ø¼Ğ {target_p:.1f} (¹F¼Ğ§Y¸¨³U)"
             
-            tw_name = get_twse_stock_name(stock_id) or STOCK_ID_TO_NAME.get(stock_id, item.get("è‚¡å"))
-            item["è‚¡å"] = tw_name
+            tw_name = get_twse_stock_name(stock_id) or STOCK_ID_TO_NAME.get(stock_id, item.get("ªÑ¦W"))
+            item["ªÑ¦W"] = tw_name
             
             if stock_id in LARGE_CAP_STOCKS:
-                item["æ³¢æ®µæœŸé–“"] = "5-10å¤© (éšæ¢¯å¢Šé«˜)"
+                item["ªi¬q´Á¶¡"] = "5-10¤Ñ (¶¥±è¹Ô°ª)"
             else:
-                if "æ³¢æ®µæœŸé–“" not in item: item["æ³¢æ®µæœŸé–“"] = "5-10å¤©"
+                if "ªi¬q´Á¶¡" not in item: item["ªi¬q´Á¶¡"] = "5-10¤Ñ"
                 
             final_results.append(item)
         if len(final_results) >= 3: break
@@ -808,32 +808,32 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     fallback_candidates = ["2330", "2317", "2382", "3231", "3017", "6187", "2454", "2308"]
     for f_id in fallback_candidates:
         if len(final_results) >= 3: break
-        if any(res.get("è‚¡è™Ÿ") == f_id for res in final_results): continue
+        if any(res.get("ªÑ¸¹") == f_id for res in final_results): continue
         valid, real_p = is_valid_stock_fast(f_id, min_price, max_price)
         if valid and real_p:
             p_low = round(real_p * 0.985, 1)
             p_high = round(real_p * 1.005, 1)
             target_p = round(real_p * 1.08, 1)
-            tw_name = STOCK_ID_TO_NAME.get(f_id, "å¼·å‹¢å€‹è‚¡")
+            tw_name = STOCK_ID_TO_NAME.get(f_id, "±j¶Õ­ÓªÑ")
             final_results.append({
-                "ä¸Šæ¼²ç‡": "76%",
-                "æ—ç¾¤": "ä¸»æµAIæ¬Šå€¼"[:6],
-                "è‚¡å": tw_name,
-                "è‚¡è™Ÿ": f_id,
-                "ç•¶å‰å¯¦åƒ¹": f"{real_p:.2f}",
-                "å»ºè­°é€²å ´": f"{p_low:.1f}-{p_high:.1f}",
-                "æ³¢æ®µåœåˆ©/é˜²è­·æç¤º": f"ç›®æ¨™ {target_p:.1f} (é”æ¨™å³è½è¢‹)",
-                "æ³¢æ®µæœŸé–“": "5-10å¤©"
+                "¤Wº¦²v": "76%",
+                "±Ú¸s": "¥D¬yAIÅv­È"[:6],
+                "ªÑ¦W": tw_name,
+                "ªÑ¸¹": f_id,
+                "·í«e¹ê»ù": f"{real_p:.2f}",
+                "«ØÄ³¶i³õ": f"{p_low:.1f}-{p_high:.1f}",
+                "ªi¬q°±§Q/¨¾Å@´£¥Ü": f"¥Ø¼Ğ {target_p:.1f} (¹F¼Ğ§Y¸¨³U)",
+                "ªi¬q´Á¶¡": "5-10¤Ñ"
             })
 
     while len(final_results) < 3:
         final_results.append({
-            "ä¸Šæ¼²ç‡": "70%", "æ—ç¾¤": "ç†±é–€ä¸»æµ", "è‚¡å": "å°ç©é›»",
-            "è‚¡è™Ÿ": "2330", "ç•¶å‰å¯¦åƒ¹": "---", "å»ºè­°é€²å ´": "---", "æ³¢æ®µåœåˆ©/é˜²è­·æç¤º": "---", "æ³¢æ®µæœŸé–“": "5-10å¤©"
+            "¤Wº¦²v": "70%", "±Ú¸s": "¼öªù¥D¬y", "ªÑ¦W": "¥x¿n¹q",
+            "ªÑ¸¹": "2330", "·í«e¹ê»ù": "---", "«ØÄ³¶i³õ": "---", "ªi¬q°±§Q/¨¾Å@´£¥Ü": "---", "ªi¬q´Á¶¡": "5-10¤Ñ"
         })
         
     df_res = pd.DataFrame(final_results)
-    cols_order = ["ä¸Šæ¼²ç‡", "æ—ç¾¤", "è‚¡å", "è‚¡è™Ÿ", "ç•¶å‰å¯¦åƒ¹", "å»ºè­°é€²å ´", "æ³¢æ®µåœåˆ©/é˜²è­·æç¤º", "æ³¢æ®µæœŸé–“"]
+    cols_order = ["¤Wº¦²v", "±Ú¸s", "ªÑ¦W", "ªÑ¸¹", "·í«e¹ê»ù", "«ØÄ³¶i³õ", "ªi¬q°±§Q/¨¾Å@´£¥Ü", "ªi¬q´Á¶¡"]
     return df_res[cols_order].to_dict('records')
 
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital_mode, price_or_capital, target_date_str):
@@ -846,126 +846,126 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     peer_str = get_peer_comparison(stock_id)
     
     is_large_cap = stock_id in LARGE_CAP_STOCKS
-    cap_type_str = "ã€å±¬æ€§ã€‘ï¼šåƒå„„å¤§å‹æ¬Šå€¼æŒ‡æ¨™è‚¡ (æ³¢æ®µå¤šç‚ºéšæ¢¯å¼éœ‡ç›ªå¢Šé«˜ï¼Œåˆ‡å‹¿è¿½é«˜)" if is_large_cap else "ã€å±¬æ€§ã€‘ï¼šä¸­å°å‹æ³¢æ®µæ”»æ“Šè‚¡"
+    cap_type_str = "¡iÄİ©Ê¡j¡G¤d»õ¤j«¬Åv­È«ü¼ĞªÑ (ªi¬q¦h¬°¶¥±è¦¡¾_Àú¹Ô°ª¡A¤Á¤Å°l°ª)" if is_large_cap else "¡iÄİ©Ê¡j¡G¤¤¤p«¬ªi¬q§ğÀ»ªÑ"
     
     if p_info:
         real_price = p_info["real_price"]
-        price_info_str = f"ç•¶å‰çœŸå¯¦å¸‚å ´æˆäº¤åƒ¹ï¼š{real_price} å…ƒ ({cap_type_str})"
+        price_info_str = f"·í«e¯u¹ê¥«³õ¦¨¥æ»ù¡G{real_price} ¤¸ ({cap_type_str})"
         p_low = round(real_price * 0.985, 1)
         p_high = round(real_price * 1.005, 1)
         p_mid = round((p_low + p_high) / 2, 2)
         target_p = round(real_price * 1.08, 1)
-        calc_price_str = f"ã€ç³»çµ±çµ±ä¸€è¨ˆç®—æ•¸æ“šã€‘ï¼šå»ºè­°è²·é€²å€é–“ï¼š{p_low}å…ƒ ~ {p_high}å…ƒï¼Œé ä¼°é€²å ´å‡åƒ¹ä¸­é–“å€¼ï¼š{p_mid}å…ƒï¼Œæ³¢æ®µåœåˆ©ç›®æ¨™åƒ¹ï¼š{target_p}å…ƒã€‚"
+        calc_price_str = f"¡i¨t²Î²Î¤@­pºâ¼Æ¾Ú¡j¡G«ØÄ³¶R¶i°Ï¶¡¡G{p_low}¤¸ ~ {p_high}¤¸¡A¹w¦ô¶i³õ§¡»ù¤¤¶¡­È¡G{p_mid}¤¸¡Aªi¬q°±§Q¥Ø¼Ğ»ù¡G{target_p}¤¸¡C"
     else:
         real_price = 100.0
-        price_info_str = "å³æ™‚è‚¡åƒ¹ï¼šéœ€åƒè€ƒå¸‚å ´ç¾åƒ¹"
+        price_info_str = "§Y®ÉªÑ»ù¡G»İ°Ñ¦Ò¥«³õ²{»ù"
         p_low, p_high, p_mid, target_p = "---", "---", "---", "---"
         calc_price_str = ""
 
-    chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "ç„¡æœ€æ–°ç±Œç¢¼æ•¸æ“š"
+    chip_str = chip_data.to_string(index=False) if isinstance(chip_data, pd.DataFrame) and not chip_data.empty else "µL³Ì·sÄw½X¼Æ¾Ú"
     
     if isinstance(kd_info, dict):
         vol_ratio = kd_info.get('vol_ratio', 1.0)
-        kd_str = f"æœ€æ–°{period_type} KD æŒ‡æ¨™ï¼šK={kd_info.get('K')}, D={kd_info.get('D')}ï¼Œè½‰æŠ˜è¨Šè™Ÿç‚º [{kd_info.get('signal')}]"
-        ma_str = f"5æ—¥å‡ç·š(5MA)={kd_info.get('5MA')}å…ƒï¼Œ20æ—¥æœˆç·š(20MA)={kd_info.get('20MA')}å…ƒ (æœˆç·šä¹–é›¢ç‡: {kd_info.get('bias_20ma'):+f}%)ã€‚"
-        vol_str = f"ç•¶å‰æˆäº¤é‡å¢å€æ•¸ï¼š{vol_ratio} å€ (5æ—¥å‡é‡åŸºæº–)ã€‚ç‹€æ…‹ï¼š[{kd_info.get('vol_signal_str')}]ã€‚"
-        pattern_str = f"ã€å›å¾Œè²·ä¸Šæ¼²ã€è¨ºæ–·ï¼š[{kd_info.get('pullback_buy_signal')}]"
+        kd_str = f"³Ì·s{period_type} KD «ü¼Ğ¡GK={kd_info.get('K')}, D={kd_info.get('D')}¡AÂà§é°T¸¹¬° [{kd_info.get('signal')}]"
+        ma_str = f"5¤é§¡½u(5MA)={kd_info.get('5MA')}¤¸¡A20¤é¤ë½u(20MA)={kd_info.get('20MA')}¤¸ (¤ë½u¨ÄÂ÷²v: {kd_info.get('bias_20ma'):+f}%)¡C"
+        vol_str = f"·í«e¦¨¥æ¶q¼W­¿¼Æ¡G{vol_ratio} ­¿ (5¤é§¡¶q°ò·Ç)¡Cª¬ºA¡G[{kd_info.get('vol_signal_str')}]¡C"
+        pattern_str = f"¡y¦^«á¶R¤Wº¦¡z¶EÂ_¡G[{kd_info.get('pullback_buy_signal')}]"
         adv_tech_str = (
-            f"RSI(14æ—¥)={kd_info.get('RSI', 'N/A')} | "
-            f"MACD DIF(å¿«ç·š)={kd_info.get('DIF', 'N/A')} | MACD Signal(æ…¢ç·š)={kd_info.get('MACD_Signal', 'N/A')} | "
-            f"å¸ƒæ—ä¸Šè»Œ={kd_info.get('BB_Upper', 'N/A')}å…ƒ | å¸ƒæ—ä¸‹è»Œ={kd_info.get('BB_Lower', 'N/A')}å…ƒ"
+            f"RSI(14¤é)={kd_info.get('RSI', 'N/A')} | "
+            f"MACD DIF(§Ö½u)={kd_info.get('DIF', 'N/A')} | MACD Signal(ºC½u)={kd_info.get('MACD_Signal', 'N/A')} | "
+            f"¥¬ªL¤W­y={kd_info.get('BB_Upper', 'N/A')}¤¸ | ¥¬ªL¤U­y={kd_info.get('BB_Lower', 'N/A')}¤¸"
         )
     else:
         vol_ratio = 1.0
-        kd_str = ma_str = vol_str = pattern_str = adv_tech_str = "æŠ€è¡“æ•¸æ“šä¸è¶³"
+        kd_str = ma_str = vol_str = pattern_str = adv_tech_str = "§Ş³N¼Æ¾Ú¤£¨¬"
     
-    vol_hint = "ç•¶å‰æˆäº¤é‡å°šæœªçˆ†ç™¼ï¼Œè‹¥é‡èƒ½ä¸åŠ 1.2 å€ï¼Œå»ºè­°æ–¼ã€å»ºè­°é€²å ´å€é–“ä¸‹é™ã€é€¢ä½æ›å–®ä½ˆå±€ï¼Œåˆ‡å‹¿é–‹é«˜è¿½åƒ¹ã€‚" if vol_ratio < 1.2 else "æˆäº¤é‡é †åˆ©æ”¾å¤§ï¼Œå…·å‚™æ”»æ“Šé‡èƒ½ï¼"
-    premarket_context = f"ã€æœ€æ–°æƒ…å ±å‹•æ…‹ã€‘ï¼šèšç„¦æ—ç¾¤ {st.session_state.premarket_focus} / é¿éšªæ—ç¾¤ {st.session_state.premarket_avoid} | æ‘˜è¦: {st.session_state.premarket_summary}"
+    vol_hint = "·í«e¦¨¥æ¶q©|¥¼Ãzµo¡A­Y¶q¯à¤£¤Î 1.2 ­¿¡A«ØÄ³©ó¡y«ØÄ³¶i³õ°Ï¶¡¤U­­¡z³{§C±¾³æ§G§½¡A¤Á¤Å¶}°ª°l»ù¡C" if vol_ratio < 1.2 else "¦¨¥æ¶q¶¶§Q©ñ¤j¡A¨ã³Æ§ğÀ»¶q¯à¡I"
+    premarket_context = f"¡i³Ì·s±¡³ø°ÊºA¡j¡G»EµJ±Ú¸s {st.session_state.premarket_focus} / Á×ÀI±Ú¸s {st.session_state.premarket_avoid} | ºK­n: {st.session_state.premarket_summary}"
 
-    # ä¾æ“šæŒæœ‰ç‹€æ…‹åˆ‡æ›ä¸åŒçš„ Prompt èªå¢ƒ
-    if capital_mode == "æ—¢æœ‰æŒè‚¡è™•ç½® (å·²å¥—ç‰¢/æŒæœ‰ä¸­)":
+    # ¨Ì¾Ú«ù¦³ª¬ºA¤Á´«¤£¦Pªº Prompt »y¹Ò
+    if capital_mode == "¬J¦³«ùªÑ³B¸m (¤w®M¨c/«ù¦³¤¤)":
         cost_price = price_or_capital if price_or_capital and price_or_capital > 0 else real_price
         unrealized_pct = round(((real_price - cost_price) / cost_price) * 100, 2)
         position_context = (
-            f"ã€ä½¿ç”¨è€…æ—¢æœ‰æŒè‚¡ç‹€æ…‹ã€‘ï¼šæŒæœ‰ç‹€æ…‹ç‚ºã€æ—¢æœ‰æŒè‚¡è™•ç½®ã€ã€‚\n"
-            f"- æ­·å²è²·é€²æˆæœ¬åƒ¹ï¼š{cost_price} å…ƒ / ç•¶å‰æœ€æ–°ç¾åƒ¹ï¼š{real_price} å…ƒ\n"
-            f"- ç•¶å‰å¸³é¢æœªå¯¦ç¾æç›Šï¼š{unrealized_pct}%"
+            f"¡i¨Ï¥ÎªÌ¬J¦³«ùªÑª¬ºA¡j¡G«ù¦³ª¬ºA¬°¡y¬J¦³«ùªÑ³B¸m¡z¡C\n"
+            f"- ¾ú¥v¶R¶i¦¨¥»»ù¡G{cost_price} ¤¸ / ·í«e³Ì·s²{»ù¡G{real_price} ¤¸\n"
+            f"- ·í«e±b­±¥¼¹ê²{·l¯q¡G{unrealized_pct}%"
         )
         mode_instruction = (
-            "=== ç¬¬ä¸€éƒ¨åˆ†ï¼šã€æ—¢æœ‰æŒè‚¡è™•ç½®èˆ‡åœæ/è§£å¥—è„«æ‰‹æŒ‡ä»¤ã€‘ ===\n"
-            "1. ã€æ ¸å¿ƒè„«æ‰‹è³£é»èˆ‡è§£å¥—ç›®æ¨™è©¦ç®—ã€‘ï¼š\n"
-            f"   * ç•¶å‰è²·é€²æˆæœ¬åƒ¹ï¼š{cost_price} å…ƒ | ç•¶å‰å¸‚å ´ç¾åƒ¹ï¼š{real_price} å…ƒ (æœªå¯¦ç¾æç›Š: {unrealized_pct}%)\n"
-            "   * å»ºè­°é€¢é«˜æ¸›ç¢¼ / åå½ˆè§£å¥—è„«æ‰‹ç›®æ¨™åƒ¹ï¼š[AIä¾æ“šä¸Šæ–¹å£“åŠ›ä½èˆ‡20MAç®—å‡ºçš„ç›®æ¨™åƒ¹ï¼Œä¾‹å¦‚ï¼šXX.X å…ƒ]\n"
-            "   * å»ºè­°é—œéµé˜²å®ˆ / åœææ›è‚¡åƒ¹ä½ï¼š[AIä¾æ“šä¸‹æ–¹æ”¯æ’ä½ç®—å‡ºçš„åœæåƒ¹ï¼Œä¾‹å¦‚ï¼šXX.X å…ƒ]\n"
-            "   * è„«æ‰‹æ™‚æ©Ÿèˆ‡è™•ç½®å»ºè­°ï¼š[ä¾‹å¦‚ï¼šè‹¥åå½ˆè‡³ XX å…ƒé‡åˆ° 20MA å£“åŠ›å»ºè­°å…ˆè§£å¥—æ¸›ç¢¼ 50%ï¼Œè‹¥è·Œç ´ XX å…ƒå‰‡éœ€æœæ–·åœææ›è‚¡]\n"
-            "2. ã€æŒè‚¡é¢¨å ±æ¯”èˆ‡è½‰æŠ˜å‹ç‡è©•ä¼°ã€‘ï¼š\n"
-            "   * æ­¢è·Œåå½ˆå‹ç‡è©•ä¼°ï¼š[AIåˆ†æç•¶å‰æŠ€è¡“é¢æ­¢è·Œåå½ˆå‹ç‡]\n"
-            "   * è™•ç½®å»ºè­°æ˜Ÿç­‰ï¼š[ä¾‹å¦‚ï¼šâ˜…â˜…â˜…â˜†â˜† (è§€æœ›ç­‰åå½ˆ)]\n"
-            "3. ã€æ—¢æœ‰æŒè‚¡æ“ç›¤æŒ‡å¼•ã€‘ï¼šï¼ˆæ˜ç¢ºé‡å°ç›®å‰å¥—ç‰¢ç‹€æ³ï¼Œçµ¦äºˆå…·é«”çš„ã€åˆ†æ‰¹è§£å¥—ã€æˆ–ã€ç ´ä½åœæã€æ™‚é–“é»èˆ‡åƒ¹æ ¼æŒ‡ä»¤ï¼‰ã€‚\n"
+            "=== ²Ä¤@³¡¤À¡G¡i¬J¦³«ùªÑ³B¸m»P°±·l/¸Ñ®M²æ¤â«ü¥O¡j ===\n"
+            "1. ¡i®Ö¤ß²æ¤â½æÂI»P¸Ñ®M¥Ø¼Ğ¸Õºâ¡j¡G\n"
+            f"   * ·í«e¶R¶i¦¨¥»»ù¡G{cost_price} ¤¸ | ·í«e¥«³õ²{»ù¡G{real_price} ¤¸ (¥¼¹ê²{·l¯q: {unrealized_pct}%)\n"
+            "   * «ØÄ³³{°ª´î½X / ¤Ï¼u¸Ñ®M²æ¤â¥Ø¼Ğ»ù¡G[AI¨Ì¾Ú¤W¤èÀ£¤O¦ì»P20MAºâ¥Xªº¥Ø¼Ğ»ù¡A¨Ò¦p¡GXX.X ¤¸]\n"
+            "   * «ØÄ³ÃöÁä¨¾¦u / °±·l´«ªÑ»ù¦ì¡G[AI¨Ì¾Ú¤U¤è¤ä¼µ¦ìºâ¥Xªº°±·l»ù¡A¨Ò¦p¡GXX.X ¤¸]\n"
+            "   * ²æ¤â®É¾÷»P³B¸m«ØÄ³¡G[¨Ò¦p¡G­Y¤Ï¼u¦Ü XX ¤¸¹J¨ì 20MA À£¤O«ØÄ³¥ı¸Ñ®M´î½X 50%¡A­Y¶^¯} XX ¤¸«h»İªGÂ_°±·l´«ªÑ]\n"
+            "2. ¡i«ùªÑ­·³ø¤ñ»PÂà§é³Ó²vµû¦ô¡j¡G\n"
+            "   * ¤î¶^¤Ï¼u³Ó²vµû¦ô¡G[AI¤ÀªR·í«e§Ş³N­±¤î¶^¤Ï¼u³Ó²v]\n"
+            "   * ³B¸m«ØÄ³¬Pµ¥¡G[¨Ò¦p¡G¡¹¡¹¡¹¡¸¡¸ (Æ[±æµ¥¤Ï¼u)]\n"
+            "3. ¡i¬J¦³«ùªÑ¾Ş½L«ü¤Ş¡j¡G¡]©ú½T°w¹ï¥Ø«e®M¨cª¬ªp¡Aµ¹¤©¨ãÅéªº¡y¤À§å¸Ñ®M¡z©Î¡y¯}¦ì°±·l¡z®É¶¡ÂI»P»ù®æ«ü¥O¡^¡C\n"
         )
     else:
-        capital_str = f"{price_or_capital:,} å…ƒ" if price_or_capital and price_or_capital > 0 else "æœªé™å®šé‡‘é¡"
-        position_context = f"ã€ä½¿ç”¨è€…æ—¢æœ‰æŒè‚¡ç‹€æ…‹ã€‘ï¼šå…¨æ–°ä½ˆå±€ (é è¨ˆå»ºç«‹éƒ¨ä½é‡‘é¡: {capital_str})"
+        capital_str = f"{price_or_capital:,} ¤¸" if price_or_capital and price_or_capital > 0 else "¥¼­­©wª÷ÃB"
+        position_context = f"¡i¨Ï¥ÎªÌ¬J¦³«ùªÑª¬ºA¡j¡G¥ş·s§G§½ (¹w­p«Ø¥ß³¡¦ìª÷ÃB: {capital_str})"
         mode_instruction = (
-            "=== ç¬¬ä¸€éƒ¨åˆ†ï¼šã€å¯¦æˆ°æ“ç›¤æŒ‡ä»¤èˆ‡é¢¨å ±æ¯”è©¦ç®—ã€‘ ===\n"
-            "1. ã€æ ¸å¿ƒè²·è³£é»èˆ‡é ä¼°ç²åˆ©è©¦ç®—ã€‘ï¼š\n"
-            "   * å»ºè­°é€²å ´è²·é€²åƒ¹ä½å€é–“ï¼š" + f"{p_low} å…ƒ ~ {p_high} å…ƒ" + " (ä¸­é–“å€¼: " + f"{p_mid} å…ƒ" + ")\n"
-            "   * æ³¢æ®µåœåˆ©è„«æ‰‹è³£å‡ºç›®æ¨™åƒ¹ï¼š" + f"{target_p} å…ƒ" + "\n"
-            "   * é è¨ˆæ½›åœ¨ç²åˆ©é‡‘é¡èˆ‡ç™¾åˆ†æ¯”ï¼šæ¯è‚¡é ä¼°ç²åˆ© +" + f"{round(target_p - p_mid, 2)}" + " å…ƒ (é ä¼°ç²åˆ©ç©ºé–“ï¼š+" + f"{round((target_p - p_mid)/p_mid*100, 2)}" + "%)\n"
-            "2. ã€å¤šç©ºå‹ç‡å„ªå‹¢èˆ‡é¢¨å ±æ¯”è©•ä¼°ã€‘ï¼š\n"
-            "   è«‹ã€åš´æ ¼ä¾æ“šä»¥ä¸‹å›ºå®šæ ¼å¼èˆ‡ç¸®æ’ã€‘å®Œæ•´å¡«å…¥çœŸå¯¦æ•¸æ“šèˆ‡AIé˜²å®ˆè¨ˆç®—ï¼š\n"
-            "   * å¤šç©ºå‹ç‡è©•ä¼°ï¼š[AIåˆ†æç•¶å‰å¤šç©ºå‹ç‡ï¼Œä¾‹å¦‚ï¼š78% å‹ç‡å„ªå‹¢]\n"
-            "   * é¢¨éšª/å ±é…¬æ¯” (R/R Ratio) è©¦ç®—ï¼š\n"
-            "     - é ä¼°é€²å ´å‡åƒ¹ï¼š" + f"{p_mid} å…ƒ" + "\n"
-            "     - æ³¢æ®µç›®æ¨™åƒ¹ï¼š" + f"{target_p} å…ƒ (ç²åˆ©ç©ºé–“ï¼š+{round(target_p - p_mid, 2)} å…ƒ / +{round((target_p - p_mid)/p_mid*100, 2)}%)\n"
-            "     - é˜²å®ˆåœæåƒ¹ï¼š[AIä¾æ“šæŠ€è¡“æ”¯æ’ç®—å‡ºåœæåƒ¹ï¼Œå¦‚ XX.XX å…ƒ] (æ½›åœ¨é¢¨éšªï¼š-XX.XX å…ƒ / -XX.XX%)\n"
-            "     - é¢¨å ±æ¯” (R/R Ratio)ï¼š[AIè¨ˆç®— æ½›åœ¨ç²åˆ©/æ½›åœ¨é¢¨éšª æ¯”å€¼ï¼Œå¦‚ X.XX : 1] (å»ºè­°é«˜æ–¼ 2.0:1 æ–¹å¯å»ºç«‹éƒ¨ä½)\n"
-            "   * ç¶œåˆæ¨è–¦æ˜Ÿç­‰ï¼š[ä¾‹å¦‚ï¼šâ˜…â˜…â˜…â˜…â˜† (4/5æ˜Ÿ)]\n"
-            "3. ã€æ¥µç°¡æ“ç›¤å¯¦æˆ°æŒ‡å¼•ã€‘ï¼šï¼ˆæ˜ç¢ºå¼·èª¿é€²å ´è²·é€²å€é–“ã€æ³¢æ®µåœåˆ©è³£å‡ºç›®æ¨™åƒ¹ï¼Œé™„ä¸Šã€é–‹é«˜ > 2% è§€æœ›èˆ‡ç›¤ä¸­é”æ¨™å³æ™‚è½è¢‹ã€å®åš€èˆ‡ã€é ä¼°æ³¢æ®µæŒæœ‰å¤©æ•¸ã€ï¼‰ã€‚\n"
+            "=== ²Ä¤@³¡¤À¡G¡i¹ê¾Ô¾Ş½L«ü¥O»P­·³ø¤ñ¸Õºâ¡j ===\n"
+            "1. ¡i®Ö¤ß¶R½æÂI»P¹w¦ôÀò§Q¸Õºâ¡j¡G\n"
+            "   * «ØÄ³¶i³õ¶R¶i»ù¦ì°Ï¶¡¡G" + f"{p_low} ¤¸ ~ {p_high} ¤¸" + " (¤¤¶¡­È: " + f"{p_mid} ¤¸" + ")\n"
+            "   * ªi¬q°±§Q²æ¤â½æ¥X¥Ø¼Ğ»ù¡G" + f"{target_p} ¤¸" + "\n"
+            "   * ¹w­p¼ç¦bÀò§Qª÷ÃB»P¦Ê¤À¤ñ¡G¨CªÑ¹w¦ôÀò§Q +" + f"{round(target_p - p_mid, 2)}" + " ¤¸ (¹w¦ôÀò§QªÅ¶¡¡G+" + f"{round((target_p - p_mid)/p_mid*100, 2)}" + "%)\n"
+            "2. ¡i¦hªÅ³Ó²vÀu¶Õ»P­·³ø¤ñµû¦ô¡j¡G\n"
+            "   ½Ğ¡iÄY®æ¨Ì¾Ú¥H¤U©T©w®æ¦¡»PÁY±Æ¡j§¹¾ã¶ñ¤J¯u¹ê¼Æ¾Ú»PAI¨¾¦u­pºâ¡G\n"
+            "   * ¦hªÅ³Ó²vµû¦ô¡G[AI¤ÀªR·í«e¦hªÅ³Ó²v¡A¨Ò¦p¡G78% ³Ó²vÀu¶Õ]\n"
+            "   * ­·ÀI/³ø¹S¤ñ (R/R Ratio) ¸Õºâ¡G\n"
+            "     - ¹w¦ô¶i³õ§¡»ù¡G" + f"{p_mid} ¤¸" + "\n"
+            "     - ªi¬q¥Ø¼Ğ»ù¡G" + f"{target_p} ¤¸ (Àò§QªÅ¶¡¡G+{round(target_p - p_mid, 2)} ¤¸ / +{round((target_p - p_mid)/p_mid*100, 2)}%)\n"
+            "     - ¨¾¦u°±·l»ù¡G[AI¨Ì¾Ú§Ş³N¤ä¼µºâ¥X°±·l»ù¡A¦p XX.XX ¤¸] (¼ç¦b­·ÀI¡G-XX.XX ¤¸ / -XX.XX%)\n"
+            "     - ­·³ø¤ñ (R/R Ratio)¡G[AI­pºâ ¼ç¦bÀò§Q/¼ç¦b­·ÀI ¤ñ­È¡A¦p X.XX : 1] («ØÄ³°ª©ó 2.0:1 ¤è¥i«Ø¥ß³¡¦ì)\n"
+            "   * ºî¦X±ÀÂË¬Pµ¥¡G[¨Ò¦p¡G¡¹¡¹¡¹¡¹¡¸ (4/5¬P)]\n"
+            "3. ¡i·¥Â²¾Ş½L¹ê¾Ô«ü¤Ş¡j¡G¡]©ú½T±j½Õ¶i³õ¶R¶i°Ï¶¡¡Bªi¬q°±§Q½æ¥X¥Ø¼Ğ»ù¡Aªş¤W¡y¶}°ª > 2% Æ[±æ»P½L¤¤¹F¼Ğ§Y®É¸¨³U¡z¥mÀ{»P¡y¹w¦ôªi¬q«ù¦³¤Ñ¼Æ¡z¡^¡C\n"
         )
 
     prompt = (
-        "è«‹ä½œç‚ºé ‚ç´šè¯çˆ¾è¡—è³‡æ·± Top-Down (è‡ªä¸Šè€Œä¸‹) ç¸½ç¶“èˆ‡å°è‚¡æ“ç›¤æ‰‹åˆ†æå¸«ã€‚åŸºæº–æ—¥æœŸï¼š" + str(target_date_str) + "ã€‚\n"
-        "ã€åš´æ ¼å¯¦äº‹æ±‚æ˜¯éµå‰‡ã€‘ï¼šæ‰€æœ‰åˆ†æå¿…é ˆ 100% ä¾æ“šä»¥ä¸‹çµ¦å‡ºçš„ç³»çµ±çœŸå¯¦æ•¸æ“šèˆ‡å³æ™‚æƒ…å ±é€²è¡Œæ·±åº¦é‚è¼¯æ¨æ¼”ï¼Œåš´ç¦æ†‘ç©ºæé€ ä¸å­˜åœ¨çš„æ­·å²æ•¸å­—èˆ‡æ–°èï¼\n\n"
-        "åˆ†ææ¨™çš„ï¼š" + str(stock_input) + " (ä»£ç¢¼: " + str(stock_id) + ")ï¼Œ" + price_info_str + "ã€‚\n"
+        "½Ğ§@¬°³»¯ÅµØº¸µó¸ê²` Top-Down (¦Û¤W¦Ó¤U) Á`¸g»P¥xªÑ¾Ş½L¤â¤ÀªR®v¡C°ò·Ç¤é´Á¡G" + str(target_date_str) + "¡C\n"
+        "¡iÄY®æ¹ê¨Æ¨D¬OÅK«h¡j¡G©Ò¦³¤ÀªR¥²¶· 100% ¨Ì¾Ú¥H¤Uµ¹¥Xªº¨t²Î¯u¹ê¼Æ¾Ú»P§Y®É±¡³ø¶i¦æ²`«×ÅŞ¿è±Àºt¡AÄY¸T¾ÌªÅ®º³y¤£¦s¦bªº¾ú¥v¼Æ¦r»P·s»D¡I\n\n"
+        "¤ÀªR¼Ğªº¡G" + str(stock_input) + " (¥N½X: " + str(stock_id) + ")¡A" + price_info_str + "¡C\n"
         + position_context + "\n"
         + calc_price_str + "\n"
         + premarket_context + "\n"
-        "ã€ç•¶å‰å…¨çƒå®è§€æ•¸æ“šçœ‹æ¿ã€‘ï¼š\n" + str(macro_data) + "\n\n"
-        "ã€é–‹ç›¤èˆ‡åœåˆ©å¯¦æˆ°éµå‰‡ã€‘ï¼š\n"
-        "1. è‹¥ç•¶æ—¥é–‹ç›¤åƒ¹ä½æ–¼å‰æ—¥æ”¶ç›¤åƒ¹ï¼ˆè·³ç©ºä½é–‹ï¼‰ï¼Œä»£è¡¨ç›¤ä¸­å¼±å‹¢ï¼Œä¸€å¾‹è¦–ç‚ºä¸æ»¿è¶³é€²å ´æ¢ä»¶ï¼\n"
-        "2. è‹¥é–‹ç›¤è·³ç©ºé–‹é«˜ > +2.0%ï¼Œä»£è¡¨å¸‚å ´ç†±åº¦éé«˜ï¼Œåˆ‡å‹¿åœ¨é–‹ç›¤ç¬¬ä¸€æ™‚é–“è¿½é«˜ï¼Œæ‡‰ç­‰å¾…æ‹‰å›è‡³å»ºè­°å€é–“ä¸‹é™å†ä½ˆå±€ã€‚\n"
-        "3. ç›¤ä¸­è‹¥è¡é«˜è§¸åŠæˆ–è¶…è¶Šã€æ³¢æ®µåœåˆ©ç›®æ¨™åƒ¹ã€(" + str(target_p) + "å…ƒ)ï¼Œå¿…é ˆåŸ·è¡Œå‹•æ…‹åœåˆ©æˆ–è¨­å®šç§»å‹•åœåˆ©é–å®šç²åˆ©ï¼Œé˜²æ­¢è¡é«˜å›è½ã€‚\n"
-        "ã€é‡èƒ½ç­–ç•¥å®åš€ã€‘ï¼š\n" + vol_hint + "\n\n"
-        "ã€åŸºæœ¬é¢ä¼°å€¼èˆ‡åŒæ¥­ç«¶çˆ­è€…å°æ¯”ã€‘ï¼š\n"
-        f"- æœ¬ç›Šæ¯” (P/E): {val_metrics['pe']} | è‚¡æ·¨æ¯” (P/B): {val_metrics['pb']} | æœ€æ–°æ¯›åˆ©ç‡: {val_metrics['gross_margin']}\n"
+        "¡i·í«e¥ş²y§»Æ[¼Æ¾Ú¬İªO¡j¡G\n" + str(macro_data) + "\n\n"
+        "¡i¶}½L»P°±§Q¹ê¾ÔÅK«h¡j¡G\n"
+        "1. ­Y·í¤é¶}½L»ù§C©ó«e¤é¦¬½L»ù¡]¸õªÅ§C¶}¡^¡A¥Nªí½L¤¤®z¶Õ¡A¤@«ßµø¬°¤£º¡¨¬¶i³õ±ø¥ó¡I\n"
+        "2. ­Y¶}½L¸õªÅ¶}°ª > +2.0%¡A¥Nªí¥«³õ¼ö«×¹L°ª¡A¤Á¤Å¦b¶}½L²Ä¤@®É¶¡°l°ª¡AÀ³µ¥«İ©Ô¦^¦Ü«ØÄ³°Ï¶¡¤U­­¦A§G§½¡C\n"
+        "3. ½L¤¤­Y½Ä°ªÄ²¤Î©Î¶W¶V¡yªi¬q°±§Q¥Ø¼Ğ»ù¡z(" + str(target_p) + "¤¸)¡A¥²¶·°õ¦æ°ÊºA°±§Q©Î³]©w²¾°Ê°±§QÂê©wÀò§Q¡A¨¾¤î½Ä°ª¦^¸¨¡C\n"
+        "¡i¶q¯àµ¦²¤¥mÀ{¡j¡G\n" + vol_hint + "\n\n"
+        "¡i°ò¥»­±¦ô­È»P¦P·~Ävª§ªÌ¹ï¤ñ¡j¡G\n"
+        f"- ¥»¯q¤ñ (P/E): {val_metrics['pe']} | ªÑ²b¤ñ (P/B): {val_metrics['pb']} | ³Ì·s¤ò§Q²v: {val_metrics['gross_margin']}\n"
         f"- {peer_str}\n\n"
-        "ã€å¸‚å ´æœ€æ–°æ–°èè¼¿è«–èˆ‡ç²åˆ©é ä¼°ã€‘ï¼š\n" + news_titles + "\n\n"
-        "ã€åŸºæœ¬é¢æœ€æ–°ç‡Ÿæ”¶è¶¨å‹¢ (è½å¾ŒæŒ‡æ¨™)ã€‘ï¼š\n" + rev_str + "\n\n"
-        "ã€è¿‘æœŸä¸‰å¤§æ³•äººç±Œç¢¼ç´°ç¯€ (é ˜å…ˆ/åŒæ­¥æŒ‡æ¨™)ã€‘ï¼š\n" + chip_str + "\n\n"
-        "ã€æŠ€è¡“é¢é‡åƒ¹ã€é›™å‡ç·šèˆ‡é€²éšæŒ‡æ¨™æ•¸æ“šã€‘ï¼š\n"
+        "¡i¥«³õ³Ì·s·s»DÁÖ½×»PÀò§Q¹w¦ô¡j¡G\n" + news_titles + "\n\n"
+        "¡i°ò¥»­±³Ì·sÀç¦¬ÁÍ¶Õ (¸¨«á«ü¼Ğ)¡j¡G\n" + rev_str + "\n\n"
+        "¡iªñ´Á¤T¤jªk¤HÄw½X²Ó¸` (»â¥ı/¦P¨B«ü¼Ğ)¡j¡G\n" + chip_str + "\n\n"
+        "¡i§Ş³N­±¶q»ù¡BÂù§¡½u»P¶i¶¥«ü¼Ğ¼Æ¾Ú¡j¡G\n"
         "- " + kd_str + "\n"
         "- " + ma_str + "\n"
         "- " + vol_str + "\n"
         "- " + pattern_str + "\n"
-        "- é€²éšæŒ‡æ¨™ç¾æ³ï¼š" + adv_tech_str + "\n\n"
-        "è«‹è¼¸å‡ºç¹é«”ä¸­æ–‡è©³ç´°å ±å‘Šï¼Œä¸¦ã€åš´æ ¼éµå®ˆä»¥ä¸‹çµæ§‹èˆ‡é †åºã€‘ï¼š\n\n"
+        "- ¶i¶¥«ü¼Ğ²{ªp¡G" + adv_tech_str + "\n\n"
+        "½Ğ¿é¥XÁcÅé¤¤¤å¸Ô²Ó³ø§i¡A¨Ã¡iÄY®æ¿í¦u¥H¤Uµ²ºc»P¶¶§Ç¡j¡G\n\n"
         + mode_instruction + "\n"
-        "=== ç¬¬äºŒéƒ¨åˆ†ï¼šã€å…¨ç¶­åº¦è©³ç´°åˆ†æå ±å‘Šå…§æ–‡ã€‘ ===\n"
-        "1. å…¨çƒå®è§€èˆ‡ç§‘æŠ€å¤§å‹¢ï¼šè©³ç´°è§£æè²»åŠã€ç¾å‚µæ®–åˆ©ç‡ã€åŸæ²¹ã€VIXèˆ‡ç›¤å‰ç„¦é»æ–°èé€£å‹•ï¼Œä¸¦çµåˆç³»çµ±ã€Œå…¨çƒå®è§€æŒ‡æ¨™å¤šç©ºè¶¨å‹¢å°æ¯”åœ–ã€ï¼ˆè²»åŠ vs ç¾å‚µæ®–åˆ©ç‡x20 vs åŸæ²¹ï¼‰é€²è¡Œå¤šç©ºè³‡é‡‘æµå‘èˆ‡ Risk-On/Risk-Off ç‹€æ…‹çš„æ·±å±¤åœ–è¡¨è§£èªªã€‚\n"
-        "2. åŸºæœ¬é¢åƒ¹å€¼è©•ä¼°èˆ‡åŒæ¥­ä¼°å€¼æ¯”è¼ƒï¼šä¾æ“šæœ€æ–°æœ¬ç›Šæ¯”ã€è‚¡æ·¨æ¯”ã€æ¯›åˆ©ç‡èˆ‡åŒæ¥­ç«¶çˆ­è€…æ•¸æ“šï¼Œçµåˆè©²å€‹è‚¡èˆ‡æ‰€å±¬æ—ç¾¤è¿‘æœŸ 12 å°æ™‚å…§çš„é‡å¤§æ–°èèˆ‡ç”¢æ¥­æƒ…å ±é€²è¡Œåƒ¹å€¼è¨ºæ–·ã€‚\n"
-        "3. é‡å¤§æ–°èåŠè¼¿è«–ç¾æ³èˆ‡æ³•äººç²åˆ©é ä¼°èƒŒé›¢è¨ºæ–·ï¼šæª¢è¦– 24 å°æ™‚å…§ç™¼ç”Ÿçš„é‡å¤§æ–°èèˆ‡è¼¿è«–ç¾æ³ï¼Œè‹¥ 24 å°æ™‚å…§ç„¡é‡å¤§æ–°èï¼Œå¿…é ˆæ˜ç¢ºé¡¯ç¤ºã€Œç„¡é‡å¤§æ–°èã€ï¼›ä¸¦è¨ºæ–·æ˜¯å¦å­˜åœ¨ã€Œåˆ©å¤šä¸æ¼²ã€ã€ã€Œåˆ©ç©ºä¸è·Œã€æˆ–æ³•äººé ä¼°ç²åˆ©èˆ‡å¯¦éš›è‚¡åƒ¹èµ°å‹¢èƒŒé›¢ä¹‹æƒ…æ³ã€‚\n"
-        "4. ä¸‰å¤§æ³•äººç±Œç¢¼æµå‘èˆ‡åŸºæœ¬é¢æœˆç‡Ÿæ”¶é€£å‹•åˆ†æï¼šäº¤å‰æ¯”å°è¿‘æœŸå¤–è³‡ã€æŠ•ä¿¡ã€è‡ªç‡Ÿå•†è²·è³£è¶…å¼µæ•¸èˆ‡æœ€æ–°æœˆç‡Ÿæ”¶ MoM/YoY è¶¨å‹¢ï¼Œè¨ºæ–·ç±Œç¢¼æ˜¯æ³•äººé–ç¢¼æ‹‰æŠ¬é‚„æ˜¯é€¢é«˜å‡ºè²¨ã€‚\n"
-        "5. 5MA/20MAæœˆç·šå¤šé ­æ ¼å±€èˆ‡é‡åƒ¹é—œä¿‚è¨ºæ–·ï¼šçµåˆç•¶å‰æˆäº¤é‡æ”¾å¤§å€æ•¸èˆ‡ 20MA æœˆç·šä¹–é›¢ç‡ï¼Œæ·±åº¦å‰–æç•¶å‰é‡åƒ¹çµæ§‹ï¼ˆå¦‚å¸¶é‡æ”»æ“Šã€é‡ç¸®æ•´ç†æˆ–å›å¾Œè²·ä¸Šæ¼²ï¼‰ã€‚\n"
-        "6. å„é …é€²éšæŠ€è¡“æ€§æŒ‡æ¨™ç¶œåˆåœ–è¡¨è§£èªªï¼šä¾æ“šç³»çµ±ä¸‰å±¤åœ–è¡¨çš„å¯¦æˆ°åœ–è¡¨å‹æ…‹é€²è¡Œæ·±å±¤é‚è¼¯è¨ºæ–·ï¼š\n"
-        "   - å¸ƒæ—é€šé“ (20MA) ä½ç½®èˆ‡å‹æ…‹ï¼šå‰–æé€šé“æ˜¯ã€ä¸Šä¸‹è»Œç·Šå¯†ç¸®å£é†é‡€å¤§è¡Œæƒ…ã€ã€ã€é–‹å£çˆ†é‡æ“´å¼µå¼·å‹¢æ”»æ“Šã€é‚„æ˜¯ã€é›¢ä¸­è»Œéé æ­£ä¹–é›¢éå¤§ã€ã€‚\n"
-        "   - KD æŒ‡æ¨™ & RSI(14) äº¤å‰è½‰æŠ˜ä½éšï¼šè¨ºæ–·æ˜¯å¦å‡ºç¾ã€ä½æª”é»ƒé‡‘äº¤å‰ä¸Šæšã€ã€ã€ä¸­é«˜æª”é«˜æª”éˆåŒ–ã€æˆ–è¶…è²·/è¶…è³£åè½‰è¨Šè™Ÿï¼Œä¸¦è§£è®€å‹•èƒ½ç”±ç©ºè½‰å¤šçš„å¯¦æˆ°å«ç¾©ã€‚\n"
-        "   - MACD å‹•èƒ½æŸ±èˆ‡ DIF/MACD è»Œé“è®ŠåŒ–ï¼šå‰–æ MACD ç¶ è‰²æŸ±ç‹€é«”æ˜¯å¦ã€æ”¶ç¸®ç¸®çŸ­ï¼ˆç©ºé ­æ¸›å¼±ï¼‰ã€æˆ–è½‰ç‚ºã€ç´…æŸ±æ“´å¼µï¼ˆå¤šé ­æ”»æ“Šï¼‰ã€ï¼Œä»¥åŠå¿«æ…¢ç·šæ˜¯å¦åœ¨é›¶è»¸ä¹‹ä¸Šå¤šé ­é‹ä½œã€‚"
+        "=== ²Ä¤G³¡¤À¡G¡i¥şºû«×¸Ô²Ó¤ÀªR³ø§i¤º¤å¡j ===\n"
+        "1. ¥ş²y§»Æ[»P¬ì§Ş¤j¶Õ¡G¸Ô²Ó¸ÑªR¶O¥b¡B¬ü¶Å´Ş§Q²v¡B­ìªo¡BVIX»P½L«eµJÂI·s»D³s°Ê¡A¨Ãµ²¦X¨t²Î¡u¥ş²y§»Æ[«ü¼Ğ¦hªÅÁÍ¶Õ¹ï¤ñ¹Ï¡v¡]¶O¥b vs ¬ü¶Å´Ş§Q²vx20 vs ­ìªo¡^¶i¦æ¦hªÅ¸êª÷¬y¦V»P Risk-On/Risk-Off ª¬ºAªº²`¼h¹Ïªí¸Ñ»¡¡C\n"
+        "2. °ò¥»­±»ù­Èµû¦ô»P¦P·~¦ô­È¤ñ¸û¡G¨Ì¾Ú³Ì·s¥»¯q¤ñ¡BªÑ²b¤ñ¡B¤ò§Q²v»P¦P·~Ävª§ªÌ¼Æ¾Ú¡Aµ²¦X¸Ó­ÓªÑ»P©ÒÄİ±Ú¸sªñ´Á 12 ¤p®É¤ºªº­«¤j·s»D»P²£·~±¡³ø¶i¦æ»ù­È¶EÂ_¡C\n"
+        "3. ­«¤j·s»D¤ÎÁÖ½×²{ªp»Pªk¤HÀò§Q¹w¦ô­IÂ÷¶EÂ_¡GÀËµø 24 ¤p®É¤ºµo¥Íªº­«¤j·s»D»PÁÖ½×²{ªp¡A­Y 24 ¤p®É¤ºµL­«¤j·s»D¡A¥²¶·©ú½TÅã¥Ü¡uµL­«¤j·s»D¡v¡F¨Ã¶EÂ_¬O§_¦s¦b¡u§Q¦h¤£º¦¡v¡B¡u§QªÅ¤£¶^¡v©Îªk¤H¹w¦ôÀò§Q»P¹ê»ÚªÑ»ù¨«¶Õ­IÂ÷¤§±¡ªp¡C\n"
+        "4. ¤T¤jªk¤HÄw½X¬y¦V»P°ò¥»­±¤ëÀç¦¬³s°Ê¤ÀªR¡G¥æ¤e¤ñ¹ïªñ´Á¥~¸ê¡B§ë«H¡B¦ÛÀç°Ó¶R½æ¶W±i¼Æ»P³Ì·s¤ëÀç¦¬ MoM/YoY ÁÍ¶Õ¡A¶EÂ_Äw½X¬Oªk¤HÂê½X©Ô©ïÁÙ¬O³{°ª¥X³f¡C\n"
+        "5. 5MA/20MA¤ë½u¦hÀY®æ§½»P¶q»ùÃö«Y¶EÂ_¡Gµ²¦X·í«e¦¨¥æ¶q©ñ¤j­¿¼Æ»P 20MA ¤ë½u¨ÄÂ÷²v¡A²`«×­åªR·í«e¶q»ùµ²ºc¡]¦p±a¶q§ğÀ»¡B¶qÁY¾ã²z©Î¦^«á¶R¤Wº¦¡^¡C\n"
+        "6. ¦U¶µ¶i¶¥§Ş³N©Ê«ü¼Ğºî¦X¹Ïªí¸Ñ»¡¡G¨Ì¾Ú¨t²Î¤T¼h¹Ïªíªº¹ê¾Ô¹Ïªí«¬ºA¶i¦æ²`¼hÅŞ¿è¶EÂ_¡G\n"
+        "   - ¥¬ªL³q¹D (20MA) ¦ì¸m»P«¬ºA¡G­åªR³q¹D¬O¡y¤W¤U­yºò±KÁY¤fÁßÆC¤j¦æ±¡¡z¡B¡y¶}¤fÃz¶qÂX±i±j¶Õ§ğÀ»¡zÁÙ¬O¡yÂ÷¤¤­y¹L»·¥¿¨ÄÂ÷¹L¤j¡z¡C\n"
+        "   - KD «ü¼Ğ & RSI(14) ¥æ¤eÂà§é¦ì¶¥¡G¶EÂ_¬O§_¥X²{¡y§CÀÉ¶Àª÷¥æ¤e¤W´­¡z¡B¡y¤¤°ªÀÉ°ªÀÉ¶w¤Æ¡z©Î¶W¶R/¶W½æ¤ÏÂà°T¸¹¡A¨Ã¸ÑÅª°Ê¯à¥ÑªÅÂà¦hªº¹ê¾Ô§t¸q¡C\n"
+        "   - MACD °Ê¯à¬W»P DIF/MACD ­y¹DÅÜ¤Æ¡G­åªR MACD ºñ¦â¬Wª¬Åé¬O§_¡y¦¬ÁYÁYµu¡]ªÅÀY´î®z¡^¡z©ÎÂà¬°¡y¬õ¬WÂX±i¡]¦hÀY§ğÀ»¡^¡z¡A¥H¤Î§ÖºC½u¬O§_¦b¹s¶b¤§¤W¦hÀY¹B§@¡C"
     )
     return call_gemini_with_retry(prompt)
 
-# ä¸» UI é‚è¼¯
-st.title("ğŸ“ˆ AI å…¨çƒå®è§€èˆ‡å°è‚¡ Top-Down ç­–ç•¥åˆ†æç³»çµ±")
+# ¥D UI ÅŞ¿è
+st.title("?? AI ¥ş²y§»Æ[»P¥xªÑ Top-Down µ¦²¤¤ÀªR¨t²Î")
 
 taiwan_now = get_taiwan_now()
 target_date_str = taiwan_now.strftime("%Y-%m-%d")
@@ -974,8 +974,8 @@ display_date_str = taiwan_now.strftime("%Y / %m / %d")
 st.sidebar.markdown(
     f"""
     <div style="font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; line-height: 1.8;">
-        å¸‚å ´çœ‹æ¿åŸºæº–æ—¥æœŸ
-        <span style="font-size: 0.75rem; color: #a0a0a0; font-weight: normal; margin-left: 4px;">(è³‡æ–™ä¾†æº: Yahoo Finance)</span>
+        ¥«³õ¬İªO°ò·Ç¤é´Á
+        <span style="font-size: 0.75rem; color: #a0a0a0; font-weight: normal; margin-left: 4px;">(¸ê®Æ¨Ó·½: Yahoo Finance)</span>
         <span style="background-color: #262730; border: 1px solid #464b5d; border-radius: 4px; padding: 2px 8px; color: #ff4d4f; font-weight: bold; margin-left: 8px;">{display_date_str}</span>
     </div>
     """,
@@ -985,75 +985,75 @@ st.sidebar.markdown(
 macro_data = get_macro_data(target_date_str)
 sector_data = get_taiwan_sector_performance(target_date_str)
 
-st.sidebar.markdown(f"### ğŸ¯ ä»Šæ—¥ [{st.session_state.last_predict_time}] AI é ä¼°ä¸Šæ¼²ç‡æœ€é«˜å‰ä¸‰æª”")
+st.sidebar.markdown(f"### ?? ¤µ¤é [{st.session_state.last_predict_time}] AI ¹w¦ô¤Wº¦²v³Ì°ª«e¤TÀÉ")
 
-st.sidebar.markdown("**æŒ‡å®šç”¢æ¥­æ—ç¾¤æˆ–é¡Œæ (é¸å¡«)**")
-custom_sector = st.sidebar.text_input("è¼¸å…¥æ—ç¾¤æˆ–é¡Œæ", value="", placeholder="ä¾‹å¦‚: è¨˜æ†¶é«”ã€PCBã€åŠå°é«”...", label_visibility="collapsed")
+st.sidebar.markdown("**«ü©w²£·~±Ú¸s©ÎÃD§÷ (¿ï¶ñ)**")
+custom_sector = st.sidebar.text_input("¿é¤J±Ú¸s©ÎÃD§÷", value="", placeholder="¨Ò¦p: °O¾ĞÅé¡BPCB¡B¥b¾ÉÅé...", label_visibility="collapsed")
 
-st.sidebar.markdown("**è¨­å®šè‚¡åƒ¹å€é–“ (æ–°å°å¹£å…ƒ)**")
+st.sidebar.markdown("**³]©wªÑ»ù°Ï¶¡ (·s¥x¹ô¤¸)**")
 p_col1, p_col2 = st.sidebar.columns(2)
-with p_col1: min_price_input = st.number_input("æœ€ä½åƒ¹", min_value=0, value=None, placeholder="æœ€ä½é‡‘é¡", step=10, label_visibility="collapsed")
-with p_col2: max_price_input = st.number_input("æœ€é«˜åƒ¹", min_value=0, value=None, placeholder="æœ€é«˜é‡‘é¡", step=10, label_visibility="collapsed")
+with p_col1: min_price_input = st.number_input("³Ì§C»ù", min_value=0, value=None, placeholder="³Ì§Cª÷ÃB", step=10, label_visibility="collapsed")
+with p_col2: max_price_input = st.number_input("³Ì°ª»ù", min_value=0, value=None, placeholder="³Ì°ªª÷ÃB", step=10, label_visibility="collapsed")
 
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
-if st.sidebar.button("AI åŸ·è¡Œæœ€æ–°æƒ…å ±åˆ†æé æ¸¬ä¸Šæ¼²æ©Ÿç‡æœ€é«˜å‰ä¸‰æª”", type="primary", key="btn_combined_diagnose", use_container_width=True):
-    with st.spinner("ğŸ¤– ç¬¬ä¸€éšæ®µï¼šæ­£åœ¨æƒæç¾è‚¡ADRã€è²»åŠã€æ²¹åƒ¹èˆ‡æœ€æ–°ç”¢æ¥­æƒ…å ±..."):
+if st.sidebar.button("AI °õ¦æ³Ì·s±¡³ø¤ÀªR¹w´ú¤Wº¦¾÷²v³Ì°ª«e¤TÀÉ", type="primary", key="btn_combined_diagnose", use_container_width=True):
+    with st.spinner("?? ²Ä¤@¶¥¬q¡G¥¿¦b±½´y¬üªÑADR¡B¶O¥b¡Bªo»ù»P³Ì·s²£·~±¡³ø..."):
         try:
             p_data = diagnose_premarket_intelligence(macro_data, target_date_str)
             st.session_state.premarket_summary = p_data.get("summary", "")
             st.session_state.premarket_focus = p_data.get("focus_sectors", [])
             st.session_state.premarket_avoid = p_data.get("avoid_sectors", [])
         except Exception as e:
-            st.sidebar.error(f"æƒ…å ±è¨ºæ–·å¤±æ•—: {e}")
+            st.sidebar.error(f"±¡³ø¶EÂ_¥¢±Ñ: {e}")
             
-    with st.spinner("ğŸ¤– ç¬¬äºŒéšæ®µï¼šçµåˆæƒ…å ±èˆ‡ç¯©é¸æ¢ä»¶ï¼Œé€²è¡Œå…¨å¸‚å ´å¤šé ­å‹æ…‹åš´è¬¹é¸è‚¡..."):
+    with st.spinner("?? ²Ä¤G¶¥¬q¡Gµ²¦X±¡³ø»P¿z¿ï±ø¥ó¡A¶i¦æ¥ş¥«³õ¦hÀY«¬ºAÄYÂÔ¿ïªÑ..."):
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
             st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
-            st.sidebar.success("æœ€æ–°æƒ…å ±è¨ºæ–·æš¨å€‹è‚¡é æ¸¬é †åˆ©å®Œæˆï¼")
+            st.sidebar.success("³Ì·s±¡³ø¶EÂ_º[­ÓªÑ¹w´ú¶¶§Q§¹¦¨¡I")
             st.rerun()
         except Exception as e:
-            st.sidebar.error(f"å€‹è‚¡é æ¸¬å¤±æ•—: {e}")
+            st.sidebar.error(f"­ÓªÑ¹w´ú¥¢±Ñ: {e}")
 
-st.sidebar.info(f"ğŸ’¡ **æœ€æ–°æƒ…å ±æ‘˜è¦**ï¼š\n{st.session_state.premarket_summary}")
+st.sidebar.info(f"?? **³Ì·s±¡³øºK­n**¡G\n{st.session_state.premarket_summary}")
 
 st.sidebar.dataframe(st.session_state.daily_picks, hide_index=True, use_container_width=True)
 st.sidebar.divider()
 
-st.sidebar.markdown("### âš™ å€‹è‚¡è©³ç´°åˆ†æèˆ‡æŠ€è¡“æŒ‡æ¨™è¨­å®š")
+st.sidebar.markdown("### ? ­ÓªÑ¸Ô²Ó¤ÀªR»P§Ş³N«ü¼Ğ³]©w")
 
 raw_stock_input = st.sidebar.text_input(
-    "è¼¸å…¥å°è‚¡ä»£ç¢¼æˆ–è‚¡å", 
+    "¿é¤J¥xªÑ¥N½X©ÎªÑ¦W", 
     value="", 
-    placeholder="ä¾‹å¦‚: 2330 æˆ– é´»æµ·",
-    help="å¦‚åªçœ‹ä¸‰å¤§æ³•äººç±Œç¢¼èˆ‡é€²éšæŠ€è¡“æŒ‡æ¨™çœ‹æ¿ï¼Œè¼¸å…¥è‚¡è™Ÿæˆ–è‚¡åå¾Œç›´æ¥æŒ‰ Enter"
+    placeholder="¨Ò¦p: 2330 ©Î ÂE®ü",
+    help="¦p¥u¬İ¤T¤jªk¤HÄw½X»P¶i¶¥§Ş³N«ü¼Ğ¬İªO¡A¿é¤JªÑ¸¹©ÎªÑ¦W«áª½±µ«ö Enter"
 )
-st.sidebar.caption("(å¦‚åªçœ‹ä¸‰å¤§æ³•äººç±Œç¢¼èˆ‡é€²éšæŠ€è¡“æŒ‡æ¨™çœ‹æ¿ï¼Œè¼¸å…¥è‚¡è™Ÿæˆ–è‚¡åå¾Œç›´æ¥æŒ‰ Enter)")
+st.sidebar.caption("(¦p¥u¬İ¤T¤jªk¤HÄw½X»P¶i¶¥§Ş³N«ü¼Ğ¬İªO¡A¿é¤JªÑ¸¹©ÎªÑ¦W«áª½±µ«ö Enter)")
 
 stock_id = parse_stock_input(raw_stock_input)
 display_title = get_stock_display_name(raw_stock_input, stock_id)
 
-period_type = st.sidebar.radio("æŠ€è¡“æŒ‡æ¨™é€±æœŸé¸æ“‡", ["æ—¥ç·š", "é€±ç·š"], horizontal=True)
+period_type = st.sidebar.radio("§Ş³N«ü¼Ğ¶g´Á¿ï¾Ü", ["¤é½u", "¶g½u"], horizontal=True)
 
-capital_mode = st.sidebar.radio("æŒæœ‰ç‹€æ…‹", ["æº–å‚™è²·é€²", "æ—¢æœ‰æŒè‚¡ (å·²å¥—ç‰¢/æŒæœ‰ä¸­)"], horizontal=True)
+capital_mode = st.sidebar.radio("«ù¦³ª¬ºA", ["¥ş·s§G§½ (·Ç³Æ«Ø¥ß³¡¦ì)", "¬J¦³«ùªÑ³B¸m (¤w®M¨c/«ù¦³¤¤)"], horizontal=False)
 
-if capital_mode == "æ—¢æœ‰æŒè‚¡ (å·²å¥—ç‰¢/æŒæœ‰ä¸­)":
-    capital_label = "ç•¶åˆè²·é€²æˆæœ¬åƒ¹ (æ¯è‚¡å¹¾å…ƒ)"
-    capital_placeholder = "ä¾‹å¦‚: 525 (æ¯è‚¡æˆæœ¬)"
+if capital_mode == "¬J¦³«ùªÑ³B¸m (¤w®M¨c/«ù¦³¤¤)":
+    capital_label = "·íªì¶R¶i¦¨¥»»ù (¨CªÑ´X¤¸)"
+    capital_placeholder = "¨Ò¦p: 525 (¨CªÑ¦¨¥»)"
 else:
-    capital_label = "é è¨ˆé€²å ´é‡‘é¡ (æ–°å°å¹£å…ƒ)"
-    capital_placeholder = "ä¾‹å¦‚: 100000 (ç¸½é ç®—)"
+    capital_label = "¹w­p¶i³õª÷ÃB (·s¥x¹ô¤¸)"
+    capital_placeholder = "¨Ò¦p: 100000 (Á`¹wºâ)"
 
 capital_input = st.sidebar.number_input(capital_label, min_value=0, value=None, placeholder=capital_placeholder, step=100)
 price_or_capital = capital_input if capital_input is not None else 0
 
-btn_analyze_stock = st.sidebar.button("ğŸ“Š é–‹å§‹ AI å€‹è‚¡åˆ†æ", type="primary", use_container_width=True)
+btn_analyze_stock = st.sidebar.button("?? ¶}©l AI ­ÓªÑ¤ÀªR", type="primary", use_container_width=True)
 
-# ä¸»ç•«é¢çœ‹æ¿
-st.subheader(f"ğŸŒ å…¨çƒå®è§€èˆ‡é¢¨éšªé¿éšªæŒ‡æ¨™çœ‹æ¿ ({target_date_str})")
+# ¥Dµe­±¬İªO
+st.subheader(f"?? ¥ş²y§»Æ[»P­·ÀIÁ×ÀI«ü¼Ğ¬İªO ({target_date_str})")
 cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
 for name, info in macro_data.items():
@@ -1063,8 +1063,8 @@ for name, info in macro_data.items():
 
 st.divider()
 
-# çœ‹æ¿æ¨™é¡Œ
-st.subheader(f"ğŸ” å€‹è‚¡ ({display_title}) ä¸‰å¤§æ³•äººç±Œç¢¼èˆ‡é€²éšæŠ€è¡“æŒ‡æ¨™ç¶œåˆåˆ†æçœ‹æ¿")
+# ¬İªO¼ĞÃD
+st.subheader(f"?? ­ÓªÑ ({display_title}) ¤T¤jªk¤HÄw½X»P¶i¶¥§Ş³N«ü¼Ğºî¦X¤ÀªR¬İªO")
 
 if stock_id and str(stock_id).strip() != "":
     chip_df = get_stock_chip(stock_id, target_date_str)
@@ -1072,25 +1072,25 @@ if stock_id and str(stock_id).strip() != "":
     
     if isinstance(kd_info, dict):
         c1, c2, c3, c4, c5 = st.columns([1, 1, 1.2, 1.2, 2.0])
-        c1.metric(f"{period_type} K / D å€¼", f"{kd_info['K']} / {kd_info['D']}")
-        c2.metric("RSI (14æ—¥)", kd_info.get('RSI', 'N/A'))
-        c3.metric("5æ—¥å‡ç·š (5MA)", kd_info['5MA'])
-        c4.metric("20æ—¥ç·š (æœˆç·š)", kd_info['20MA'], delta=f"{kd_info['bias_20ma']:+}%\n(ä¹–é›¢)")
-        c5.metric("KD & å‡ç·šå‹æ…‹", kd_info['signal'])
+        c1.metric(f"{period_type} K / D ­È", f"{kd_info['K']} / {kd_info['D']}")
+        c2.metric("RSI (14¤é)", kd_info.get('RSI', 'N/A'))
+        c3.metric("5¤é§¡½u (5MA)", kd_info['5MA'])
+        c4.metric("20¤é½u (¤ë½u)", kd_info['20MA'], delta=f"{kd_info['bias_20ma']:+}%\n(¨ÄÂ÷)")
+        c5.metric("KD & §¡½u«¬ºA", kd_info['signal'])
         
     tab_chip, tab_kd, tab_macro_chart = st.tabs([
-        "ğŸ“Š ä¸‰å¤§æ³•äººç±Œç¢¼ (å¼µ)", 
-        "ğŸ“ˆ é€²éšæŠ€è¡“æŒ‡æ¨™", 
-        "ğŸŒ å…¨çƒå®è§€æŒ‡æ¨™å¤šç©ºè¶¨å‹¢å°æ¯”åœ–"
+        "?? ¤T¤jªk¤HÄw½X (±i)", 
+        "?? ¶i¶¥§Ş³N«ü¼Ğ", 
+        "?? ¥ş²y§»Æ[«ü¼Ğ¦hªÅÁÍ¶Õ¹ï¤ñ¹Ï"
     ])
     
     with tab_chip:
         if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
             st.dataframe(chip_df, hide_index=True, use_container_width=True)
-            st.caption("ğŸ’¡ è³‡æ–™ä¾†æºï¼šå¯Œé‚¦ç¶œåˆè­‰åˆ¸ / å˜‰å¯¦è³‡è¨Š (SysJust) å®˜æ–¹ç›¤å¾ŒçœŸå¯¦è²·è³£è¶…çµ±è¨ˆï¼ˆå–®ä½ï¼šå¼µï¼‰ã€‚")
+            st.caption("?? ¸ê®Æ¨Ó·½¡G´I¨¹ºî¦XÃÒ¨é / ¹Å¹ê¸ê°T (SysJust) ©x¤è½L«á¯u¹ê¶R½æ¶W²Î­p¡]³æ¦ì¡G±i¡^¡C")
         else:
-            st.warning("ç±Œç¢¼è³‡æ–™æ›´æ–°ä¸­æˆ–ç¶²è·¯é€£ç·šå¿™ç¢Œï¼Œè«‹é»æ“Šä¸‹æ–¹æŒ‰éˆ•é‡æ–°åˆ·å–ã€‚")
-            if st.button("ğŸ”„ é‡æ–°è¼‰å…¥ç±Œç¢¼è³‡æ–™"):
+            st.warning("Äw½X¸ê®Æ§ó·s¤¤©Îºô¸ô³s½u¦£¸L¡A½ĞÂIÀ»¤U¤è«ö¶s­«·s¨ê¨ú¡C")
+            if st.button("?? ­«·s¸ü¤JÄw½X¸ê®Æ"):
                 st.cache_data.clear()
                 st.rerun()
             
@@ -1101,27 +1101,27 @@ if stock_id and str(stock_id).strip() != "":
                 shared_xaxes=True, 
                 vertical_spacing=0.09,
                 row_heights=[0.5, 0.25, 0.25],
-                subplot_titles=("æ”¶ç›¤åƒ¹èˆ‡å¸ƒæ—é€šé“ (20MA)", "KD æŒ‡æ¨™ & RSI (14)", "MACD å‹•èƒ½æŸ±èˆ‡ DIF/MACD è»Œé“")
+                subplot_titles=("¦¬½L»ù»P¥¬ªL³q¹D (20MA)", "KD «ü¼Ğ & RSI (14)", "MACD °Ê¯à¬W»P DIF/MACD ­y¹D")
             )
             
-            # 1. å¸ƒæ—é€šé“
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['Close'], mode='lines', name='æ”¶ç›¤åƒ¹', line=dict(color='#ffffff', width=2)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Upper'], mode='lines', name='å¸ƒæ—ä¸Šè»Œ', line=dict(color='#ff7875', width=1, dash='dash')), row=1, col=1)
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['20MA'], mode='lines', name='å¸ƒæ—ä¸­è»Œ', line=dict(color='#ffc069', width=1.5)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Lower'], mode='lines', name='å¸ƒæ—ä¸‹è»Œ', line=dict(color='#95de64', width=1, dash='dash')), row=1, col=1)
+            # 1. ¥¬ªL³q¹D
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['Close'], mode='lines', name='¦¬½L»ù', line=dict(color='#ffffff', width=2)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Upper'], mode='lines', name='¥¬ªL¤W­y', line=dict(color='#ff7875', width=1, dash='dash')), row=1, col=1)
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['20MA'], mode='lines', name='¥¬ªL¤¤­y', line=dict(color='#ffc069', width=1.5)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Lower'], mode='lines', name='¥¬ªL¤U­y', line=dict(color='#95de64', width=1, dash='dash')), row=1, col=1)
 
-            # 2. KD èˆ‡ RSI
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['K'], mode='lines', name='K å€¼', line=dict(color='#ff4d4f', width=1.5)), row=2, col=1)
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['D'], mode='lines', name='D å€¼', line=dict(color='#1890ff', width=1.5)), row=2, col=1)
+            # 2. KD »P RSI
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['K'], mode='lines', name='K ­È', line=dict(color='#ff4d4f', width=1.5)), row=2, col=1)
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['D'], mode='lines', name='D ­È', line=dict(color='#1890ff', width=1.5)), row=2, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['RSI'], mode='lines', name='RSI', line=dict(color='#b37feb', width=1.5, dash='dot')), row=2, col=1)
             fig.add_hline(y=80, line_dash="dash", line_color="gray", row=2, col=1)
             fig.add_hline(y=20, line_dash="dash", line_color="gray", row=2, col=1)
 
             # 3. MACD
             colors_macd = ['#ff4d4f' if val >= 0 else '#52c41a' for val in kd_df['MACD_Hist']]
-            fig.add_trace(go.Bar(x=kd_df.index, y=kd_df['MACD_Hist'], name='MACD æŸ±ç‹€', marker_color=colors_macd), row=3, col=1)
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['DIF'], mode='lines', name='DIF (å¿«ç·š)', line=dict(color='#faad14', width=1)), row=3, col=1)
-            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['MACD_Signal'], mode='lines', name='MACD (æ…¢ç·š)', line=dict(color='#13c2c2', width=1)), row=3, col=1)
+            fig.add_trace(go.Bar(x=kd_df.index, y=kd_df['MACD_Hist'], name='MACD ¬Wª¬', marker_color=colors_macd), row=3, col=1)
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['DIF'], mode='lines', name='DIF (§Ö½u)', line=dict(color='#faad14', width=1)), row=3, col=1)
+            fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['MACD_Signal'], mode='lines', name='MACD (ºC½u)', line=dict(color='#13c2c2', width=1)), row=3, col=1)
 
             fig.update_layout(
                 height=600, 
@@ -1135,28 +1135,28 @@ if stock_id and str(stock_id).strip() != "":
 
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("ç„¡æ³•è¨ˆç®—æŠ€è¡“æŒ‡æ¨™æ•¸æ“šã€‚")
+            st.info("µLªk­pºâ§Ş³N«ü¼Ğ¼Æ¾Ú¡C")
 
     with tab_macro_chart:
         macro_hist = get_macro_history_trends()
         
         fig_macro = make_subplots(specs=[[{"secondary_y": True}]])
         
-        if "è²»åŸåŠå°é«”" in macro_hist.columns:
+        if "¶O«°¥b¾ÉÅé" in macro_hist.columns:
             fig_macro.add_trace(
-                go.Scatter(x=macro_hist.index, y=macro_hist["è²»åŸåŠå°é«”"], name="è²»åŸåŠå°é«” (SOX)", line=dict(color="#ff4d4f", width=2.5)),
+                go.Scatter(x=macro_hist.index, y=macro_hist["¶O«°¥b¾ÉÅé"], name="¶O«°¥b¾ÉÅé (SOX)", line=dict(color="#ff4d4f", width=2.5)),
                 secondary_y=False
             )
         
-        if "ç¾10å¹´å‚µæ®–åˆ©ç‡(20å€)" in macro_hist.columns:
+        if "¬ü10¦~¶Å´Ş§Q²v(20­¿)" in macro_hist.columns:
             fig_macro.add_trace(
-                go.Scatter(x=macro_hist.index, y=macro_hist["ç¾10å¹´å‚µæ®–åˆ©ç‡(20å€)"], name="ç¾10å¹´å‚µæ®–åˆ©ç‡ (x20)", line=dict(color="#1890ff", width=2.5)),
+                go.Scatter(x=macro_hist.index, y=macro_hist["¬ü10¦~¶Å´Ş§Q²v(20­¿)"], name="¬ü10¦~¶Å´Ş§Q²v (x20)", line=dict(color="#1890ff", width=2.5)),
                 secondary_y=True
             )
             
-        if "WTI åœ‹éš›åŸæ²¹" in macro_hist.columns:
+        if "WTI °ê»Ú­ìªo" in macro_hist.columns:
             fig_macro.add_trace(
-                go.Scatter(x=macro_hist.index, y=macro_hist["WTI åœ‹éš›åŸæ²¹"], name="WTI åŸæ²¹ (ç¾å…ƒ)", line=dict(color="#faad14", width=2)),
+                go.Scatter(x=macro_hist.index, y=macro_hist["WTI °ê»Ú­ìªo"], name="WTI ­ìªo (¬ü¤¸)", line=dict(color="#faad14", width=2)),
                 secondary_y=True
             )
 
@@ -1165,31 +1165,31 @@ if stock_id and str(stock_id).strip() != "":
             margin=dict(l=10, r=10, t=20, b=40),
             legend=dict(orientation="h", y=-0.2, x=0.1)
         )
-        fig_macro.update_yaxes(title_text="è²»åŸåŠå°é«”æŒ‡æ•¸", secondary_y=False)
-        fig_macro.update_yaxes(title_text="ç¾å‚µæ®–åˆ©ç‡(x20) / åŸæ²¹(ç¾å…ƒ)", secondary_y=True)
+        fig_macro.update_yaxes(title_text="¶O«°¥b¾ÉÅé«ü¼Æ", secondary_y=False)
+        fig_macro.update_yaxes(title_text="¬ü¶Å´Ş§Q²v(x20) / ­ìªo(¬ü¤¸)", secondary_y=True)
         
         st.plotly_chart(fig_macro, use_container_width=True)
-        st.caption("ğŸ’¡ **è§€å¯ŸæŒ‡å¼•**ï¼šç•¶ã€è²»åŠï¼ˆç´…ç·šï¼‰ã€å‘ä¸Šã€ã€ç¾å‚µæ®–åˆ©ç‡ï¼ˆè—ç·šï¼‰ã€&ã€åŸæ²¹ï¼ˆé»ƒç·šï¼‰ã€è¶¨å‹¢å‘ä¸‹ï¼Œä¸‰å¤§æŒ‡æ¨™åŒæ™‚æˆç«‹æ™‚ï¼Œç‚ºå…¨çƒè³‡é‡‘ Risk-On åå¤šè¶¨å‹¢ï¼Œè³‡é‡‘ã€Šæ¥µå¤§æ©Ÿç‡ã€‹æœƒå¤§è¦æ¨¡åŒ¯å…¥å…¨çƒè‚¡ç¥¨å¸‚å ´ï¼Œç‰¹åˆ¥æ˜¯ç§‘æŠ€æ¯”é‡é«˜çš„ç¾è‚¡èˆ‡å°è‚¡ï¼")
+        st.caption("?? **Æ[¹î«ü¤Ş**¡G·í¡y¶O¥b¡]¬õ½u¡^¡z¦V¤W¡B¡y¬ü¶Å´Ş§Q²v¡]ÂÅ½u¡^¡z&¡y­ìªo¡]¶À½u¡^¡zÁÍ¶Õ¦V¤U¡A¤T¤j«ü¼Ğ¦P®É¦¨¥ß®É¡A¬°¥ş²y¸êª÷ Risk-On °¾¦hÁÍ¶Õ¡A¸êª÷¡m·¥¤j¾÷²v¡n·|¤j³W¼Ò¶×¤J¥ş²yªÑ²¼¥«³õ¡A¯S§O¬O¬ì§Ş¤ñ­«°ªªº¬üªÑ»P¥xªÑ¡I")
 
 else:
-    st.info("è«‹æ–¼å·¦å´è¼¸å…¥å°è‚¡ä»£ç¢¼æˆ–è‚¡åå¾Œæª¢è¦–ç±Œç¢¼èˆ‡é€²éšæŠ€è¡“æŒ‡æ¨™çœ‹æ¿")
+    st.info("½Ğ©ó¥ª°¼¿é¤J¥xªÑ¥N½X©ÎªÑ¦W«áÀËµøÄw½X»P¶i¶¥§Ş³N«ü¼Ğ¬İªO")
 
 st.divider()
 
 if btn_analyze_stock:
     if not raw_stock_input or str(raw_stock_input).strip() == "":
-        st.warning("è«‹å…ˆåœ¨å·¦å´æ¬„ä½è¼¸å…¥å°è‚¡ä»£ç¢¼æˆ–è‚¡åï¼")
+        st.warning("½Ğ¥ı¦b¥ª°¼Äæ¦ì¿é¤J¥xªÑ¥N½X©ÎªÑ¦W¡I")
     else:
         chip_df = get_stock_chip(stock_id, target_date_str)
         _, kd_info = calculate_kd(stock_id, period_type=period_type)
-        with st.spinner(f"ğŸ¤– AI çµåˆæœ€æ–°æƒ…å ±æª¢æã€æ—¢æœ‰æŒè‚¡è™•ç½®/é¢¨å ±æ¯”è©¦ç®—ã€‘èˆ‡ã€é‡èƒ½ä½éšã€‘..."):
+        with st.spinner(f"?? AI µ²¦X³Ì·s±¡³øÀËªR¡i¬J¦³«ùªÑ³B¸m/­·³ø¤ñ¸Õºâ¡j»P¡i¶q¯à¦ì¶¥¡j..."):
             try:
                 report = ai_single_stock_analysis(
                     macro_data, sector_data, raw_stock_input, 
                     chip_data=chip_df, kd_info=kd_info, period_type=period_type, 
                     capital_mode=capital_mode, price_or_capital=price_or_capital, target_date_str=target_date_str
                 )
-                st.subheader(f"ğŸ¤– Gemini AI å…¨ç¶­åº¦è©³ç´°åˆ†æå ±å‘Š ({display_title})")
+                st.subheader(f"?? Gemini AI ¥şºû«×¸Ô²Ó¤ÀªR³ø§i ({display_title})")
                 st.markdown(report)
             except Exception as e:
-                st.error(f"åˆ†æç”Ÿæˆå¤±æ•—: {e}")
+                st.error(f"¤ÀªR¥Í¦¨¥¢±Ñ: {e}")
