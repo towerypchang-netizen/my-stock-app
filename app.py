@@ -36,7 +36,6 @@ def check_password():
             user_password = st.text_input("請輸入存取密碼 (B組)：", type="password")
             
             if st.button("確認登入", type="primary", use_container_width=True):
-                # 先宣告預設清單變數，避免 .get() 傳入多餘參數造成 TypeError
                 default_emails = [
                     "tower.yp.chang@gmail.com", 
                     "sherryhsu6155@gmail.com", 
@@ -45,18 +44,14 @@ def check_password():
                 ]
                 default_passwords = ["615588", "085978"]
                 
-                # 取得 Secrets 中設定的多組 A 組與 B 組清單
                 allowed_emails = st.secrets.get("ALLOWED_EMAILS", default_emails)
                 allowed_passwords = st.secrets.get("ALLOWED_PASSWORDS", default_passwords)
                 
-                # 清除前後空格並轉小寫比對
                 clean_email = user_email.strip().lower()
                 clean_password = user_password.strip()
                 
-                # 轉為小寫的授權 Email 清單
                 allowed_emails_clean = [e.strip().lower() for e in allowed_emails]
                 
-                # 雙重條件比對：Email 必須在 A 組，且 密碼必須在 B 組
                 if clean_email in allowed_emails_clean and clean_password in allowed_passwords:
                     st.session_state.authenticated = True
                     st.success("雙重驗證成功，正在進入系統...")
@@ -175,7 +170,7 @@ STOCK_NAME_TO_ID = {
     "欣興": "3037", "健鼎": "3044", "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958",
     "臻鼎KY": "4958", "聯茂": "6213", "金像電": "2368", "台光電": "2383", "華通": "2313",
     "群創": "3481", "友達": "2409", "力積電": "6770", "威盛": "2388", "宏碁": "2353",
-    "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260", "萬潤": "6187", "辛耘": "3583", "泰碩": "3338"
+    "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260", "萬潤": "6187", "辛耘": "3583", "泰碩": "3338", "金居": "8358"
 }
 
 STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
@@ -185,7 +180,7 @@ LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "289
 PEER_GROUPS = {
     "CPO/光通訊/矽光子": ["6442", "3081", "4979", "3163"],
     "液冷/散熱模組": ["3324", "8996", "3017", "2308", "3013", "3338"],
-    "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313"],
+    "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313", "8358"],
     "晶圓代工/半導體/設備": ["2330", "2303", "6770", "3711", "2449", "2467", "2404", "6187", "3583"],
     "IC 設計/ASIC": ["2454", "3034", "3661", "5269", "3443", "6643", "2388", "3035"],
     "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356", "2421"],
@@ -265,6 +260,47 @@ if "daily_picks" not in st.session_state:
 
 if "last_predict_time" not in st.session_state:
     st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
+
+# ==============================================================================
+# 🛡️ 風護模組：證交所/櫃買中心「注意股/處置股」警示 API 檢測
+# ==============================================================================
+@st.cache_data(ttl=1800)
+def check_stock_warning_status(stock_id):
+    """即時查驗證交所與櫃買中心公布之注意與處置股票公告"""
+    clean_id = parse_stock_input(stock_id)
+    if not clean_id:
+        return {"status": "NORMAL", "msg": ""}
+
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    
+    # 1. 查驗櫃買中心 (TPEx) 處置/注意股票 API
+    try:
+        url_tpex = "https://www.tpex.org.tw/web/stock/margin_trading/warning/wrt_result.php?l=zh-tw&o=json"
+        resp = requests.get(url_tpex, headers=headers, timeout=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            for row in data.get('aaData', []):
+                if len(row) >= 2 and str(clean_id) in str(row[0]):
+                    note = str(row)
+                    if "處置" in note:
+                        return {"status": "DISPOSITION", "msg": "🚨 本檔被列為【處置股票】(分盤撮合/預先收足款券)，流動性嚴重受限！"}
+                    return {"status": "ATTENTION", "msg": "⚠️ 本檔被列為【注意股票】(短線振幅過大或週轉率過高)，籌碼波動極劇烈！"}
+    except Exception:
+        pass
+
+    # 2. 查驗證交所 (TWSE) 公告 API
+    try:
+        url_twse = "https://www.twse.com.tw/rwd/zh/announcement/notice?response=json"
+        resp = requests.get(url_twse, headers=headers, timeout=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            for row in data.get('data', []):
+                if len(row) >= 2 and str(clean_id) in str(row[1]):
+                    return {"status": "ATTENTION", "msg": "⚠️ 本檔被列為【注意股票】(短線振幅過大或週轉率過高)，籌碼波動極劇烈！"}
+    except Exception:
+        pass
+
+    return {"status": "NORMAL", "msg": ""}
 
 def call_gemini_with_retry(prompt, max_retries=2):
     if not GEMINI_API_KEY:
@@ -417,6 +453,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
 
         df['5MA'] = df['Close'].rolling(window=5).mean().round(2).fillna(df['Close'])
         df['20MA'] = df['Close'].rolling(window=20).mean().round(2).fillna(df['Close'])
+        df['60MA'] = df['Close'].rolling(window=60).mean().round(2).fillna(df['20MA'])
         
         std_20 = df['Close'].rolling(window=20).std().fillna(0)
         df['BB_Upper'] = (df['20MA'] + (std_20 * 2)).round(2)
@@ -461,12 +498,14 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         latest_close = round(df['Close'].iloc[-1], 2)
         latest_5ma = round(df['5MA'].iloc[-1], 2) if not pd.isna(df['5MA'].iloc[-1]) else latest_close
         latest_20ma = round(df['20MA'].iloc[-1], 2) if not pd.isna(df['20MA'].iloc[-1]) else latest_close
+        latest_60ma = round(df['60MA'].iloc[-1], 2) if not pd.isna(df['60MA'].iloc[-1]) else latest_20ma
         latest_k = round(df['K'].iloc[-1], 2)
         latest_d = round(df['D'].iloc[-1], 2)
         prev_k = df['K'].iloc[-2] if len(df) >= 2 else latest_k
         prev_d = df['D'].iloc[-2] if len(df) >= 2 else latest_d
 
         bias_20ma = round(((latest_close - latest_20ma) / (latest_20ma if latest_20ma != 0 else 1)) * 100, 2)
+        bias_60ma = round(((latest_close - latest_60ma) / (latest_60ma if latest_60ma != 0 else 1)) * 100, 2)
 
         recent_closes = df['Close'].tail(5).tolist()
         has_pullback = any(recent_closes[i] < recent_closes[i-1] for i in range(1, len(recent_closes)-1)) if len(recent_closes) >= 3 else False
@@ -490,7 +529,8 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
 
         return df.tail(40), {
             "K": latest_k, "D": latest_d, "signal": signal,
-            "5MA": latest_5ma, "20MA": latest_20ma, "bias_20ma": bias_20ma,
+            "5MA": latest_5ma, "20MA": latest_20ma, "60MA": latest_60ma, 
+            "bias_20ma": bias_20ma, "bias_60ma": bias_60ma,
             "vol_ratio": vol_ratio, "vol_signal_str": vol_signal_str,
             "is_big_black_k": is_big_black_k,
             "Close": latest_close,
@@ -618,7 +658,6 @@ def get_stock_chip(stock_id, target_date_str):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
 
-    # 1. 第一優先：富邦證券盤後籌碼 (明確指定 Big5 編碼防止 UTF-8 解碼失敗)
     try:
         url = f"https://fubon-ebrokerdj.fbs.com.tw/z/zc/zcl/zcl.djhtm?a={clean_stock_id}&b=3"
         resp = requests.get(url, headers=headers, timeout=5)
@@ -667,7 +706,6 @@ def get_stock_chip(stock_id, target_date_str):
     except Exception:
         pass
 
-    # 2. 備用方案：FinMind API 籌碼
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
@@ -763,7 +801,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     else:
         sector_limit_str = "【指定產業限制】：無限制（授權 AI 對全台股進行全維度分析，自主挑選全市場多頭型態最強之熱門主流標的）"
 
-    # 動態建構大師診斷模組條件指令
     master_prompt_str = ""
     if selected_masters:
         master_rules = []
@@ -809,17 +846,40 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         
         valid, real_p = is_valid_stock_fast(stock_id, min_price, max_price)
         if valid and real_p:
-            p_low = round(real_p * 0.985, 1)
-            p_high = round(real_p * 1.005, 1)
-            target_p = round(real_p * 1.08, 1)
+            # 🛡️ 風護模組 1：注意股 / 處置股判定降權
+            warn_info = check_stock_warning_status(stock_id)
+            raw_pct_str = item.get("上漲率", item.get("預估上漲率", "78%"))
+            raw_pct = float(re.sub(r'[^\d.]', '', raw_pct_str) or 78.0)
             
+            if warn_info["status"] == "DISPOSITION":
+                raw_pct -= 12.0
+            elif warn_info["status"] == "ATTENTION":
+                raw_pct -= 6.0
+            
+            raw_pct = max(60.0, min(88.0, raw_pct))
+            item["上漲率"] = f"{raw_pct:.0f}%"
+
+            # 🛡️ 風護模組 2：20MA / 60MA 均線正乖離率 (Bias) 過熱降溫與進場價修正
+            _, kd_info = calculate_kd(stock_id, period_type="日線")
+            bias_20 = kd_info.get("bias_20ma", 0.0) if isinstance(kd_info, dict) else 0.0
+            bias_60 = kd_info.get("bias_60ma", 0.0) if isinstance(kd_info, dict) else 0.0
+            ma20_val = kd_info.get("20MA", real_p) if isinstance(kd_info, dict) else real_p
+
+            if bias_20 > 15.0 or bias_60 > 15.0:
+                p_low = round(ma20_val * 0.99, 1)
+                p_high = round(ma20_val * 1.02, 1)
+                item["波段停利/防護提示"] = f"🔥過熱! 修正至20MA({p_low}-{p_high})逢低接"
+            else:
+                p_low = round(real_p * 0.985, 1)
+                p_high = round(real_p * 1.005, 1)
+                target_p = round(real_p * 1.08, 1)
+                item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即落袋)"
+
             raw_sector = str(item.get("族群", "主流題材")).strip()
             item["族群"] = raw_sector[:6]
             
-            item["上漲率"] = item.get("上漲率", item.get("預估上漲率", "78%"))
             item["當前實價"] = f"{real_p:.2f}"
             item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
-            item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即落袋)"
             
             tw_name = get_twse_stock_name(stock_id) or STOCK_ID_TO_NAME.get(stock_id, item.get("股名"))
             item["股名"] = tw_name
@@ -871,6 +931,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     news_titles = get_stock_news(stock_id)
     val_metrics = get_stock_valuation_metrics(stock_id)
     peer_str = get_peer_comparison(stock_id)
+    warn_info = check_stock_warning_status(stock_id)
     
     is_large_cap = stock_id in LARGE_CAP_STOCKS
     cap_type_str = "【屬性】：千億大型權值指標股 (波段多為階梯式震盪墊高，切勿追高)" if is_large_cap else "【屬性】：中小型波段攻擊股"
@@ -878,11 +939,24 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     if p_info:
         real_price = p_info["real_price"]
         price_info_str = f"當前真實市場成交價：{real_price} 元 ({cap_type_str})"
-        p_low = round(real_price * 0.985, 1)
-        p_high = round(real_price * 1.005, 1)
+        
+        # 🛡️ 風護演算法：正乖離過熱買點下修 logic
+        bias_20 = kd_info.get("bias_20ma", 0.0) if isinstance(kd_info, dict) else 0.0
+        bias_60 = kd_info.get("bias_60ma", 0.0) if isinstance(kd_info, dict) else 0.0
+        ma20_val = kd_info.get("20MA", real_price) if isinstance(kd_info, dict) else real_price
+
+        if bias_20 > 15.0 or bias_60 > 15.0:
+            p_low = round(ma20_val * 0.99, 1)
+            p_high = round(ma20_val * 1.02, 1)
+            overheat_warning_str = f"【風護風控警示 - 高檔過熱】：當前月線正乖離率高達 {bias_20:+f}% (> +15%)！追高風險極高，系統已強制將建議買進區間下修至 20MA 月線支撐附近 ({p_low}元 ~ {p_high}元)。"
+        else:
+            p_low = round(real_price * 0.985, 1)
+            p_high = round(real_price * 1.005, 1)
+            overheat_warning_str = ""
+
         p_mid = round((p_low + p_high) / 2, 2)
         target_p = round(real_price * 1.08, 1)
-        calc_price_str = f"【系統統一計算數據】：建議買進區間：{p_low}元 ~ {p_high}元，預估進場均價中間值：{p_mid}元，波段停利目標價：{target_p}元。"
+        calc_price_str = f"【系統統一計算數據】：建議買進區間：{p_low}元 ~ {p_high}元，預估進場均價中間值：{p_mid}元，波段停利目標價：{target_p}元。\n{overheat_warning_str}"
     else:
         real_price = 100.0
         price_info_str = "即時股價：需參考市場現價"
@@ -894,7 +968,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     if isinstance(kd_info, dict):
         vol_ratio = kd_info.get('vol_ratio', 1.0)
         kd_str = f"最新{period_type} KD 指標：K={kd_info.get('K')}, D={kd_info.get('D')}，轉折訊號為 [{kd_info.get('signal')}]"
-        ma_str = f"5日均線(5MA)={kd_info.get('5MA')}元，20日月線(20MA)={kd_info.get('20MA')}元 (月線乖離率: {kd_info.get('bias_20ma'):+f}%)。"
+        ma_str = f"5日均線(5MA)={kd_info.get('5MA')}元，20日月線(20MA)={kd_info.get('20MA')}元 (月線乖離率: {kd_info.get('bias_20ma'):+f}%)，60日季線(60MA)={kd_info.get('60MA')}元。"
         vol_str = f"當前成交量增倍數：{vol_ratio} 倍 (5日均量基準)。狀態：[{kd_info.get('vol_signal_str')}]。"
         pattern_str = f"『回後買上漲』診斷：[{kd_info.get('pullback_buy_signal')}]"
         adv_tech_str = (
@@ -909,7 +983,8 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     vol_hint = "當前成交量尚未爆發，若量能不及 1.2 倍，建議於『建議進場區間下限』逢低掛單佈局，切勿開高追價。" if vol_ratio < 1.2 else "成交量順利放大，具備攻擊量能！"
     premarket_context = f"【最新情報動態】：聚焦族群 {st.session_state.premarket_focus} / 避險族群 {st.session_state.premarket_avoid} | 摘要: {st.session_state.premarket_summary}"
 
-    # 大師個股詳細診斷指令建構
+    warning_prompt_context = f"【交易風險警示狀態】：{warn_info['msg']}" if warn_info["status"] != "NORMAL" else "【交易風險警示狀態】：無警示，交易流動性正常。"
+
     master_single_instruction = ""
     if selected_masters:
         m_list_str = "、".join(selected_masters)
@@ -926,7 +1001,6 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
                 "   - 【宇帆隊長觀點】：從 Top-Down 產業題材能見度、三大法人/投信籌碼鎖碼續航力與月營收爆發力進行深度診斷，評估是否屬於主力極度青睞之波段黑馬。\n"
             )
 
-    # 依據持有狀態切換不同的 Prompt 語境
     if capital_mode == "既有持股 (已套牢/持有中)":
         cost_price = price_or_capital if price_or_capital and price_or_capital > 0 else real_price
         unrealized_pct = round(((real_price - cost_price) / cost_price) * 100, 2)
@@ -975,7 +1049,7 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         + position_context + "\n"
         + calc_price_str + "\n"
         + premarket_context + "\n"
-        "【當前全球宏觀數據看板】：\n" + str(macro_data) + "\n\n"
+        + warning_prompt_context + "\n\n"
         "【開盤與停利實戰鐵則】：\n"
         "1. 若當日開盤價低於前日收盤價（跳空低開），代表盤中弱勢，一律視為不滿足進場條件！\n"
         "2. 若開盤跳空開高 > +2.0%，代表市場熱度過高，切勿在開盤第一時間追高，應等待拉回至建議區間下限再佈局。\n"
@@ -1035,7 +1109,6 @@ st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 
 st.sidebar.markdown("**指定產業族群或題材 (選填)**")
 custom_sector = st.sidebar.text_input("輸入族群或題材", value="", placeholder="例如: 記憶體、PCB、半導體...", label_visibility="collapsed")
 
-# 新增：大師診斷模組選單 (可單選、複選、不選)
 st.sidebar.markdown("**大師診斷模組 (可單選/複選/不選)**")
 selected_masters = st.sidebar.multiselect(
     "選擇大師診斷風格",
@@ -1063,7 +1136,7 @@ if st.sidebar.button("AI 執行最新情報分析預測上漲機率最高前三�
         except Exception as e:
             st.sidebar.error(f"情報診斷失敗: {e}")
             
-    with st.spinner("🤖 第二階段：結合情報、大師條件與篩選條件，進行全市場多頭型態嚴謹選股..."):
+    with st.spinner("🤖 第二階段：結合情報、風護模組與大師條件，進行全市場多頭型態嚴謹選股..."):
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, selected_masters, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
@@ -1093,7 +1166,6 @@ display_title = get_stock_display_name(raw_stock_input, stock_id)
 
 period_type = st.sidebar.radio("技術指標週期選擇", ["日線", "週線"], horizontal=True)
 
-# 簡化選項文字，並設定 horizontal=True 排在同一行
 capital_mode = st.sidebar.radio("持有狀態", ["準備買進", "既有持股 (已套牢/持有中)"], horizontal=True)
 
 if capital_mode == "既有持股 (已套牢/持有中)":
@@ -1118,6 +1190,14 @@ for name, info in macro_data.items():
     idx += 1
 
 st.divider()
+
+# 🛡️ 條件式尾盤 13:00 風護警示面板（僅在偵測到注意/處置股票時顯現）
+if stock_id and str(stock_id).strip() != "":
+    warn_check = check_stock_warning_status(stock_id)
+    if warn_check["status"] == "DISPOSITION":
+        st.error(f"{warn_check['msg']}\n\n🚨 **【13:00 尾盤定型操盤紀律】**：處置股流動性嚴重受阻，請務必等到下午 1:00 尾盤確認未出現無量下殺且未破防守位再考慮分批買進，切勿在早盤開高時盲目追高掛單！")
+    elif warn_check["status"] == "ATTENTION":
+        st.warning(f"{warn_check['msg']}\n\n⚠️ **【13:00 尾盤定型操盤紀律】**：注意股短線波動極劇烈，早盤極易出現當沖洗盤與開高走低陷阱，請務必於下午 1:00 尾盤定型時，確認股價穩在建議進場區間且並未爆量跳水方可掛單！")
 
 # 看板標題
 st.subheader(f"🔍 個股 ({display_title}) 三大法人籌碼與進階技術指標綜合分析看板")
@@ -1160,20 +1240,17 @@ if stock_id and str(stock_id).strip() != "":
                 subplot_titles=("收盤價與布林通道 (20MA)", "KD 指標 & RSI (14)", "MACD 動能柱與 DIF/MACD 軌道")
             )
             
-            # 1. 布林通道
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['Close'], mode='lines', name='收盤價', line=dict(color='#ffffff', width=2)), row=1, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Upper'], mode='lines', name='布林上軌', line=dict(color='#ff7875', width=1, dash='dash')), row=1, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['20MA'], mode='lines', name='布林中軌', line=dict(color='#ffc069', width=1.5)), row=1, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['BB_Lower'], mode='lines', name='布林下軌', line=dict(color='#95de64', width=1, dash='dash')), row=1, col=1)
 
-            # 2. KD 與 RSI
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['K'], mode='lines', name='K 值', line=dict(color='#ff4d4f', width=1.5)), row=2, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['D'], mode='lines', name='D 值', line=dict(color='#1890ff', width=1.5)), row=2, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['RSI'], mode='lines', name='RSI', line=dict(color='#b37feb', width=1.5, dash='dot')), row=2, col=1)
             fig.add_hline(y=80, line_dash="dash", line_color="gray", row=2, col=1)
             fig.add_hline(y=20, line_dash="dash", line_color="gray", row=2, col=1)
 
-            # 3. MACD
             colors_macd = ['#ff4d4f' if val >= 0 else '#52c41a' for val in kd_df['MACD_Hist']]
             fig.add_trace(go.Bar(x=kd_df.index, y=kd_df['MACD_Hist'], name='MACD 柱狀', marker_color=colors_macd), row=3, col=1)
             fig.add_trace(go.Scatter(x=kd_df.index, y=kd_df['DIF'], mode='lines', name='DIF (快線)', line=dict(color='#faad14', width=1)), row=3, col=1)
@@ -1239,11 +1316,10 @@ if btn_analyze_stock:
         chip_df = get_stock_chip(stock_id, target_date_str)
         _, kd_info = calculate_kd(stock_id, period_type=period_type)
         
-        # 動態判定等待動畫提示文字
         if capital_mode == "既有持股 (已套牢/持有中)":
-            sp_text = "🤖 AI 結合最新情報檢析【既有持股套牢解套/停損脫手策略】與【量能位階】..."
+            sp_text = "🤖 AI 結合最新情報與風護演算法檢析【既有持股套牢解套/停損脫手策略】..."
         else:
-            sp_text = "🤖 AI 結合最新情報檢析【實戰操盤買賣點/風報比試算】與【量能位階】..."
+            sp_text = "🤖 AI 結合最新情報與風護演算法檢析【實戰操盤買賣點/風報比試算】..."
             
         with st.spinner(sp_text):
             try:
