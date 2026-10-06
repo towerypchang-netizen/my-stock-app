@@ -475,7 +475,7 @@ def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
         
         vol_signal_str = "🔥 帶量攻擊" if vol_ratio >= 1.2 else "⚪ 量能平穩"
         pullback_buy_signal = f"🔥 回後買上漲成立 (乖離{bias_20ma:+}%)" if (has_pullback and is_above_5ma and is_above_20ma) else (
-            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠️️ 短線拉回整理"
+            "🟢 雙均線多頭保護持穩" if (is_above_5ma and is_above_20ma) else "⚠ 短線拉回整理"
         )
 
         signal = "中性觀望"
@@ -751,7 +751,7 @@ def is_valid_stock_fast(stock_id, min_price, max_price):
 
     return True, real_p
 
-def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str):
+def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, selected_masters, target_date_str):
     cond_list = []
     if min_price > 0: cond_list.append(f"最低不得低於 {min_price} 元")
     if max_price > 0: cond_list.append(f"最高不得超過 {max_price} 元")
@@ -763,12 +763,27 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     else:
         sector_limit_str = "【指定產業限制】：無限制（授權 AI 對全台股進行全維度分析，自主挑選全市場多頭型態最強之熱門主流標的）"
 
+    # 動態建構大師診斷模組條件指令
+    master_prompt_str = ""
+    if selected_masters:
+        master_rules = []
+        if "杜金龍(股市老牌大師)" in selected_masters:
+            master_rules.append(
+                "【杜金龍大師選股邏輯】：優先挑選波段從近期高點適度拉回 7%-11% 支撐甜蜜點、本益比處於歷史合理下限（價值定錨），且股價重回 20MA（月線）支撐之多頭標的。"
+            )
+        if "宇帆隊長" in selected_masters:
+            master_rules.append(
+                "【宇帆隊長選股邏輯】：優先挑選『產業 Top-Down 龍頭』，且『三大法人/投信連續買超鎖碼』、月營收 MoM 雙位數成長爆發，並在量縮整理後帶量突破前高之強勢飆股。"
+            )
+        master_prompt_str = "【啟用大師診斷模組加權】：\n" + "\n".join(master_rules) + "\n請結合以上大師之審核視角進行嚴格二次評分濾網篩選！\n"
+
     premarket_focus_str = f"【08:00 盤前即時利多/聚焦族群】：{st.session_state.premarket_focus}" if st.session_state.premarket_focus else ""
 
     prompt_select = (
         "請作為頂級華爾街台股選股操盤手，基準日期：" + str(target_date_str) + "。\n"
         "價格條件：" + price_limit_str + "。\n"
         "族群條件：" + sector_limit_str + "。\n"
+        + master_prompt_str +
         "大盤環境：" + str(macro_data) + "\n"
         + premarket_focus_str + "\n\n"
         "請精選 10 檔最具備波段攻擊潛力、多頭型態且成交量充沛的台股標的名單，預估上漲率請給予 68%-88% 之間的數值。\n"
@@ -848,7 +863,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
     cols_order = ["上漲率", "族群", "股名", "股號", "當前實價", "建議進場", "波段停利/防護提示", "波段期間"]
     return df_res[cols_order].to_dict('records')
 
-def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital_mode, price_or_capital, target_date_str):
+def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital_mode, price_or_capital, selected_masters, target_date_str):
     stock_id = parse_stock_input(stock_input)
     p_info = get_realtime_tw_price_info(stock_id)
     rev_str = get_stock_revenue_data(stock_id)
@@ -894,7 +909,24 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
     vol_hint = "當前成交量尚未爆發，若量能不及 1.2 倍，建議於『建議進場區間下限』逢低掛單佈局，切勿開高追價。" if vol_ratio < 1.2 else "成交量順利放大，具備攻擊量能！"
     premarket_context = f"【最新情報動態】：聚焦族群 {st.session_state.premarket_focus} / 避險族群 {st.session_state.premarket_avoid} | 摘要: {st.session_state.premarket_summary}"
 
-    # 依據持有狀態切換不同的 Prompt 語境 (支援簡化後的選項名稱)
+    # 大師個股詳細診斷指令建構
+    master_single_instruction = ""
+    if selected_masters:
+        m_list_str = "、".join(selected_masters)
+        master_single_instruction = (
+            f"7. 【大師診斷模組比對報告 (已啟用：{m_list_str})】：\n"
+            "   請針對使用者勾選的大師視角，獨立給予診斷說明：\n"
+        )
+        if "杜金龍(股市老牌大師)" in selected_masters:
+            master_single_instruction += (
+                "   - 【杜金龍大師觀點】：剖析本益比位階、拉回幅度是否達到 7-11% 黃金甜蜜區，以及 20MA 月線扣抵與支撐性，給予大師評分與佈局建議。\n"
+            )
+        if "宇帆隊長" in selected_masters:
+            master_single_instruction += (
+                "   - 【宇帆隊長觀點】：從 Top-Down 產業題材能見度、三大法人/投信籌碼鎖碼續航力與月營收爆發力進行深度診斷，評估是否屬於主力極度青睞之波段黑馬。\n"
+            )
+
+    # 依據持有狀態切換不同的 Prompt 語境
     if capital_mode == "既有持股 (已套牢/持有中)":
         cost_price = price_or_capital if price_or_capital and price_or_capital > 0 else real_price
         unrealized_pct = round(((real_price - cost_price) / cost_price) * 100, 2)
@@ -972,7 +1004,8 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "6. 各項進階技術性指標綜合圖表解說：依據系統三層圖表的實戰圖表型態進行深層邏輯診斷：\n"
         "   - 布林通道 (20MA) 位置與型態：剖析通道是『上下軌緊密縮口醞釀大行情』、『開口爆量擴張強勢攻擊』還是『離中軌過遠正乖離過大』。\n"
         "   - KD 指標 & RSI(14) 交叉轉折位階：診斷是否出現『低檔黃金交叉上揚』、『中高檔高檔鈍化』或超買/超賣反轉訊號，並解讀動能由空轉多的實戰含義。\n"
-        "   - MACD 動能柱與 DIF/MACD 軌道變化：剖析 MACD 綠色柱狀體是否『收縮縮短（空頭減弱）』或轉為『紅柱擴張（多頭攻擊）』，以及快慢線是否在零軸之上多頭運作。"
+        "   - MACD 動能柱與 DIF/MACD 軌道變化：剖析 MACD 綠色柱狀體是否『收縮縮短（空頭減弱）』或轉為『紅柱擴張（多頭攻擊）』，以及快慢線是否在零軸之上多頭運作。\n"
+        + master_single_instruction
     )
     return call_gemini_with_retry(prompt)
 
@@ -1002,6 +1035,16 @@ st.sidebar.markdown(f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 
 st.sidebar.markdown("**指定產業族群或題材 (選填)**")
 custom_sector = st.sidebar.text_input("輸入族群或題材", value="", placeholder="例如: 記憶體、PCB、半導體...", label_visibility="collapsed")
 
+# 新增：大師診斷模組選單 (可單選、複選、不選)
+st.sidebar.markdown("**大師診斷模組 (可單選/複選/不選)**")
+selected_masters = st.sidebar.multiselect(
+    "選擇大師診斷風格",
+    options=["杜金龍(股市老牌大師)", "宇帆隊長"],
+    default=[],
+    placeholder="預設不選擇 (採用標準 Top-Down AI 策略)",
+    label_visibility="collapsed"
+)
+
 st.sidebar.markdown("**設定股價區間 (新台幣元)**")
 p_col1, p_col2 = st.sidebar.columns(2)
 with p_col1: min_price_input = st.number_input("最低價", min_value=0, value=None, placeholder="最低金額", step=10, label_visibility="collapsed")
@@ -1020,9 +1063,9 @@ if st.sidebar.button("AI 執行最新情報分析預測上漲機率最高前三�
         except Exception as e:
             st.sidebar.error(f"情報診斷失敗: {e}")
             
-    with st.spinner("🤖 第二階段：結合情報與篩選條件，進行全市場多頭型態嚴謹選股..."):
+    with st.spinner("🤖 第二階段：結合情報、大師條件與篩選條件，進行全市場多頭型態嚴謹選股..."):
         try:
-            picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, target_date_str)
+            picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, selected_masters, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
             st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
             st.sidebar.success("最新情報診斷暨個股預測順利完成！")
@@ -1207,7 +1250,8 @@ if btn_analyze_stock:
                 report = ai_single_stock_analysis(
                     macro_data, sector_data, raw_stock_input, 
                     chip_data=chip_df, kd_info=kd_info, period_type=period_type, 
-                    capital_mode=capital_mode, price_or_capital=price_or_capital, target_date_str=target_date_str
+                    capital_mode=capital_mode, price_or_capital=price_or_capital, 
+                    selected_masters=selected_masters, target_date_str=target_date_str
                 )
                 st.subheader(f"🤖 Gemini AI 全維度詳細分析報告 ({display_title})")
                 st.markdown(report)
