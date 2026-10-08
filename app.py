@@ -170,7 +170,8 @@ STOCK_NAME_TO_ID = {
     "欣興": "3037", "健鼎": "3044", "M31": "6643", "m31": "6643", "臻鼎": "4958", "臻鼎-KY": "4958",
     "臻鼎KY": "4958", "聯茂": "6213", "金像電": "2368", "台光電": "2383", "華通": "2313",
     "群創": "3481", "友達": "2409", "力積電": "6770", "威盛": "2388", "宏碁": "2353",
-    "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260", "萬潤": "6187", "辛耘": "3583", "泰碩": "3338", "金居": "8358"
+    "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260", "萬潤": "6187", "辛耘": "3583", "泰碩": "3338", "金居": "8358",
+    "眾達": "4977", "眾達-KY": "4977", "眾達KY": "4977", "昇陽半": "8028", "昇陽半導體": "8028"
 }
 
 STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
@@ -178,10 +179,10 @@ STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
 LARGE_CAP_STOCKS = ["2330", "2317", "2454", "2308", "2382", "2881", "2882", "2891", "3711", "2303"]
 
 PEER_GROUPS = {
-    "CPO/光通訊/矽光子": ["6442", "3081", "4979", "3163"],
+    "CPO/光通訊/矽光子": ["6442", "3081", "4979", "3163", "4977"],
     "液冷/散熱模組": ["3324", "8996", "3017", "2308", "3013", "3338"],
     "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313", "8358"],
-    "晶圓代工/半導體/設備": ["2330", "2303", "6770", "3711", "2449", "2467", "2404", "6187", "3583"],
+    "晶圓代工/半導體/設備": ["2330", "2303", "6770", "3711", "2449", "2467", "2404", "6187", "3583", "8028"],
     "IC 設計/ASIC": ["2454", "3034", "3661", "5269", "3443", "6643", "2388", "3035"],
     "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356", "2421"],
     "記憶體/模組": ["3260", "2408", "2344"],
@@ -190,7 +191,7 @@ PEER_GROUPS = {
 }
 
 # ------------------------------------------------------------------------------
-# 全台股上市/上櫃動態名稱與代號反查函式 (新增：僅作為字典比對失敗時的備援補完)
+# 全台股上市/上櫃動態名稱與代號反查函式
 # ------------------------------------------------------------------------------
 @st.cache_data(ttl=86400)
 def get_all_taiwan_stocks_dict():
@@ -207,6 +208,7 @@ def get_all_taiwan_stocks_dict():
                 s_name = str(item.get("Name", "")).strip()
                 if s_id and s_name:
                     all_stocks[s_name] = s_id
+                    all_stocks[s_id] = s_name  # 雙向索引，輸入股號也能反查股名
     except Exception:
         pass
 
@@ -219,6 +221,7 @@ def get_all_taiwan_stocks_dict():
                 s_name = str(item.get("CompanyName", "")).strip()
                 if s_id and s_name:
                     all_stocks[s_name] = s_id
+                    all_stocks[s_id] = s_name  # 雙向索引，輸入股號也能反查股名
     except Exception:
         pass
         
@@ -266,19 +269,27 @@ def get_twse_stock_name(stock_id):
     return None
 
 def get_stock_display_name(raw_input, stock_id):
-    """傳回乾淨的『股名 股號』格式"""
+    """修復版：不論輸入純數字還是中文名稱，都能精準傳回『股名 股號』格式"""
     if not stock_id:
         return "未指定"
     
     clean_input = str(raw_input).strip()
-    pure_name = re.sub(r'[\(\)\d\s]', '', clean_input)
     
+    # 1. 若原始輸入已有中文名稱 (且非純數字)
+    pure_name = re.sub(r'[\(\)\d\s]', '', clean_input)
     if pure_name and pure_name != stock_id:
         return f"{pure_name} {stock_id}"
 
+    # 2. 若輸入為純數字 (如 4977)，優先從 STOCK_ID_TO_NAME 靜態反查
     if stock_id in STOCK_ID_TO_NAME:
         return f"{STOCK_ID_TO_NAME[stock_id]} {stock_id}"
         
+    # 3. 若靜態反查不到，使用動態全台股資料庫 (全覆蓋上市/上櫃)
+    all_stocks = get_all_taiwan_stocks_dict()
+    if stock_id in all_stocks:
+        return f"{all_stocks[stock_id]} {stock_id}"
+
+    # 4. 備援爬蟲 API 反查
     twse_name = get_twse_stock_name(stock_id)
     if twse_name:
         return f"{twse_name} {stock_id}"
