@@ -171,7 +171,7 @@ STOCK_NAME_TO_ID = {
     "臻鼎KY": "4958", "聯茂": "6213", "金像電": "2368", "台光電": "2383", "華通": "2313",
     "群創": "3481", "友達": "2409", "力積電": "6770", "威盛": "2388", "宏碁": "2353",
     "仁寶": "2324", "光寶科": "2301", "英業達": "2356", "威剛": "3260", "萬潤": "6187", "辛耘": "3583", "泰碩": "3338", "金居": "8358",
-    "眾達": "4977", "眾達-KY": "4977", "眾達KY": "4977", "昇陽半": "8028", "昇陽半導體": "8028"
+    "眾達": "4977", "眾達-KY": "4977", "眾達KY": "4977", "昇陽半": "8028", "昇陽半導體": "8028", "貿聯": "3665", "貿聯-KY": "3665", "貿聯KY": "3665"
 }
 
 STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
@@ -184,7 +184,7 @@ PEER_GROUPS = {
     "PCB/銅箔基板/載板": ["6213", "2368", "2383", "4958", "3037", "3044", "2313", "8358"],
     "晶圓代工/半導體/設備": ["2330", "2303", "6770", "3711", "2449", "2467", "2404", "6187", "3583", "8028"],
     "IC 設計/ASIC": ["2454", "3034", "3661", "5269", "3443", "6643", "2388", "3035"],
-    "AI 伺服器/組裝": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356", "2421"],
+    "AI 伺服器/組裝/線束": ["2317", "2382", "3231", "2357", "2376", "4938", "6669", "2353", "2324", "2356", "2421", "3665"],
     "記憶體/模組": ["3260", "2408", "2344"],
     "航運": ["2603", "2609", "2615"],
     "金控": ["2881", "2882", "2891"]
@@ -208,7 +208,7 @@ def get_all_taiwan_stocks_dict():
                 s_name = str(item.get("Name", "")).strip()
                 if s_id and s_name:
                     all_stocks[s_name] = s_id
-                    all_stocks[s_id] = s_name  # 雙向索引，輸入股號也能反查股名
+                    all_stocks[s_id] = s_name
     except Exception:
         pass
 
@@ -221,7 +221,7 @@ def get_all_taiwan_stocks_dict():
                 s_name = str(item.get("CompanyName", "")).strip()
                 if s_id and s_name:
                     all_stocks[s_name] = s_id
-                    all_stocks[s_id] = s_name  # 雙向索引，輸入股號也能反查股名
+                    all_stocks[s_id] = s_name
     except Exception:
         pass
         
@@ -280,7 +280,7 @@ def get_stock_display_name(raw_input, stock_id):
     if pure_name and pure_name != stock_id:
         return f"{pure_name} {stock_id}"
 
-    # 2. 若輸入為純數字 (如 4977)，優先從 STOCK_ID_TO_NAME 靜態反查
+    # 2. 若輸入為純數字，優先從 STOCK_ID_TO_NAME 靜態反查
     if stock_id in STOCK_ID_TO_NAME:
         return f"{STOCK_ID_TO_NAME[stock_id]} {stock_id}"
         
@@ -981,6 +981,7 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
 
 def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd_info, period_type, capital_mode, price_or_capital, selected_masters, target_date_str):
     stock_id = parse_stock_input(stock_input)
+    display_name = get_stock_display_name(stock_input, stock_id)
     p_info = get_realtime_tw_price_info(stock_id)
     rev_str = get_stock_revenue_data(stock_id)
     
@@ -1073,9 +1074,9 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
             "   * 建議關鍵防守 / 停損換股價位：[AI依據下方支撐位算出的停損價，例如：XX.X 元]\n"
             "   * 脫手時機與處置建議：[例如：若反彈至 XX 元遇到 20MA 壓力建議先解套減碼 50%，若跌破 XX 元則需果斷停損換股]\n"
             "2. 【持股風報比與轉折勝率評估】：\n"
-            "   * 止跌反彈勝率評估：[AI分析當前技術面止跌反彈勝率]\n"
-            "   * 處置建議星等：[例如：★★★☆☆ (觀望等反彈)]\n"
-            "3. 【既有持股操盤指引】：（明確針對目前套牢狀況，給予具體的『分批解套』或『破位停損』時間點與價格指令）。\n"
+            "   * 止跌反彈勝率評估：[例如：76% 止跌反彈勝率 (簡要說明依據)]\n"
+            "   * 風險/報酬比 (R/R Ratio) 試算：[比值及建倉建議]\n"
+            "3. 【既有持股操盤指引】：（明確針對目前套牢狀況，給予具體的『分批解套』或『破位停損』時間點與價格指令，無贅詞無重複）。\n"
         )
     else:
         capital_str = f"{price_or_capital:,} 元" if price_or_capital and price_or_capital > 0 else "未限定金額"
@@ -1083,34 +1084,32 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         mode_instruction = (
             "=== 第一部分：【實戰操盤指令與風報比試算】 ===\n"
             "1. 【核心買賣點與預估獲利試算】：\n"
-            "   * 建議進場買進價位區間：" + f"{p_low} 元 ~ {p_high} 元" + " (中間值: " + f"{p_mid} 元" + ")\n"
+            "   * 建議進場買進區間：" + f"{p_low} 元 ~ {p_high} 元" + " (預估進場均價中間值: " + f"{p_mid} 元" + ")\n"
             "   * 波段停利脫手賣出目標價：" + f"{target_p} 元" + "\n"
-            "   * 預計潛在獲利金額與百分比：每股預估獲利 +" + f"{round(target_p - p_mid, 2)}" + " 元 (預估獲利空間：+" + f"{round((target_p - p_mid)/p_mid*100, 2)}" + "%)\n"
+            "   * 預計潛在獲利：每股 +" + f"{round(target_p - p_mid, 2)}" + " 元 (預估獲利空間：+" + f"{round((target_p - p_mid)/p_mid*100, 2)}" + "%)\n"
             "2. 【多空勝率優勢與風報比評估】：\n"
-            "   請【嚴格依據以下固定格式與縮排】完整填入真實數據與AI防守計算：\n"
-            "   * 多空勝率評估：[AI分析當前多空勝率，例如：78% 勝率優勢]\n"
-            "   * 風險/報酬比 (R/R Ratio) 試算：\n"
-            "     - 預估進場均價：" + f"{p_mid} 元" + "\n"
-            "     - 波段目標價：" + f"{target_p} 元 (獲利空間：+{round(target_p - p_mid, 2)} 元 / +{round((target_p - p_mid)/p_mid*100, 2)}%)\n"
-            "     - 防守停損價：[AI依據技術支撐算出停損價，如 XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%)\n"
-            "     - 風報比 (R/R Ratio)：[AI計算 潛在獲利/潛在風險 比值，如 X.XX : 1] (建議高於 2.0:1 方可建立部位)\n"
-            "   * 綜合推薦星等：[例如：★★★★☆ (4/5星)]\n"
-            "3. 【極簡操盤實戰指引】：（明確強調進場買進區間、波段停利賣出目標價，附上『開高 > 2% 觀望與盤中達標即時落袋』叮嚀與『預估波段持有天數』）。\n"
+            "   * 多空勝率評估：[AI填入%數] 勝率優勢 (※請簡要補充1文句說明勝率評估依據※)\n"
+            "   * 防守停損價：[AI依據技術支撐算出停損價，如 XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%，設於 20MA 月線上方極近處作為關鍵防守線)\n"
+            "   * 風報比 (R/R Ratio)：[AI計算 潛在獲利/潛在風險 比值，如 X.XX : 1] (高於 2.0:1 門檻，具備建立全新部位之價值)\n"
+            "3. 【極簡操盤實戰指引】：\n"
+            "   * 進場部署：請鎖定建議買進區間分批掛單，若成交量未放大，切勿開高追價，建議於區間下限逢低吸納。\n"
+            "   * 開盤警示：若跳空低開（低於前日收盤）視為弱勢取消進場；若開盤跳空開高 > +2.0%，切勿追高，等待股價回落至區間內再建立部位。\n"
+            "   * 停利執行：盤中衝高觸及或超越目標價，必須即時執行動態停利落袋為安。\n"
+            "   * 預估波段持有天數：5 ~ 10 個交易日。\n"
         )
 
     prompt = (
         "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期：" + str(target_date_str) + "。\n"
-        "【嚴格實事求是鐵則】：所有分析必須 100% 依據以下給出的系統真實數據與即時情報進行深度邏輯推演，嚴禁憑空捏造不存在的歷史數字與新聞！\n\n"
-        "分析標的：" + str(stock_input) + " (代碼: " + str(stock_id) + ")，" + price_info_str + "。\n"
+        "【輸出規範與無贅詞鐵則】：\n"
+        "1. 嚴格遵守精簡扼要、不失重點、無重複、無贅詞之格式輸出！\n"
+        "2. 嚴禁出現『恭喜取得第一手即時盤面數據』、『我是華爾街資深...』、『以下為針對...』等開場贅詞招呼語！直接輸出標題！\n"
+        "3. 第一部分【實戰操盤指令與風報比試算】中，不可重複印出預估進場均價、波段目標價或綜合推薦星等；多空勝率評估必須附帶簡要依據；防守停損價與風報比單獨成列。\n"
+        "4. 所有分析必須 100% 依據以下給出的系統真實數據與即時情報進行深度邏輯推演！\n\n"
+        "分析標的：" + str(display_name) + "，" + price_info_str + "。\n"
         + position_context + "\n"
         + calc_price_str + "\n"
         + premarket_context + "\n"
         + warning_prompt_context + "\n\n"
-        "【開盤與停利實戰鐵則】：\n"
-        "1. 若當日開盤價低於前日收盤價（跳空低開），代表盤中弱勢，一律視為不滿足進場條件！\n"
-        "2. 若開盤跳空開高 > +2.0%，代表市場熱度過高，切勿在開盤第一時間追高，應等待拉回至建議區間下限再佈局。\n"
-        "3. 盤中若衝高觸及或超越『波段停利目標價』(" + str(target_p) + "元)，必須執行動態停利或設定移動停利鎖定獲利，防止衝高回落。\n"
-        "【量能策略叮嚀】：\n" + vol_hint + "\n\n"
         "【基本面估值與同業競爭者對比】：\n"
         f"- 本益比 (P/E): {val_metrics['pe']} | 股淨比 (P/B): {val_metrics['pb']} | 最新毛利率: {val_metrics['gross_margin']}\n"
         f"- {peer_str}\n\n"
@@ -1123,18 +1122,19 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         "- " + vol_str + "\n"
         "- " + pattern_str + "\n"
         "- 進階指標現況：" + adv_tech_str + "\n\n"
-        "請輸出繁體中文詳細報告，並【嚴格遵守以下結構與順序】：\n\n"
+        "請輸出繁體中文詳細報告，格式如下：\n\n"
+        "🤖 Gemini AI 全維度詳細分析報告 (" + str(display_name) + ")\n\n"
         + mode_instruction + "\n"
         "=== 第二部分：【全維度詳細分析報告內文】 ===\n"
-        "1. 全球宏觀與科技大勢：詳細解析費半、美債殖利率、原油、VIX與盤前焦點新聞連動，並結合系統「全球宏觀指標多空趨勢對比圖」（費半 vs 美債殖利率x20 vs 原油）進行多空資金流向與 Risk-On/Risk-Off 狀態的深層圖表解說。\n"
-        "2. 基本面價值評估與同業估值比較：依據最新本益比、股淨比、毛利率與同業競爭者數據，結合該個股與所屬族群近期 12 小時內的重大新聞與產業情報進行價值診斷。\n"
-        "3. 重大新聞及輿論現況與法人獲利預估背離診斷：檢視 24 小時內發生的重大新聞與輿論現況，若 24 小時內無重大新聞，必須明確顯示「無重大新聞」；並診斷是否存在「利多不漲」、「利空不跌」或法人預估獲利與實際股價走勢背離之情況。\n"
-        "4. 三大法人籌碼流向與基本面月營收連動分析：交叉比對近期外資、投信、自營商買賣超張數與最新月營收 MoM/YoY 趨勢，診斷籌碼是法人鎖碼拉抬還是逢高出貨。\n"
-        "5. 5MA/20MA月線多頭格局與量價關係診斷：結合當前成交量放大倍數與 20MA 月線乖離率，深度剖析當前量價結構（如帶量攻擊、量縮整理或回後買上漲）。\n"
-        "6. 各項進階技術性指標綜合圖表解說：依據系統三層圖表的實戰圖表型態進行深層邏輯診斷：\n"
-        "   - 布林通道 (20MA) 位置與型態：剖析通道是『上下軌緊密縮口醞釀大行情』、『開口爆量擴張強勢攻擊』還是『離中軌過遠正乖離過大』。\n"
-        "   - KD 指標 & RSI(14) 交叉轉折位階：診斷是否出現『低檔黃金交叉上揚』、『中高檔高檔鈍化』或超買/超賣反轉訊號，並解讀動能由空轉多的實戰含義。\n"
-        "   - MACD 動能柱與 DIF/MACD 軌道變化：剖析 MACD 綠色柱狀體是否『收縮縮短（空頭減弱）』或轉為『紅柱擴張（多頭攻擊）』，以及快慢線是否在零軸之上多頭運作。\n"
+        "1. 全球宏觀與科技大勢：條列解析費半、VIX與資金流向（ Risk-On / Risk-Off 狀態）。\n"
+        "2. 基本面價值評估與同業估值比較：依據最新 P/E、P/B、毛利率與同業數據給予精簡診斷結論。\n"
+        "3. 重大新聞及輿論現況與法人獲利預估背離診斷：檢視 24 小時內新聞（無新聞請顯示「無重大新聞」）並診斷背離狀況。\n"
+        "4. 三大法人籌碼流向與基本面月營收連動分析：交叉比對外資、投信、自營商籌碼與月營收 MoM/YoY 趨勢。\n"
+        "5. 5MA/20MA月線多頭格局與量價關係診斷：結合成交量倍數與 20MA 月線乖離率進行量價剖析。\n"
+        "6. 各項進階技術性指標綜合圖表解說：\n"
+        "   - 布林通道 (Bollinger Bands)：上軌/中軌/下軌位置與通道型態診斷。\n"
+        "   - KD 指標 & RSI(14)：KD 轉折位階與 RSI 強弱診斷。\n"
+        "   - MACD 動能柱與軌道變化：DIF/MACD 快慢線與柱狀體多空控盤診斷。\n"
         + master_single_instruction
     )
     return call_gemini_with_retry(prompt)
@@ -1385,7 +1385,6 @@ if btn_analyze_stock:
                     capital_mode=capital_mode, price_or_capital=price_or_capital, 
                     selected_masters=selected_masters, target_date_str=target_date_str
                 )
-                st.subheader(f"🤖 Gemini AI 全維度詳細分析報告 ({display_title})")
                 st.markdown(report)
             except Exception as e:
                 st.error(f"分析生成失敗: {e}")
