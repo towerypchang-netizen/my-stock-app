@@ -624,8 +624,9 @@ def get_macro_data(target_date_str):
             data = data.dropna(subset=['Close'])
             if not data.empty and len(data) >= 2:
                 latest = data['Close'].iloc[-1]
-                start = data['Close'].iloc[0]
-                change = ((latest - start) / start) * 100
+                # 💡 精準修復：取倒數第二筆（前一交易日收盤價），確保漲跌幅計算精準無誤
+                prev_close = data['Close'].iloc[-2]
+                change = ((latest - prev_close) / prev_close) * 100
                 unit = "%" if symbol == "^TNX" else ""
                 macro_summary[name] = {"val": f"{latest:.2f}{unit}", "change": f"{change:+.2f}%"}
             else:
@@ -1167,7 +1168,7 @@ with p_col2: max_price_input = st.number_input("最高價", min_value=0, value=N
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
-# 💡 直接整合快取自動清除邏輯於按鈕點擊事件
+# 💡 整合快取自動清除邏輯於按鈕點擊事件
 if st.sidebar.button("AI 執行最新情報分析預測上漲機率最高前三檔", type="primary", key="btn_combined_diagnose", use_container_width=True):
     get_macro_data.clear()
     get_realtime_tw_price_info.clear()
