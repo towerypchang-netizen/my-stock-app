@@ -241,7 +241,6 @@ def parse_stock_input(user_input):
         if core_name == clean_name or core_name in clean_name or clean_name in core_name:
             return s_id
             
-    # 若靜態字典找不到，觸發動態全台股反查補完
     all_stocks = get_all_taiwan_stocks_dict()
     if clean_input in all_stocks:
         return all_stocks[clean_input]
@@ -269,27 +268,21 @@ def get_twse_stock_name(stock_id):
     return None
 
 def get_stock_display_name(raw_input, stock_id):
-    """修復版：不論輸入純數字還是中文名稱，都能精準傳回『股名 股號』格式"""
     if not stock_id:
         return "未指定"
     
     clean_input = str(raw_input).strip()
-    
-    # 1. 若原始輸入已有中文名稱 (且非純數字)
     pure_name = re.sub(r'[\(\)\d\s]', '', clean_input)
     if pure_name and pure_name != stock_id:
         return f"{pure_name} {stock_id}"
 
-    # 2. 若輸入為純數字，優先從 STOCK_ID_TO_NAME 靜態反查
     if stock_id in STOCK_ID_TO_NAME:
         return f"{STOCK_ID_TO_NAME[stock_id]} {stock_id}"
         
-    # 3. 若靜態反查不到，使用動態全台股資料庫 (全覆蓋上市/上櫃)
     all_stocks = get_all_taiwan_stocks_dict()
     if stock_id in all_stocks:
         return f"{all_stocks[stock_id]} {stock_id}"
 
-    # 4. 備援爬蟲 API 反查
     twse_name = get_twse_stock_name(stock_id)
     if twse_name:
         return f"{twse_name} {stock_id}"
@@ -322,14 +315,12 @@ if "last_predict_time" not in st.session_state:
 # ==============================================================================
 @st.cache_data(ttl=1800)
 def check_stock_warning_status(stock_id):
-    """即時查驗證交所與櫃買中心公布之注意與處置股票公告"""
     clean_id = parse_stock_input(stock_id)
     if not clean_id:
         return {"status": "NORMAL", "msg": ""}
 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     
-    # 1. 查驗櫃買中心 (TPEx) 處置/注意股票 API
     try:
         url_tpex = "https://www.tpex.org.tw/web/stock/margin_trading/warning/wrt_result.php?l=zh-tw&o=json"
         resp = requests.get(url_tpex, headers=headers, timeout=2)
@@ -344,7 +335,6 @@ def check_stock_warning_status(stock_id):
     except Exception:
         pass
 
-    # 2. 查驗證交所 (TWSE) 公告 API
     try:
         url_twse = "https://www.twse.com.tw/rwd/zh/announcement/notice?response=json"
         resp = requests.get(url_twse, headers=headers, timeout=2)
@@ -463,7 +453,7 @@ def get_peer_comparison(stock_id):
         
     return f"所屬同業族群：[{g_name}]\n" + "\n".join(records)
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_realtime_tw_price_info(stock_id):
     try:
         clean_id = parse_stock_input(stock_id)
@@ -489,7 +479,7 @@ def get_realtime_tw_price_info(stock_id):
         pass
     return None
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=300)
 def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
     try:
         clean_id = parse_stock_input(stock_id)
@@ -618,7 +608,7 @@ def get_stock_revenue_data(stock_id):
         pass
     return "月營收數據：穩定成長中"
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=300)
 def get_macro_data(target_date_str):
     macro_tickers = {
         "費城半導體": "^SOX", "台灣加權": "^TWII",
@@ -704,7 +694,7 @@ def get_taiwan_sector_performance(target_date_str):
         pass
     return "類股數據更新中"
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=600)
 def get_stock_chip(stock_id, target_date_str):
     clean_stock_id = parse_stock_input(stock_id)
     if not clean_stock_id:
@@ -829,9 +819,7 @@ def is_valid_stock_fast(stock_id, min_price, max_price):
         return False, None
         
     real_p = p_info["real_price"]
-    if p_info["is_gap_down"]: 
-        return False, None
-        
+    
     if min_price > 0 and real_p < min_price: 
         return False, None
     if max_price > 0 and real_p > max_price: 
@@ -902,7 +890,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
         
         valid, real_p = is_valid_stock_fast(stock_id, min_price, max_price)
         if valid and real_p:
-            # 🛡️ 風護模組 1：注意股 / 處置股判定降權
             warn_info = check_stock_warning_status(stock_id)
             raw_pct_str = item.get("上漲率", item.get("預估上漲率", "78%"))
             raw_pct = float(re.sub(r'[^\d.]', '', raw_pct_str) or 78.0)
@@ -915,7 +902,6 @@ def generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_s
             raw_pct = max(60.0, min(88.0, raw_pct))
             item["上漲率"] = f"{raw_pct:.0f}%"
 
-            # 🛡️ 風護模組 2：20MA / 60MA 均線正乖離率 (Bias) 過熱降溫與進場價修正
             _, kd_info = calculate_kd(stock_id, period_type="日線")
             bias_20 = kd_info.get("bias_20ma", 0.0) if isinstance(kd_info, dict) else 0.0
             bias_60 = kd_info.get("bias_60ma", 0.0) if isinstance(kd_info, dict) else 0.0
@@ -997,7 +983,6 @@ def ai_single_stock_analysis(macro_data, sector_data, stock_input, chip_data, kd
         real_price = p_info["real_price"]
         price_info_str = f"當前真實市場成交價：{real_price} 元 ({cap_type_str})"
         
-        # 🛡️ 風護演算法：正乖離過熱買點下修 logic
         bias_20 = kd_info.get("bias_20ma", 0.0) if isinstance(kd_info, dict) else 0.0
         bias_60 = kd_info.get("bias_60ma", 0.0) if isinstance(kd_info, dict) else 0.0
         ma20_val = kd_info.get("20MA", real_price) if isinstance(kd_info, dict) else real_price
@@ -1182,9 +1167,15 @@ with p_col2: max_price_input = st.number_input("最高價", min_value=0, value=N
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
+# 💡 直接整合快取自動清除邏輯於按鈕點擊事件
 if st.sidebar.button("AI 執行最新情報分析預測上漲機率最高前三檔", type="primary", key="btn_combined_diagnose", use_container_width=True):
-    with st.spinner("🤖 第一階段：正在掃描美股ADR、費半、油價與最新產業情報..."):
+    get_macro_data.clear()
+    get_realtime_tw_price_info.clear()
+    calculate_kd.clear()
+    
+    with st.spinner("🤖 第一階段：正在即時擷取盤中最新美股ADR、費半、油價與產業情報..."):
         try:
+            macro_data = get_macro_data(target_date_str)
             p_data = diagnose_premarket_intelligence(macro_data, target_date_str)
             st.session_state.premarket_summary = p_data.get("summary", "")
             st.session_state.premarket_focus = p_data.get("focus_sectors", [])
@@ -1192,12 +1183,12 @@ if st.sidebar.button("AI 執行最新情報分析預測上漲機率最高前三�
         except Exception as e:
             st.sidebar.error(f"情報診斷失敗: {e}")
             
-    with st.spinner("🤖 第二階段：結合情報、風護模組與大師條件，進行全市場多頭型態嚴謹選股..."):
+    with st.spinner("🤖 第二階段：結合最新盤中行情、風護模組與大師條件，進行全市場精準選股..."):
         try:
             picks_data = generate_daily_picks(macro_data, sector_data, min_price, max_price, custom_sector, selected_masters, target_date_str)
             st.session_state.daily_picks = pd.DataFrame(picks_data)
             st.session_state.last_predict_time = get_taiwan_now().strftime("%m/%d %H:%M:%S")
-            st.sidebar.success("最新情報診斷暨個股預測順利完成！")
+            st.sidebar.success("最新盤中行情刷新暨個股預測順利完成！")
             st.rerun()
         except Exception as e:
             st.sidebar.error(f"個股預測失敗: {e}")
@@ -1238,6 +1229,7 @@ btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="prima
 
 # 主畫面看板
 st.subheader(f"🌐 全球宏觀與風險避險指標看板 ({target_date_str})")
+
 cols = st.columns([1, 1, 1, 1, 1, 1])
 idx = 0
 for name, info in macro_data.items():
@@ -1281,10 +1273,7 @@ if stock_id and str(stock_id).strip() != "":
             st.dataframe(chip_df, hide_index=True, use_container_width=True)
             st.caption("💡 資料來源：富邦綜合證券 / 嘉實資訊 (SysJust) 官方盤後真實買賣超統計（單位：張）。")
         else:
-            st.warning("籌碼資料更新中或網路連線忙碌，請點擊下方按鈕重新刷取。")
-            if st.button("🔄 重新載入籌碼資料"):
-                st.cache_data.clear()
-                st.rerun()
+            st.warning("籌碼資料更新中。")
             
     with tab_kd:
         if kd_df is not None and not kd_df.empty:
