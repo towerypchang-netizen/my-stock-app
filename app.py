@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import math
 import os
 import re
 import time
@@ -252,6 +253,9 @@ STOCK_NAME_TO_ID = {
     "貿聯": "3665",
     "貿聯-KY": "3665",
     "貿聯KY": "3665",
+    "雷虎": "8033",
+    "漢翔": "2634",
+    "聯亞": "3081",
 }
 
 STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
@@ -615,47 +619,43 @@ def diagnose_premarket_intelligence(macro_data, target_date_str):
 
 def get_stock_news(stock_id):
   clean_id = parse_stock_input(stock_id)
-  try:
-    ticker = yf.Ticker(clean_id + ".TW")
-    news_list = ticker.news
-    if not news_list:
-      ticker = yf.Ticker(clean_id + ".TWO")
+  for suffix in [".TW", ".TWO"]:
+    try:
+      ticker = yf.Ticker(clean_id + suffix)
       news_list = ticker.news
-
-    if news_list and len(news_list) > 0:
-      titles = [
-          f"- {item.get('title', '')}"
-          for item in news_list[:5]
-          if item.get("title")
-      ]
-      return "\n".join(titles)
-  except Exception:
-    pass
+      if news_list and len(news_list) > 0:
+        titles = [
+            f"- {item.get('title', '')}"
+            for item in news_list[:5]
+            if item.get("title")
+        ]
+        return "\n".join(titles)
+    except Exception:
+      continue
   return "無重大新聞"
 
 
 def get_stock_valuation_metrics(stock_id):
   clean_id = parse_stock_input(stock_id)
-  try:
-    ticker = yf.Ticker(clean_id + ".TW")
-    info = ticker.info
-    if not info or "forwardPE" not in info:
-      ticker = yf.Ticker(clean_id + ".TWO")
+  for suffix in [".TW", ".TWO"]:
+    try:
+      ticker = yf.Ticker(clean_id + suffix)
       info = ticker.info
+      if info and ("forwardPE" in info or "trailingPE" in info):
+        pe = info.get("trailingPE") or info.get("forwardPE") or "N/A"
+        pb = info.get("priceToBook") or "N/A"
+        profit_margin = info.get("grossMargins") or "N/A"
+        if profit_margin != "N/A":
+          profit_margin = f"{profit_margin * 100:.2f}%"
 
-    pe = info.get("trailingPE") or info.get("forwardPE") or "N/A"
-    pb = info.get("priceToBook") or "N/A"
-    profit_margin = info.get("grossMargins") or "N/A"
-    if profit_margin != "N/A":
-      profit_margin = f"{profit_margin * 100:.2f}%"
-
-    return {
-        "pe": f"{pe:.2f}" if isinstance(pe, (int, float)) else "N/A",
-        "pb": f"{pb:.2f}" if isinstance(pb, (int, float)) else "N/A",
-        "gross_margin": profit_margin,
-    }
-  except Exception:
-    return {"pe": "N/A", "pb": "N/A", "gross_margin": "N/A"}
+        return {
+            "pe": f"{pe:.2f}" if isinstance(pe, (int, float)) else "N/A",
+            "pb": f"{pb:.2f}" if isinstance(pb, (int, float)) else "N/A",
+            "gross_margin": profit_margin,
+        }
+    except Exception:
+      continue
+  return {"pe": "N/A", "pb": "N/A", "gross_margin": "N/A"}
 
 
 def get_peer_comparison(stock_id):
@@ -681,54 +681,69 @@ def get_peer_comparison(stock_id):
   return f"所屬同業族群：[{g_name}]\n" + "\n".join(records)
 
 
+# ------------------------------------------------------------------------------
+# 實價抓取（支援上市 .TW 與上櫃 .TWO 自動備援與 NaN 防護）
+# ------------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def get_realtime_tw_price_info(stock_id):
-  try:
-    clean_id = parse_stock_input(stock_id)
-    ticker_symbol = clean_id + ".TW"
-    ticker = yf.Ticker(ticker_symbol)
-    data = ticker.history(period="5d")
-    if data.empty or len(data) == 0:
-      ticker_symbol = clean_id + ".TWO"
-      ticker = yf.Ticker(ticker_symbol)
-      data = ticker.history(period="5d")
+  clean_id = parse_stock_input(stock_id)
+  if not clean_id:
+    return None
 
-    if not data.empty:
-      latest_close = round(float(data["Close"].iloc[-1]), 2)
-      prev_close = (
-          round(float(data["Close"].iloc[-2]), 2)
-          if len(data) >= 2
-          else latest_close
-      )
-      open_price = (
-          round(float(data["Open"].iloc[-1]), 2)
-          if "Open" in data.columns
-          else latest_close
-      )
-      return {
-          "real_price": latest_close,
-          "prev_close": prev_close,
-          "open_price": open_price,
-          "is_gap_down": open_price < prev_close,
-      }
-  except Exception:
-    pass
+  for suffix in [".TW", ".TWO"]:
+    try:
+      ticker_symbol = clean_id + suffix
+      ticker = yf.Ticker(ticker_symbol)
+      data = ticker.history(period="5d").dropna(subset=["Close"])
+
+      if not data.empty and len(data) >= 1:
+        latest_close = round(float(data["Close"].iloc[-1]), 2)
+        if not math.isnan(latest_close) and latest_close > 0:
+          prev_close = (
+              round(float(data["Close"].iloc[-2]), 2)
+              if len(data) >= 2
+              else latest_close
+          )
+          open_price = (
+              round(float(data["Open"].iloc[-1]), 2)
+              if "Open" in data.columns
+              else latest_close
+          )
+          return {
+              "real_price": latest_close,
+              "prev_close": prev_close,
+              "open_price": open_price,
+              "is_gap_down": open_price < prev_close,
+          }
+    except Exception:
+      continue
   return None
 
 
+# ------------------------------------------------------------------------------
+# 技術指標 KD/MA 計算（支援上市 .TW 與上櫃 .TWO 自動備援）
+# ------------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
+  clean_id = parse_stock_input(stock_id)
+  if not clean_id:
+    return None, "無效代碼"
+
+  df = pd.DataFrame()
+  for suffix in [".TW", ".TWO"]:
+    try:
+      ticker = yf.Ticker(clean_id + suffix)
+      df_temp = ticker.history(period="6mo").dropna(subset=["Close"])
+      if not df_temp.empty and len(df_temp) >= 20:
+        df = df_temp
+        break
+    except Exception:
+      continue
+
+  if df.empty or len(df) < 20:
+    return None, "數據不足"
+
   try:
-    clean_id = parse_stock_input(stock_id)
-    ticker = yf.Ticker(clean_id + ".TW")
-    df = ticker.history(period="6mo")
-    if df.empty:
-      ticker = yf.Ticker(clean_id + ".TWO")
-      df = ticker.history(period="6mo")
-
-    if df.empty or len(df) < 20:
-      return None, "數據不足"
-
     if period_type == "週線":
       df = (
           df.resample("W")
@@ -940,9 +955,9 @@ def get_stock_revenue_data(stock_id):
 
 
 # ==============================================================================
-# 🌐 宏觀數據抓取（R5 修正：防舊快取、防美台時區錯位、盤前加權鎖定昨收）
+# 🌐 宏觀數據抓取（防舊快取、防美台時區錯位、盤前加權鎖定昨收）
 # ==============================================================================
-@st.cache_data(ttl=60)  # 快取設為 60 秒，確保抓取最新已完結行情
+@st.cache_data(ttl=60)
 def get_macro_data(target_date_str):
   macro_tickers = {
       "費城半導體": "^SOX",
@@ -957,7 +972,6 @@ def get_macro_data(target_date_str):
 
   for name, symbol in macro_tickers.items():
     try:
-      # 自動抓取最近 10 個交易日數據，不硬設 end 日期以防未結算位移
       data = yf.Ticker(symbol).history(period="10d").dropna(subset=["Close"])
 
       if not data.empty and len(data) >= 2:
@@ -967,7 +981,6 @@ def get_macro_data(target_date_str):
         change = ((latest - prev_close) / prev_close) * 100
         unit = "%" if symbol == "^TNX" else ""
 
-        # 盤前防護：若在台灣時間 09:00 前讀取「台灣加權」，因台股尚未開盤，強制將漲跌幅鎖定為 0.00%
         now_tw = get_taiwan_now()
         if symbol == "^TWII" and now_tw.hour < 9:
           change = 0.00
@@ -1199,6 +1212,8 @@ def is_valid_stock_fast(stock_id, min_price, max_price):
     return False, None
 
   real_p = p_info["real_price"]
+  if real_p is None or math.isnan(real_p) or real_p <= 0:
+    return False, None
 
   if min_price > 0 and real_p < min_price:
     return False, None
@@ -1215,7 +1230,7 @@ def is_valid_stock_fast(stock_id, min_price, max_price):
 
 
 # ==============================================================================
-# 🚨 市場風控熔斷檢測機制 (Market Danger Circuit Breaker Filter)
+# 🚨 市場風控熔斷檢測機制
 # ==============================================================================
 def check_market_risk_regime(macro_data):
   """診斷當前大盤與全球宏觀指標是否觸發空倉熔斷警示"""
@@ -1228,19 +1243,16 @@ def check_market_risk_regime(macro_data):
     except Exception:
       return 0.0
 
-  # 1. 檢測費城半導體跌幅
   sox_chg = parse_change(macro_data.get("費城半導體", {}).get("change", "0"))
   if sox_chg < -1.2:
     risk_score += 1
     risk_reasons.append(f"費城半導體重挫 ({sox_chg:+.2f}%)")
 
-  # 2. 檢測 VIX 恐慌指數
   vix_chg = parse_change(macro_data.get("VIX 恐慌指數", {}).get("change", "0"))
   if vix_chg > 3.0:
     risk_score += 1
     risk_reasons.append(f"VIX 恐慌指數暴漲 ({vix_chg:+.2f}%)")
 
-  # 3. 檢測 WTI 國際原油 (通膨再起疑慮)
   oil_chg = parse_change(
       macro_data.get("WTI 國際原油", {}).get("change", "0")
   )
@@ -1248,7 +1260,6 @@ def check_market_risk_regime(macro_data):
     risk_score += 1
     risk_reasons.append(f"WTI 原油急漲 ({oil_chg:+.2f}%)")
 
-  # 4. 檢測美10年債殖利率
   tnx_chg = parse_change(
       macro_data.get("美10年債殖利率", {}).get("change", "0")
   )
@@ -1256,13 +1267,15 @@ def check_market_risk_regime(macro_data):
     risk_score += 1
     risk_reasons.append(f"美債殖利率飆升 ({tnx_chg:+.2f}%)")
 
-  # 風控門檻：若滿足 2 項以上高風險條件，判定為極度危險 Risk-Off 熔斷狀態
   if risk_score >= 2:
     return True, risk_reasons
 
   return False, []
 
 
+# ------------------------------------------------------------------------------
+# 選股名單生成（含嚴格 NaN 過濾與無效標的排除）
+# ------------------------------------------------------------------------------
 def generate_daily_picks(
     macro_data,
     sector_data,
@@ -1272,7 +1285,6 @@ def generate_daily_picks(
     selected_masters,
     target_date_str,
 ):
-  # 💡 第一關：先執行「市場風控熔斷診斷」
   is_danger, danger_reasons = check_market_risk_regime(macro_data)
   if is_danger:
     reason_str = " | ".join(danger_reasons)
@@ -1381,8 +1393,9 @@ def generate_daily_picks(
     if not stock_id:
       continue
 
+    # 安全驗證與真實成交價抓取
     valid, real_p = is_valid_stock_fast(stock_id, min_price, max_price)
-    if valid and real_p:
+    if valid and real_p is not None and not math.isnan(real_p) and real_p > 0:
       warn_info = check_stock_warning_status(stock_id)
       raw_pct_str = item.get("上漲率", item.get("預估上漲率", "78%"))
       raw_pct = float(re.sub(r"[^\d.]", "", raw_pct_str) or 78.0)
@@ -1439,6 +1452,7 @@ def generate_daily_picks(
     if len(final_results) >= 3:
       break
 
+  # 後備強勢股檢測（必須能順利抓到實價）
   fallback_candidates = [
       "2330",
       "2317",
@@ -1455,7 +1469,7 @@ def generate_daily_picks(
     if any(res.get("股號") == f_id for res in final_results):
       continue
     valid, real_p = is_valid_stock_fast(f_id, min_price, max_price)
-    if valid and real_p:
+    if valid and real_p is not None and not math.isnan(real_p) and real_p > 0:
       p_low = round(real_p * 0.985, 1)
       p_high = round(real_p * 1.005, 1)
       target_p = round(real_p * 1.08, 1)
@@ -1471,15 +1485,21 @@ def generate_daily_picks(
           "波段期間": "5-10天",
       })
 
+  # 若極端情況下筆數不足，給予穩定之台積電基本資料
   while len(final_results) < 3:
+    p_info = get_realtime_tw_price_info("2330")
+    rp = p_info["real_price"] if p_info else 1000.0
+    pl = round(rp * 0.985, 1)
+    ph = round(rp * 1.005, 1)
+    tp = round(rp * 1.08, 1)
     final_results.append({
         "上漲率": "70%",
-        "族群": "熱門主流",
+        "族群": "晶圓代工",
         "股名": "台積電",
         "股號": "2330",
-        "當前實價": "---",
-        "建議進場": "---",
-        "波段停利/防護提示": "---",
+        "當前實價": f"{rp:.2f}",
+        "建議進場": f"{pl:.1f}-{ph:.1f}",
+        "波段停利/防護提示": f"目標 {tp:.1f} (達標即落袋)",
         "波段期間": "5-10天",
     })
 
@@ -1976,7 +1996,7 @@ for name, info in macro_data.items():
 
 st.divider()
 
-# 💡 主畫面風控熔斷警示 banner
+# 💡 風控熔斷警示 banner
 is_danger, danger_reasons = check_market_risk_regime(macro_data)
 if is_danger:
   st.error(
