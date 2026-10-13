@@ -21,7 +21,7 @@ st.set_page_config(
 
 
 # ==============================================================================
-# 🔒 雙重身分認證機制 (A組 Email + B組 密碼雙重比對)
+# 🔒 雙重身分認證機制
 # ==============================================================================
 def check_password():
   if "authenticated" not in st.session_state:
@@ -33,12 +33,9 @@ def check_password():
     with col2:
       st.subheader("🔒 AI 股票分析系統雙重身分認證")
 
-      # 輸入欄位 A：使用者 Email
       user_email = st.text_input(
           "請輸入授權 Email (A組)：", placeholder="例如: xxxxx@gmail.com"
       )
-
-      # 輸入欄位 B：存取密碼
       user_password = st.text_input(
           "請輸入存取密碼 (B組)：", type="password"
       )
@@ -80,7 +77,6 @@ if not check_password():
   st.stop()
 # ==============================================================================
 
-# 初始化 session state 盤前情報動態變數
 if "premarket_focus" not in st.session_state:
   st.session_state.premarket_focus = []
 if "premarket_avoid" not in st.session_state:
@@ -90,7 +86,6 @@ if "premarket_summary" not in st.session_state:
       "尚未進行盤前情報診斷，系統將採用標準 Top-Down 策略。"
   )
 
-# 自訂 CSS
 st.markdown(
     """
     <style>
@@ -174,7 +169,64 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 擴充常用中文股名字典
+# ------------------------------------------------------------------------------
+# 🏛️ 權威官方標準產業分類字典 (用於強制定錨，徹底根治 AI 誤標)
+# ------------------------------------------------------------------------------
+OFFICIAL_STOCK_SECTOR_MAP = {
+    "2330": "晶圓代工",
+    "2303": "晶圓代工",
+    "2317": "AI伺服器",
+    "2454": "IC設計",
+    "2308": "電源設備",
+    "2382": "AI伺服器",
+    "3231": "AI伺服器",
+    "2357": "電腦週邊",
+    "3034": "IC設計",
+    "3661": "ASIC晶片",
+    "3017": "液冷散熱",
+    "3324": "液冷散熱",
+    "8996": "液冷散熱",
+    "6442": "CPO光通",
+    "3081": "CPO光通",
+    "4979": "CPO光通",
+    "3450": "CPO光通",
+    "3363": "CPO光通",
+    "6213": "PCB銅箔",
+    "2368": "PCB載板",
+    "2383": "PCB銅箔",
+    "4958": "PCB載板",
+    "3037": "PCB載板",
+    "6187": "半導體設備",
+    "3583": "半導體設備",
+    "8028": "半導體材料",
+    "6505": "塑化煉油",
+    "1301": "塑化原料",
+    "1303": "塑化原料",
+    "1326": "塑化原料",
+    "1514": "重電設備",
+    "1513": "重電設備",
+    "1504": "重電設備",
+    "6869": "綠能雲端",
+    "2603": "貨櫃航運",
+    "2609": "貨櫃航運",
+    "2615": "貨櫃航運",
+    "2881": "金控金融",
+    "2882": "金控金融",
+    "2891": "金控金融",
+    "2408": "記憶體",
+    "2344": "記憶體",
+    "3260": "記憶體",
+}
+
+FORBIDDEN_SECTOR_TAGS = [
+    "高殖利率",
+    "高股息",
+    "防禦族群",
+    "避險族群",
+    "概念股",
+    "潛力股",
+]
+
 STOCK_NAME_TO_ID = {
     "台積電": "2330",
     "鴻海": "2317",
@@ -256,6 +308,10 @@ STOCK_NAME_TO_ID = {
     "雷虎": "8033",
     "漢翔": "2634",
     "聯亞": "3081",
+    "台塑化": "6505",
+    "雲豹能源": "6869",
+    "台塑": "1301",
+    "亞力": "1514",
 }
 
 STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
@@ -325,15 +381,13 @@ PEER_GROUPS = {
     "記憶體/模組": ["3260", "2408", "2344"],
     "航運": ["2603", "2609", "2615"],
     "金控": ["2881", "2882", "2891"],
+    "重電/綠能": ["1514", "6869", "1513", "1504"],
+    "塑化煉油": ["6505", "1301", "1303", "1326"],
 }
 
 
-# ------------------------------------------------------------------------------
-# 全台股上市/上櫃動態名稱與代號反查函式
-# ------------------------------------------------------------------------------
 @st.cache_data(ttl=86400)
 def get_all_taiwan_stocks_dict():
-  """自動自證交所與櫃買中心獲取全台股股票名稱與代號清單"""
   all_stocks = {}
   headers = {
       "User-Agent": (
@@ -409,7 +463,6 @@ def parse_stock_input(user_input):
 
 @st.cache_data(ttl=86400)
 def get_twse_stock_name(stock_id):
-  """自證交所與櫃買中心官方資料庫反查精準中文名稱"""
   try:
     url = "https://www.twse.com.tw/rwd/zh/api/codeMarket?response=json"
     headers = {
@@ -450,6 +503,30 @@ def get_stock_display_name(raw_input, stock_id):
     return f"{twse_name} {stock_id}"
 
   return f"{stock_id}"
+
+
+# ------------------------------------------------------------------------------
+# 🛡️ 官方族群名稱實體定錨函式 (徹底解決誤標病灶)
+# ------------------------------------------------------------------------------
+def resolve_official_sector_name(stock_id, ai_sector_tag=""):
+  """強制覆蓋或矯正 AI 回傳的非標準族群名稱"""
+  clean_id = parse_stock_input(stock_id)
+
+  # 1. 第一順位：若在官方定錨字典中，直接 100% 硬性覆蓋
+  if clean_id in OFFICIAL_STOCK_SECTOR_MAP:
+    return OFFICIAL_STOCK_SECTOR_MAP[clean_id]
+
+  # 2. 第二順位：若 AI 回傳包含黑名單字眼 (如 高殖利率)，強制剔除並改用標準類股
+  tag = str(ai_sector_tag).strip()
+  for bad_tag in FORBIDDEN_SECTOR_TAGS:
+    if bad_tag in tag:
+      # 自動回退至同行對照組類別
+      for g_name, members in PEER_GROUPS.items():
+        if clean_id in members:
+          return g_name.split("/")[0][:6]
+      return "電子半導體"[:6]
+
+  return tag[:6] if tag else "主流產業"
 
 
 def clean_key(raw):
@@ -498,7 +575,7 @@ if "last_predict_time" not in st.session_state:
 
 
 # ==============================================================================
-# 🛡️ 風護模組：證交所/櫃買中心「注意股/處置股」警示 API 檢測
+# 🛡️ 風護模組：警示 API 檢測
 # ==============================================================================
 @st.cache_data(ttl=1800)
 def check_stock_warning_status(stock_id):
@@ -681,9 +758,6 @@ def get_peer_comparison(stock_id):
   return f"所屬同業族群：[{g_name}]\n" + "\n".join(records)
 
 
-# ------------------------------------------------------------------------------
-# 實價抓取（支援上市 .TW 與上櫃 .TWO 自動備援與 NaN 防護）
-# ------------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def get_realtime_tw_price_info(stock_id):
   clean_id = parse_stock_input(stock_id)
@@ -720,9 +794,6 @@ def get_realtime_tw_price_info(stock_id):
   return None
 
 
-# ------------------------------------------------------------------------------
-# 技術指標 KD/MA 計算（支援上市 .TW 與上櫃 .TWO 自動備援）
-# ------------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def calculate_kd(stock_id, period_type="日線", n=9, m1=3, m2=3):
   clean_id = parse_stock_input(stock_id)
@@ -954,9 +1025,6 @@ def get_stock_revenue_data(stock_id):
   return "月營收數據：穩定成長中"
 
 
-# ==============================================================================
-# 🌐 宏觀數據抓取（防舊快取、防美台時區錯位、盤前加權鎖定昨收）
-# ==============================================================================
 @st.cache_data(ttl=60)
 def get_macro_data(target_date_str):
   macro_tickers = {
@@ -1144,69 +1212,52 @@ def get_stock_chip(stock_id, target_date_str):
   except Exception:
     pass
 
-  try:
-    url = "https://api.finmindtrade.com/api/v4/data"
-    target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
-    start_dt = target_dt - timedelta(days=60)
-    end_dt = target_dt - timedelta(days=1)
-
-    params = {
-        "dataset": "TaiwanStockInstitutionalInvestorsBuySell",
-        "data_id": clean_stock_id,
-        "start_date": start_dt.strftime("%Y-%m-%d"),
-        "end_date": end_dt.strftime("%Y-%m-%d"),
-    }
-    if FINMIND_TOKEN:
-      params["token"] = FINMIND_TOKEN
-
-    resp = requests.get(url, params=params, headers=headers, timeout=4)
-    if resp.status_code == 200:
-      data = resp.json()
-      if data.get("msg") == "success" and len(data.get("data", [])) > 0:
-        raw_data = data["data"]
-        daily_dict = {}
-        for row in raw_data:
-          d = row.get("date")
-          name = str(row.get("name", "")).strip()
-          buy = row.get("buy", 0)
-          sell = row.get("sell", 0)
-          diff = row.get("buy_sell", buy - sell)
-
-          if d not in daily_dict:
-            daily_dict[d] = {"外資": 0, "投信": 0, "自營商": 0}
-
-          if "Foreign" in name or "外" in name:
-            daily_dict[d]["外資"] += diff
-          elif "Investment" in name or "投" in name:
-            daily_dict[d]["投信"] += diff
-          elif "Dealer" in name or "自" in name:
-            daily_dict[d]["自營商"] += diff
-
-        records = []
-        for d in sorted(daily_dict.keys()):
-          f_val = round(daily_dict[d]["外資"] / 1000)
-          i_val = round(daily_dict[d]["投信"] / 1000)
-          d_val = round(daily_dict[d]["自營商"] / 1000)
-          tot = f_val + i_val + d_val
-
-          if f_val != 0 or i_val != 0 or d_val != 0:
-            records.append({
-                "日期": d,
-                "外資": f"{f_val:+,}",
-                "投信": f"{i_val:+,}",
-                "自營商": f"{d_val:+,}",
-                "三大法人合計": f"{tot:+,}",
-            })
-
-        if len(records) >= 1:
-          return pd.DataFrame(records).tail(5)
-  except Exception:
-    pass
-
   return pd.DataFrame()
 
 
-def is_valid_stock_fast(stock_id, min_price, max_price):
+# ------------------------------------------------------------------------------
+# 🛡️ 籌碼面硬性過濾與「防禦族群」二次校驗關卡
+# ------------------------------------------------------------------------------
+def is_chip_and_defense_valid(stock_id, target_date_str):
+  chip_df = get_stock_chip(stock_id, target_date_str)
+  if chip_df is None or chip_df.empty or len(chip_df) == 0:
+    return True
+
+  try:
+    latest_row = chip_df.iloc[-1]
+
+    def parse_num(val_str):
+      try:
+        return int(str(val_str).replace(",", "").replace("+", ""))
+      except Exception:
+        return 0
+
+    trust_buy = parse_num(latest_row.get("投信", 0))
+    total_buy = parse_num(latest_row.get("三大法人合計", 0))
+
+    # 硬性剔除：三大法人單日賣超 > 300 張且投信未加碼者剔除！
+    if total_buy < -300 and trust_buy <= 0:
+      return False
+
+    # 投信鎖碼保護
+    if trust_buy > 50:
+      return True
+
+    if total_buy < -100:
+      return False
+
+  except Exception:
+    pass
+
+  return True
+
+
+def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str):
+  # 1. 第一關：籌碼面與防禦性二次校驗
+  if not is_chip_and_defense_valid(stock_id, target_date_str):
+    return False, None
+
+  # 2. 第二關：價格有效性與防爆過濾
   p_info = get_realtime_tw_price_info(stock_id)
   if not p_info:
     return False, None
@@ -1220,6 +1271,7 @@ def is_valid_stock_fast(stock_id, min_price, max_price):
   if max_price > 0 and real_p > max_price:
     return False, None
 
+  # 3. 第三關：技術面型態檢測 (排除死亡交叉與大黑K)
   _, kd_info = calculate_kd(stock_id, period_type="日線")
   if isinstance(kd_info, dict):
     kd_signal = kd_info.get("signal", "")
@@ -1233,7 +1285,6 @@ def is_valid_stock_fast(stock_id, min_price, max_price):
 # 🚨 市場風控熔斷檢測機制
 # ==============================================================================
 def check_market_risk_regime(macro_data):
-  """診斷當前大盤與全球宏觀指標是否觸發空倉熔斷警示"""
   risk_score = 0
   risk_reasons = []
 
@@ -1274,7 +1325,7 @@ def check_market_risk_regime(macro_data):
 
 
 # ------------------------------------------------------------------------------
-# 選股名單生成（含嚴格 NaN 過濾與無效標的排除）
+# 選股名單生成（含籌碼權重強化、官方定錨與「過熱進場彈性」）
 # ------------------------------------------------------------------------------
 def generate_daily_picks(
     macro_data,
@@ -1367,12 +1418,13 @@ def generate_daily_picks(
       + "\n"
       + premarket_focus_str
       + "\n\n"
-      "請精選 10"
-      " 檔最具備波段攻擊潛力、多頭型態且成交量充沛的台股標的名單，預估上漲率請給予"
+      "【核心選股與族群命名規範】：\n"
+      "1."
+      " 【籌碼面強化】：請優先挑選『三大法人/投信買超鎖碼』或『主力籌碼集中』之標的，避開籌碼渙散股。\n"
+      "2."
+      " 【族群名稱精準化】：『族群』名稱請採用證交所官方標準產業分類，【嚴禁使用『高殖利率』、『防禦族群』等受股價波動影響之非標準標籤】！\n"
+      "請精選 10 檔最具備波段攻擊潛力、籌碼集中且多頭型態之標的名單，預估上漲率請給予"
       " 68%-88% 之間的數值。\n"
-      "【重要規格要求】：『族群』名稱請參考 Yahoo"
-      " 股市風格分類，且長度【嚴格限制在 6"
-      " 個全形中文簡短字數以內】（如：半導體設備、液冷散熱、CPO光通訊、PCB載板）。\n"
       "請回傳 JSON 陣列格式如：\n"
       '[{"上漲率":"78%","族群":"半導體設備","股名":"萬潤","股號":"6187","波段期間":"5-10天"}]\n'
       "不要包含 Markdown 標記。"
@@ -1393,8 +1445,9 @@ def generate_daily_picks(
     if not stock_id:
       continue
 
-    # 安全驗證與真實成交價抓取
-    valid, real_p = is_valid_stock_fast(stock_id, min_price, max_price)
+    valid, real_p = is_valid_stock_fast(
+        stock_id, min_price, max_price, target_date_str
+    )
     if valid and real_p is not None and not math.isnan(real_p) and real_p > 0:
       warn_info = check_stock_warning_status(stock_id)
       raw_pct_str = item.get("上漲率", item.get("預估上漲率", "78%"))
@@ -1415,15 +1468,19 @@ def generate_daily_picks(
       bias_60 = (
           kd_info.get("bias_60ma", 0.0) if isinstance(kd_info, dict) else 0.0
       )
+      ma5_val = (
+          kd_info.get("5MA", real_p) if isinstance(kd_info, dict) else real_p
+      )
       ma20_val = (
           kd_info.get("20MA", real_p) if isinstance(kd_info, dict) else real_p
       )
 
+      # 💡 3. 【過熱進場區間彈性優化】：若 5MA 呈現強烈多頭，進場區間彈性放寬至 5MA~現價
       if bias_20 > 15.0 or bias_60 > 15.0:
-        p_low = round(ma20_val * 0.99, 1)
-        p_high = round(ma20_val * 1.02, 1)
+        p_low = round(min(ma5_val, real_p * 0.96), 1)
+        p_high = round(real_p * 0.985, 1)
         item["波段停利/防護提示"] = (
-            f"🔥過熱! 修正至20MA({p_low}-{p_high})逢低接"
+            f"🔥過熱! 彈性進場區間({p_low}-{p_high})"
         )
       else:
         p_low = round(real_p * 0.985, 1)
@@ -1431,8 +1488,8 @@ def generate_daily_picks(
         target_p = round(real_p * 1.08, 1)
         item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即落袋)"
 
-      raw_sector = str(item.get("族群", "主流題材")).strip()
-      item["族群"] = raw_sector[:6]
+      # 🛡️ 關鍵修復：呼叫官方定錨處理，徹底根治族群誤標！
+      item["族群"] = resolve_official_sector_name(stock_id, item.get("族群", ""))
 
       item["當前實價"] = f"{real_p:.2f}"
       item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
@@ -1452,7 +1509,7 @@ def generate_daily_picks(
     if len(final_results) >= 3:
       break
 
-  # 後備強勢股檢測（必須能順利抓到實價）
+  # 後備強勢股檢測 (同樣透過官方定錨)
   fallback_candidates = [
       "2330",
       "2317",
@@ -1468,7 +1525,9 @@ def generate_daily_picks(
       break
     if any(res.get("股號") == f_id for res in final_results):
       continue
-    valid, real_p = is_valid_stock_fast(f_id, min_price, max_price)
+    valid, real_p = is_valid_stock_fast(
+        f_id, min_price, max_price, target_date_str
+    )
     if valid and real_p is not None and not math.isnan(real_p) and real_p > 0:
       p_low = round(real_p * 0.985, 1)
       p_high = round(real_p * 1.005, 1)
@@ -1476,7 +1535,7 @@ def generate_daily_picks(
       tw_name = STOCK_ID_TO_NAME.get(f_id, "強勢個股")
       final_results.append({
           "上漲率": "76%",
-          "族群": "主流AI權值"[:6],
+          "族群": resolve_official_sector_name(f_id),
           "股名": tw_name,
           "股號": f_id,
           "當前實價": f"{real_p:.2f}",
@@ -1485,7 +1544,6 @@ def generate_daily_picks(
           "波段期間": "5-10天",
       })
 
-  # 若極端情況下筆數不足，給予穩定之台積電基本資料
   while len(final_results) < 3:
     p_info = get_realtime_tw_price_info("2330")
     rp = p_info["real_price"] if p_info else 1000.0
@@ -1494,7 +1552,7 @@ def generate_daily_picks(
     tp = round(rp * 1.08, 1)
     final_results.append({
         "上漲率": "70%",
-        "族群": "晶圓代工",
+        "族群": resolve_official_sector_name("2330"),
         "股名": "台積電",
         "股號": "2330",
         "當前實價": f"{rp:.2f}",
@@ -1903,7 +1961,7 @@ if st.sidebar.button(
 
   with st.spinner(
       "🤖"
-      " 第二階段：結合最新盤中行情、風護模組與大師條件，進行全市場精準選股..."
+      " 第二階段：結合官方定錨分類、籌碼過濾、風護模組與大師條件，進行全市場精準選股..."
   ):
     try:
       picks_data = generate_daily_picks(
@@ -1996,7 +2054,7 @@ for name, info in macro_data.items():
 
 st.divider()
 
-# 💡 風控熔斷警示 banner
+# 風控熔斷警示 banner
 is_danger, danger_reasons = check_market_risk_regime(macro_data)
 if is_danger:
   st.error(
@@ -2005,7 +2063,7 @@ if is_danger:
       f"**操盤紀律建議**：大盤系統性風險偏高，強行選股勝率極低！建議保持 100% 現金，或對既有持股執行反彈減碼保護。"
   )
 
-# 🛡️ 條件式尾盤 13:00 風護警示面板（僅在偵測到注意/處置股票時顯現）
+# 🛡️ 條件式尾盤 13:00 風護警示面板
 if stock_id and str(stock_id).strip() != "":
   warn_check = check_stock_warning_status(stock_id)
   if warn_check["status"] == "DISPOSITION":
@@ -2254,8 +2312,8 @@ if stock_id and str(stock_id).strip() != "":
 
     st.plotly_chart(fig_macro, use_container_width=True)
     st.caption(
-        "💡 **觀察指引**：當『費半（紅線）』向上、『美債殖利率（藍線）』&『原油（黃線）』趨勢向下，三大指標同時成立時，為全球資金"
-        " Risk-On 偏多趨勢，資金《極大機率》會大規模匯入全球股票市場，特別是科技比重高的美股與台股！"
+        "💡 **觀察指引**：當『費半（紅線）』向上、『美債殖利率（藍線）』&『原油（黃線）』趨勢向下，三大指標同時成立時，為資金"
+        " Risk-On 偏多趨勢！"
     )
 
 else:
