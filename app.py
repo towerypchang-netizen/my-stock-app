@@ -199,10 +199,13 @@ OFFICIAL_STOCK_SECTOR_MAP = {
     "6187": "半導體設備",
     "3583": "半導體設備",
     "8028": "半導體材料",
+    "2449": "半導體封測",
     "6505": "塑化煉油",
     "1301": "塑化原料",
     "1303": "塑化原料",
+    "1312": "塑膠工業",
     "1326": "塑化原料",
+    "4755": "化學工業",
     "1514": "重電設備",
     "1513": "重電設備",
     "1504": "重電設備",
@@ -311,6 +314,9 @@ STOCK_NAME_TO_ID = {
     "台塑化": "6505",
     "雲豹能源": "6869",
     "台塑": "1301",
+    "南亞": "1303",
+    "國喬": "1312",
+    "三福化": "4755",
     "亞力": "1514",
 }
 
@@ -382,7 +388,7 @@ PEER_GROUPS = {
     "航運": ["2603", "2609", "2615"],
     "金控": ["2881", "2882", "2891"],
     "重電/綠能": ["1514", "6869", "1513", "1504"],
-    "塑化煉油": ["6505", "1301", "1303", "1326"],
+    "塑化原料/特化": ["6505", "1301", "1303", "1312", "4755"],
 }
 
 
@@ -506,21 +512,17 @@ def get_stock_display_name(raw_input, stock_id):
 
 
 # ------------------------------------------------------------------------------
-# 🛡️ 官方族群名稱實體定錨函式 (徹底解決誤標病灶)
+# 🛡️ 官方族群名稱實體定錨函式
 # ------------------------------------------------------------------------------
 def resolve_official_sector_name(stock_id, ai_sector_tag=""):
-  """強制覆蓋或矯正 AI 回傳的非標準族群名稱"""
   clean_id = parse_stock_input(stock_id)
 
-  # 1. 第一順位：若在官方定錨字典中，直接 100% 硬性覆蓋
   if clean_id in OFFICIAL_STOCK_SECTOR_MAP:
     return OFFICIAL_STOCK_SECTOR_MAP[clean_id]
 
-  # 2. 第二順位：若 AI 回傳包含黑名單字眼 (如 高殖利率)，強制剔除並改用標準類股
   tag = str(ai_sector_tag).strip()
   for bad_tag in FORBIDDEN_SECTOR_TAGS:
     if bad_tag in tag:
-      # 自動回退至同行對照組類別
       for g_name, members in PEER_GROUPS.items():
         if clean_id in members:
           return g_name.split("/")[0][:6]
@@ -1216,10 +1218,28 @@ def get_stock_chip(stock_id, target_date_str):
 
 
 # ------------------------------------------------------------------------------
-# 🛡️ 籌碼面硬性過濾與「防禦族群」二次校驗關卡
+# 🛡️ 盤前避險族群硬性黑名單 (Hard Ban Filter) 與籌碼檢測
 # ------------------------------------------------------------------------------
 def is_chip_and_defense_valid(stock_id, target_date_str):
-  chip_df = get_stock_chip(stock_id, target_date_str)
+  clean_id = parse_stock_input(stock_id)
+
+  # 🚨 核心新功能：【盤前避險族群硬性黑名單（Hard Ban Filter）】
+  # 檢視盤前情報，若提示「避開高估值/科技/半導體」，硬性攔截相關高位階科技股
+  avoid_sectors = st.session_state.get("premarket_avoid", [])
+  avoid_str = "".join(avoid_sectors)
+
+  if any(k in avoid_str for k in ["科技", "半導體", "高估值"]):
+    official_sector = resolve_official_sector_name(clean_id)
+    # 若屬於半導體設備、半導體封測或高位階 IC 類別，直接 Hard Ban！
+    if official_sector in [
+        "半導體設備",
+        "半導體封測",
+        "IC設計",
+        "ASIC晶片",
+    ]:
+      return False
+
+  chip_df = get_stock_chip(clean_id, target_date_str)
   if chip_df is None or chip_df.empty or len(chip_df) == 0:
     return True
 
@@ -1235,11 +1255,14 @@ def is_chip_and_defense_valid(stock_id, target_date_str):
     trust_buy = parse_num(latest_row.get("投信", 0))
     total_buy = parse_num(latest_row.get("三大法人合計", 0))
 
-    # 硬性剔除：三大法人單日賣超 > 300 張且投信未加碼者剔除！
+    # 硬性剔除：三大法人單日賣超 > 300 張且投信未加碼者剔除！（如萬潤投信-489張）
     if total_buy < -300 and trust_buy <= 0:
       return False
 
-    # 投信鎖碼保護
+    # 若投信呈現顯著賣超 (-100 張以上)，即使外資買超也視為籌碼鬆動，剔除！
+    if trust_buy < -100:
+      return False
+
     if trust_buy > 50:
       return True
 
@@ -1253,7 +1276,7 @@ def is_chip_and_defense_valid(stock_id, target_date_str):
 
 
 def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str):
-  # 1. 第一關：籌碼面與防禦性二次校驗
+  # 1. 第一關：盤前硬性黑名單與籌碼面二次校驗
   if not is_chip_and_defense_valid(stock_id, target_date_str):
     return False, None
 
@@ -1325,7 +1348,7 @@ def check_market_risk_regime(macro_data):
 
 
 # ------------------------------------------------------------------------------
-# 選股名單生成（含籌碼權重強化、官方定錨與「過熱進場彈性」）
+# 選股名單生成（含盤前避險黑名單、籌碼強化、官方定錨與進場彈性）
 # ------------------------------------------------------------------------------
 def generate_daily_picks(
     macro_data,
@@ -1401,6 +1424,11 @@ def generate_daily_picks(
       if st.session_state.premarket_focus
       else ""
   )
+  premarket_avoid_str = (
+      f"【08:00 盤前即時風險/避險黑名單】：{st.session_state.premarket_avoid}"
+      if st.session_state.premarket_avoid
+      else ""
+  )
 
   prompt_select = (
       "請作為頂級華爾街台股選股操盤手，基準日期："
@@ -1417,16 +1445,18 @@ def generate_daily_picks(
       + str(macro_data)
       + "\n"
       + premarket_focus_str
+      + "\n"
+      + premarket_avoid_str
       + "\n\n"
       "【核心選股與族群命名規範】：\n"
       "1."
-      " 【籌碼面強化】：請優先挑選『三大法人/投信買超鎖碼』或『主力籌碼集中』之標的，避開籌碼渙散股。\n"
+      " 【籌碼面與避險硬性要求】：請優先挑選『三大法人/投信買超鎖碼』之標的；【嚴禁挑選盤前提示避開之族群】！\n"
       "2."
       " 【族群名稱精準化】：『族群』名稱請採用證交所官方標準產業分類，【嚴禁使用『高殖利率』、『防禦族群』等受股價波動影響之非標準標籤】！\n"
       "請精選 10 檔最具備波段攻擊潛力、籌碼集中且多頭型態之標的名單，預估上漲率請給予"
       " 68%-88% 之間的數值。\n"
       "請回傳 JSON 陣列格式如：\n"
-      '[{"上漲率":"78%","族群":"半導體設備","股名":"萬潤","股號":"6187","波段期間":"5-10天"}]\n'
+      '[{"上漲率":"78%","族群":"塑化原料","股名":"台塑","股號":"1301","波段期間":"5-10天"}]\n'
       "不要包含 Markdown 標記。"
   )
 
@@ -1445,6 +1475,7 @@ def generate_daily_picks(
     if not stock_id:
       continue
 
+    # 執行包含「盤前避險黑名單」在內的三關安全檢測
     valid, real_p = is_valid_stock_fast(
         stock_id, min_price, max_price, target_date_str
     )
@@ -1471,11 +1502,8 @@ def generate_daily_picks(
       ma5_val = (
           kd_info.get("5MA", real_p) if isinstance(kd_info, dict) else real_p
       )
-      ma20_val = (
-          kd_info.get("20MA", real_p) if isinstance(kd_info, dict) else real_p
-      )
 
-      # 💡 3. 【過熱進場區間彈性優化】：若 5MA 呈現強烈多頭，進場區間彈性放寬至 5MA~現價
+      # 💡 過熱進場區間彈性優化：多頭強勢股進場區間設為 5MA~現價
       if bias_20 > 15.0 or bias_60 > 15.0:
         p_low = round(min(ma5_val, real_p * 0.96), 1)
         p_high = round(real_p * 0.985, 1)
@@ -1488,7 +1516,7 @@ def generate_daily_picks(
         target_p = round(real_p * 1.08, 1)
         item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即落袋)"
 
-      # 🛡️ 關鍵修復：呼叫官方定錨處理，徹底根治族群誤標！
+      # 🛡️ 官方定錨處理，徹底根治族群誤標
       item["族群"] = resolve_official_sector_name(stock_id, item.get("族群", ""))
 
       item["當前實價"] = f"{real_p:.2f}"
@@ -1509,16 +1537,16 @@ def generate_daily_picks(
     if len(final_results) >= 3:
       break
 
-  # 後備強勢股檢測 (同樣透過官方定錨)
+  # 後備強勢股檢測（需通過盤前避險黑名單與籌碼檢測）
   fallback_candidates = [
+      "1301",
+      "1303",
+      "6505",
+      "2881",
+      "2882",
       "2330",
       "2317",
       "2382",
-      "3231",
-      "3017",
-      "6187",
-      "2454",
-      "2308",
   ]
   for f_id in fallback_candidates:
     if len(final_results) >= 3:
@@ -1545,16 +1573,16 @@ def generate_daily_picks(
       })
 
   while len(final_results) < 3:
-    p_info = get_realtime_tw_price_info("2330")
-    rp = p_info["real_price"] if p_info else 1000.0
+    p_info = get_realtime_tw_price_info("1301")
+    rp = p_info["real_price"] if p_info else 80.0
     pl = round(rp * 0.985, 1)
     ph = round(rp * 1.005, 1)
     tp = round(rp * 1.08, 1)
     final_results.append({
-        "上漲率": "70%",
-        "族群": resolve_official_sector_name("2330"),
-        "股名": "台積電",
-        "股號": "2330",
+        "上漲率": "75%",
+        "族群": resolve_official_sector_name("1301"),
+        "股名": "台塑",
+        "股號": "1301",
         "當前實價": f"{rp:.2f}",
         "建議進場": f"{pl:.1f}-{ph:.1f}",
         "波段停利/防護提示": f"目標 {tp:.1f} (達標即落袋)",
@@ -1961,7 +1989,7 @@ if st.sidebar.button(
 
   with st.spinner(
       "🤖"
-      " 第二階段：結合官方定錨分類、籌碼過濾、風護模組與大師條件，進行全市場精準選股..."
+      " 第二階段：結合盤前避險黑名單、官方定錨分類、籌碼過濾與大師條件，進行全市場精準選股..."
   ):
     try:
       picks_data = generate_daily_picks(
