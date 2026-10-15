@@ -2333,15 +2333,72 @@ with chk_cols[3]:
 # 抓取獨立歷史對比曲線數據
 norm_trends_df = get_macro_history_trends_normalized(days=days_selected)
 
+# 🎨 重新校驗深色背景 (plotly_dark) 之超高對比度配色與線形對應[cite: 15]
 cols_map = {
-    "台股加權": ("台股加權指數", "#ff7875", 2.5, "solid", show_taiex, "lines"),
-    "日經 225 N225": ("日經 225", "#13c2c2", 2.0, "solid", show_nikkei, "lines"),
-    "費城半導體 SOX": ("費半 SOX", "#52c41a", 2.0, "solid", show_sox, "lines"),
-    "美債 10Y 殖利率": ("美債 10Y 殖利率", "#faad14", 2.0, "dash", show_us10y, "lines"),
-    "恐慌指數 VIX": ("恐慌指數 VIX", "#b37feb", 1.5, "dashdot", show_vix, "lines"),
-    "美元指數 DXY": ("美元指數 DXY", "#1890ff", 2.0, "dot", show_dxy, "lines"),
-    "WTI 原油": ("WTI 原油", "#eb2f96", 1.5, "solid", show_wti, "lines"),
-    "黃金現貨 Gold": ("黃金現貨 Gold", "#fadb14", 1.5, "solid", show_gold, "lines"),
+    "台股加權": (
+        "台股加權指數",
+        "#ff1e1e",
+        2.8,
+        "solid",
+        show_taiex,
+        "lines",
+    ),  # 🔴 鮮豔純紅 (加粗主線)[cite: 15]
+    "費城半導體 SOX": (
+        "費半 SOX",
+        "#00ff66",
+        2.0,
+        "solid",
+        show_sox,
+        "lines",
+    ),  # 🟢 亮毒綠色[cite: 15]
+    "日經 225 N225": (
+        "日經 225",
+        "#00e5ff",
+        2.0,
+        "solid",
+        show_nikkei,
+        "lines",
+    ),  # 🔷 亮青藍色[cite: 15]
+    "美債 10Y 殖利率": (
+        "美債 10Y 殖利率",
+        "#ff9900",
+        2.0,
+        "dash",
+        show_us10y,
+        "lines",
+    ),  # 🟠 鮮豔橘黃 + 長虛線[cite: 15]
+    "恐慌指數 VIX": (
+        "恐慌指數 VIX",
+        "#d870ff",
+        1.8,
+        "dashdot",
+        show_vix,
+        "lines",
+    ),  # 🟣 亮紫粉色 + 點劃線[cite: 15]
+    "美元指數 DXY": (
+        "美元指數 DXY",
+        "#2979ff",
+        2.0,
+        "dot",
+        show_dxy,
+        "lines",
+    ),  # 🟦 天空純藍 + 密點線[cite: 15]
+    "WTI 原油": (
+        "WTI 原油",
+        "#ff007f",
+        1.8,
+        "solid",
+        show_wti,
+        "lines",
+    ),  # 鮮豔玫紅色[cite: 15]
+    "黃金現貨 Gold": (
+        "黃金現貨 Gold",
+        "#ffee00",
+        1.8,
+        "solid",
+        show_gold,
+        "lines",
+    ),  # 🟡 帝王亮黃[cite: 15]
 }
 
 fig_trends = go.Figure()
