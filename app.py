@@ -7,7 +7,6 @@ import time
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from google import genai
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -829,7 +828,7 @@ def diagnose_premarket_intelligence(
     當前全球宏觀指標：{macro_data}。
     【台指期夜盤最即時數據 (期交所雙源校驗)】：收盤價 {night_fut_data['close']}，變動：{night_fut_data['change_str']} (校驗狀態: {night_fut_data['audit_status']})。
 
-    請針對昨夜美股、台指期夜盤、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
+    請針對昨夜美股、台指期夜盤、日經225、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
     若宏觀或台指期夜盤呈現顯著避險（如夜盤重挫、費半重挫或VIX暴漲），請於摘要中明確警示「高風險不宜盲目開倉」。
     請回傳 JSON 格式：
     {{
@@ -1187,10 +1186,11 @@ def get_stock_revenue_data(stock_id):
 
 
 # ==============================================================================
-# 🌐 全球宏觀8大指標 + 台指期夜盤數據
+# 🌐 全球宏觀9大指標 + 台指期夜盤數據
 # ==============================================================================
 MACRO_TICKERS_MAP = {
     "台股加權": "^TWII",
+    "日經 225 N225": "^N225",
     "費城半導體 SOX": "^SOX",
     "美元指數 DXY": "DX-Y.NYB",
     "美債 10Y 殖利率": "^TNX",
@@ -1202,7 +1202,7 @@ MACRO_TICKERS_MAP = {
 
 
 @st.cache_data(ttl=120)
-def get_macro_8_indicators(target_date_str):
+def get_macro_9_indicators(target_date_str):
   macro_summary = {}
   night_data = get_night_futures_double_check()
 
@@ -1275,12 +1275,13 @@ def get_macro_8_indicators(target_date_str):
 
 @st.cache_data(ttl=600)
 def get_macro_history_trends_normalized(days=30):
-  """抓取全球總經指標歷史數據，獨立計算台指期夜盤線並徹底區隔"""
+  """抓取全球總經指標歷史數據 (已移除重疊之夜盤歷史，加入日經225)"""
   res_dict = {}
 
   ticker_history_map = {
       "台股加權": "^TWII",
       "費城半導體 SOX": "^SOX",
+      "日經 225 N225": "^N225",
       "美元指數 DXY": "DX-Y.NYB",
       "美債 10Y 殖利率": "^TNX",
       "恐慌指數 VIX": "^VIX",
@@ -1312,29 +1313,6 @@ def get_macro_history_trends_normalized(days=30):
         res_dict[name] = s
     except Exception:
       pass
-
-  # --------------------------------------------------------------------------
-  # 🎯 解決重疊問題：獨立建構夜盤軌跡 (歷史基差波動 + 最新夜盤真實漲跌)
-  # --------------------------------------------------------------------------
-  if "台股加權" in res_dict:
-    tw_series = res_dict["台股加權"].copy()
-    night_data = get_night_futures_double_check()
-    
-    # 建立獨立夜盤序列 (加入微幅基差波動變化，避免 100% 點位與大盤重合)
-    night_series = tw_series.copy()
-    
-    # 為歷史點數加入真實期現貨逆/正價差微幅震盪效果 (0.1% ~ 0.25%)
-    np.random.seed(42)  # 固定隨機種子保持線條穩定
-    noise = (np.sin(np.arange(len(night_series))) * 0.18) / 100.0
-    night_series = night_series * (1.0 + noise)
-    
-    # 最新一點完全錨定期交所最新夜盤真實漲跌幅
-    if len(night_series) > 0:
-      latest_tw_close = tw_series.iloc[-1]
-      night_chg_pct = night_data.get("change_pct", 0.0) / 100.0
-      night_series.iloc[-1] = latest_tw_close * (1.0 + night_chg_pct)
-      
-    res_dict["台指期夜盤"] = night_series
 
   combined = pd.DataFrame(res_dict).tail(days)
 
@@ -2140,7 +2118,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 
-macro_data = get_macro_8_indicators(target_date_str)
+macro_data = get_macro_9_indicators(target_date_str)
 night_fut_data = get_night_futures_double_check()
 sector_data = get_taiwan_sector_performance(target_date_str)
 
@@ -2195,7 +2173,7 @@ if st.sidebar.button(
     key="btn_combined_diagnose",
     use_container_width=True,
 ):
-  get_macro_8_indicators.clear()
+  get_macro_9_indicators.clear()
   get_night_futures_double_check.clear()
   get_realtime_tw_price_info.clear()
   calculate_kd.clear()
@@ -2204,7 +2182,7 @@ if st.sidebar.button(
       "🤖 第一階段：正在即時擷取期交所台指夜盤、美股ADR、費半、油價與產業情報..."
   ):
     try:
-      macro_data = get_macro_8_indicators(target_date_str)
+      macro_data = get_macro_9_indicators(target_date_str)
       night_fut_data = get_night_futures_double_check()
       p_data = diagnose_premarket_intelligence(
           macro_data, night_fut_data, target_date_str
@@ -2296,29 +2274,30 @@ btn_analyze_stock = st.sidebar.button(
 
 
 # ==============================================================================
-# 📈 全球總經資金流指標看板與對比折線圖 (夜盤採高亮橘點虛線與多層級繪圖)
+# 📈 全球總經資金流指標看板與對比折線圖
 # ==============================================================================
 st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
     " AI 總經推論"
 )
 
-# 8 大指標 + 台指夜盤 頂部卡片列
-cols8 = st.columns(8)
+# 🎯 9 大指標卡片列（由左至右精準順序排版）
+cols9 = st.columns(9)
 
 card_items = [
-    ("台指期夜盤", macro_data.get("台指期夜盤", {})),
     ("台股加權", macro_data.get("台股加權", {})),
+    ("台指期夜盤", macro_data.get("台指期夜盤", {})),
+    ("日經 225", macro_data.get("日經 225 N225", {})),
     ("費半 SOX", macro_data.get("費城半導體 SOX", {})),
-    ("美元 DXY", macro_data.get("美元指數 DXY", {})),
     ("美債 10Y", macro_data.get("美債 10Y 殖利率", {})),
+    ("美元 DXY", macro_data.get("美元指數 DXY", {})),
     ("恐慌 VIX", macro_data.get("恐慌指數 VIX", {})),
     ("WTI 原油", macro_data.get("WTI 原油", {})),
     ("黃金 Gold", macro_data.get("黃金現貨 Gold", {})),
 ]
 
 for idx, (label_name, item_info) in enumerate(card_items):
-  with cols8[idx]:
+  with cols9[idx]:
     st.metric(
         label=label_name,
         value=item_info.get("val", "N/A"),
@@ -2331,7 +2310,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # 觀察天數 Slider
 days_selected = st.slider("選擇圖表觀察天數 (天) :", 14, 90, 30, step=1)
 
-# Checkbox 排版
+# Checkbox 選擇排版
 st.markdown("**選擇要在折線圖中對比的指標 :**")
 chk_cols = st.columns(4)
 
@@ -2340,7 +2319,7 @@ with chk_cols[0]:
   show_sox = st.checkbox("費城半導體 SOX", value=True)
 
 with chk_cols[1]:
-  show_night = st.checkbox("台指期夜盤", value=True)
+  show_nikkei = st.checkbox("日經 225 N225", value=True)
   show_us10y = st.checkbox("美債 10Y 殖利率", value=False)
 
 with chk_cols[2]:
@@ -2354,25 +2333,27 @@ with chk_cols[3]:
 # 抓取獨立歷史對比曲線數據
 norm_trends_df = get_macro_history_trends_normalized(days=days_selected)
 
-# 🎨 視覺與圖層優化：夜盤獨佔最頂圖層，採用高亮鮮橘色 (#ffa940) + 點虛線 (dot) + 圓點標記 (lines+markers)
 cols_map = {
     "台股加權": ("台股加權指數", "#ff7875", 2.5, "solid", show_taiex, "lines"),
+    "日經 225 N225": ("日經 225", "#13c2c2", 2.0, "solid", show_nikkei, "lines"),
     "費城半導體 SOX": ("費半 SOX", "#52c41a", 2.0, "solid", show_sox, "lines"),
-    "台指期夜盤": ("台指期夜盤", "#ffa940", 2.5, "dot", show_night, "lines+markers"),
     "美債 10Y 殖利率": ("美債 10Y 殖利率", "#faad14", 2.0, "dash", show_us10y, "lines"),
     "恐慌指數 VIX": ("恐慌指數 VIX", "#b37feb", 1.5, "dashdot", show_vix, "lines"),
     "美元指數 DXY": ("美元指數 DXY", "#1890ff", 2.0, "dot", show_dxy, "lines"),
-    "WTI 原油": ("WTI 原油", "#13c2c2", 1.5, "solid", show_wti, "lines"),
+    "WTI 原油": ("WTI 原油", "#eb2f96", 1.5, "solid", show_wti, "lines"),
     "黃金現貨 Gold": ("黃金現貨 Gold", "#fadb14", 1.5, "solid", show_gold, "lines"),
 }
 
 fig_trends = go.Figure()
 
-# 調整繪圖順序：將「台指期夜盤」安排在最後繪製，確保其圖層絕對浮在最上層[cite: 13]
-draw_order = [k for k in cols_map.keys() if k != "台指期夜盤"] + ["台指期夜盤"]
-
-for col_key in draw_order:
-  disp_name, color_hex, width_px, dash_style, is_selected, draw_mode = cols_map[col_key]
+for col_key, (
+    disp_name,
+    color_hex,
+    width_px,
+    dash_style,
+    is_selected,
+    draw_mode,
+) in cols_map.items():
   if is_selected and col_key in norm_trends_df.columns:
     s_data = norm_trends_df[col_key].dropna()
     if not s_data.empty:
@@ -2383,7 +2364,6 @@ for col_key in draw_order:
               mode=draw_mode,
               name=disp_name,
               connectgaps=True,
-              marker=dict(size=5 if "markers" in draw_mode else 0),
               line=dict(color=color_hex, width=width_px, dash=dash_style),
               hovertemplate=(
                   f"<b>{disp_name}</b><br>日期: %{{x|%Y-%m-%d}}<br>累積漲跌幅:"
