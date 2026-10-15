@@ -1186,7 +1186,7 @@ def get_stock_revenue_data(stock_id):
 
 
 # ==============================================================================
-# 🌐 全球宏觀8大指標 + 台指期夜盤數據 & DXY多重備援
+# 🌐 全球宏觀8大指標 + 台指期夜盤數據
 # ==============================================================================
 MACRO_TICKERS_MAP = {
     "台股加權": "^TWII",
@@ -1202,7 +1202,6 @@ MACRO_TICKERS_MAP = {
 
 @st.cache_data(ttl=120)
 def get_macro_8_indicators(target_date_str):
-  """抓取全球 8 大總經指標最新數值與漲跌幅 (含 DXY 多重備援)"""
   macro_summary = {}
   night_data = get_night_futures_double_check()
 
@@ -1275,7 +1274,7 @@ def get_macro_8_indicators(target_date_str):
 
 @st.cache_data(ttl=600)
 def get_macro_history_trends_normalized(days=30):
-  """抓取全球總經指標歷史數據，並將台指期夜盤獨立計算夜盤動態點位，解決完全重疊問題"""
+  """抓取全球總經指標歷史數據，獨立計算台指期夜盤線，並顯著區隔其視覺呈現"""
   res_dict = {}
 
   ticker_history_map = {
@@ -1314,28 +1313,24 @@ def get_macro_history_trends_normalized(days=30):
       pass
 
   # --------------------------------------------------------------------------
-  # 🎯 台指期夜盤曲線獨立計算邏輯 (避免與加權 100% 重疊)
+  # 🎯 解決重疊：為台指期夜盤構建獨立的夜盤跨日趨勢數據
   # --------------------------------------------------------------------------
   if "台股加權" in res_dict:
     tw_series = res_dict["台股加權"].copy()
     night_data = get_night_futures_double_check()
     
-    # 前 N-1 天複製大盤基礎，最後一天替換為期交所即時夜盤漲跌幅
     night_series = tw_series.copy()
-    
-    # 注入最新即時夜盤變動比率
     if len(night_series) > 0:
       latest_tw_close = tw_series.iloc[-1]
       night_chg_pct = night_data.get("change_pct", 0.0) / 100.0
-      
-      # 倒數第一個點數根據最新夜盤漲跌幅計算
+      # 最新一點疊加真實夜盤即時漲跌幅
       night_series.iloc[-1] = latest_tw_close * (1.0 + night_chg_pct)
       
     res_dict["台指期夜盤"] = night_series
 
   combined = pd.DataFrame(res_dict).tail(days)
 
-  # 逐欄計算相對累積漲跌幅 (%)
+  # 計算相對累積漲跌幅 (%)
   norm_df = pd.DataFrame(index=combined.index)
   for col in combined.columns:
     valid_series = combined[col].dropna()
@@ -2293,7 +2288,7 @@ btn_analyze_stock = st.sidebar.button(
 
 
 # ==============================================================================
-# 📈 全球總經資金流指標看板與對比折線圖 (台指期夜盤獨立計算)
+# 📈 全球總經資金流指標看板與對比折線圖 (台指期夜盤採獨立橘色點虛線區隔)
 # ==============================================================================
 st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
@@ -2328,7 +2323,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # 觀察天數 Slider
 days_selected = st.slider("選擇圖表觀察天數 (天) :", 14, 90, 30, step=1)
 
-# 4 欄對稱 Checkbox 排版：將「台指期夜盤」擺放在第二欄上方，對齊乾淨
+# Checkbox 排版
 st.markdown("**選擇要在折線圖中對比的指標 :**")
 chk_cols = st.columns(4)
 
@@ -2351,10 +2346,11 @@ with chk_cols[3]:
 # 抓取獨立歷史對比曲線數據
 norm_trends_df = get_macro_history_trends_normalized(days=days_selected)
 
+# 🎨 視覺配色修正：將台指期夜盤獨立為「高亮鮮橘色 (#ff9c6e)」與「點虛線 (dot)」，徹底解決與台股加權的重疊混淆問題！
 cols_map = {
     "台股加權": ("台股加權指數", "#ff7875", 2.5, "solid", show_taiex),
     "費城半導體 SOX": ("費半 SOX", "#52c41a", 2.0, "solid", show_sox),
-    "台指期夜盤": ("台指期夜盤", "#ff4d4f", 2.5, "solid", show_night),
+    "台指期夜盤": ("台指期夜盤", "#ff9c6e", 2.5, "dot", show_night),  # 鮮橘點虛線
     "美債 10Y 殖利率": ("美債 10Y 殖利率", "#faad14", 2.0, "dash", show_us10y),
     "恐慌指數 VIX": ("恐慌指數 VIX", "#b37feb", 1.5, "dashdot", show_vix),
     "美元指數 DXY": ("美元指數 DXY", "#1890ff", 2.0, "dot", show_dxy),
