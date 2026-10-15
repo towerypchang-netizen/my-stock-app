@@ -170,7 +170,7 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------------------
-# 🏛️ 權威官方標準產業分類字典 (用於強制定錨，徹底根治 AI 誤標)
+# 🏛️ 權威官方標準產業分類字典 (用於強制定錨)
 # ------------------------------------------------------------------------------
 OFFICIAL_STOCK_SECTOR_MAP = {
     "2330": "晶圓代工",
@@ -260,7 +260,6 @@ STOCK_NAME_TO_ID = {
     "晟銘電": "3013",
     "志聖": "2467",
     "建準": "2421",
-    "精英": "2331",
     "精華": "1565",
     "漢唐": "2404",
     "創意": "3443",
@@ -392,6 +391,124 @@ PEER_GROUPS = {
 }
 
 
+# ==============================================================================
+# 📡 雙源台指期夜盤 (TAIFEX 期交所 + 嘉實富邦 DJ) 即時資料與交叉校驗模組
+# ==============================================================================
+@st.cache_data(ttl=300)
+def get_night_futures_double_check():
+  """透過 Python 爬取期交所 OpenAPI 與富邦 DJ，進行數據雙源稽核 (Reconciliation)"""
+  taifex_data = None
+  dj_data = None
+
+  headers = {
+      "User-Agent": (
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      )
+  }
+
+  # 1. 來源 A：期交所 TAIFEX OpenAPI (盤後交易夜盤)
+  try:
+    url_taifex = "https://openapi.taifex.com.tw/v1/DailyMarketReportFut"
+    resp = requests.get(url_taifex, headers=headers, timeout=3)
+    if resp.status_code == 200:
+      items = resp.json()
+      for row in items:
+        # 尋找台指期 TX / MTX 的夜盤盤後交易資料
+        prod_name = str(row.get("CommodityID", "")).strip()
+        trading_session = str(row.get("TradingSession", "")).strip()
+        if prod_name in ["TX", "MTX"] and (
+            "盤後" in trading_session or "2" in trading_session
+        ):
+          close_p = float(row.get("Close", 0) or 0)
+          change_p = float(row.get("Change", 0) or 0)
+          if close_p > 0:
+            taifex_data = {
+                "close": close_p,
+                "change": change_p,
+                "source": "期交所 (TAIFEX)",
+            }
+            break
+  except Exception:
+    pass
+
+  # 2. 來源 B：富邦 / 嘉實 DJ 網頁行情 (輔助校驗)
+  try:
+    url_fubon = "https://fubon-ebrokerdj.fbs.com.tw/z/zg/zg_F.djhtm"
+    resp = requests.get(url_fubon, headers=headers, timeout=3)
+    if resp.status_code == 200:
+      resp.encoding = "big5"
+      soup = BeautifulSoup(resp.text, "html.parser")
+      table = soup.find("table", class_="t01")
+      if table:
+        for r in table.find_all("tr"):
+          text = r.text
+          if "台指期" in text or "夜台指" in text:
+            cols = [td.text.strip() for td in r.find_all("td")]
+            if len(cols) >= 4:
+              def parse_val(v):
+                return float(
+                    v.replace(",", "").replace("+", "").replace("%", "")
+                )
+
+              close_p = parse_val(cols[1])
+              change_p = parse_val(cols[2])
+              dj_data = {
+                  "close": close_p,
+                  "change": change_p,
+                  "source": "嘉實富邦 DJ",
+              }
+              break
+  except Exception:
+    pass
+
+  # 3. 雙源交叉稽核邏輯 (Reconciliation)
+  final_res = {
+      "close": "N/A",
+      "change_str": "0.00%",
+      "change_val": 0.0,
+      "audit_status": "來源連線中",
+  }
+
+  if taifex_data and dj_data:
+    # 雙源皆成功取回，比對數值差距
+    diff = abs(taifex_data["close"] - dj_data["close"])
+    if diff <= 10:  # 容許微幅點數秒差
+      final_res["close"] = f"{taifex_data['close']:,.0f}"
+      chg = taifex_data["change"]
+      final_res["change_val"] = chg
+      final_res["change_str"] = f"{chg:+.0f} 點"
+      final_res["audit_status"] = (
+          f"🟢 雙源校驗無誤 (TAIFEX: {taifex_data['close']} | DJ:"
+          f" {dj_data['close']})"
+      )
+    else:
+      # 以官方期交所為主
+      final_res["close"] = f"{taifex_data['close']:,.0f}"
+      chg = taifex_data["change"]
+      final_res["change_val"] = chg
+      final_res["change_str"] = f"{chg:+.0f} 點"
+      final_res["audit_status"] = (
+          f"⚠️ 雙源有些微秒差 (以期交所為主: {taifex_data['close']})"
+      )
+  elif taifex_data:
+    final_res["close"] = f"{taifex_data['close']:,.0f}"
+    chg = taifex_data["change"]
+    final_res["change_val"] = chg
+    final_res["change_str"] = f"{chg:+.0f} 點"
+    final_res["audit_status"] = "🔵 期交所官方 API 單源確認"
+  elif dj_data:
+    final_res["close"] = f"{dj_data['close']:,.0f}"
+    chg = dj_data["change"]
+    final_res["change_val"] = chg
+    final_res["change_str"] = f"{chg:+.0f} 點"
+    final_res["audit_status"] = "🟡 嘉實富邦單源備援"
+  else:
+    final_res["audit_status"] = "⚪ 夜盤盤後資料更新中"
+
+  return final_res
+
+
 @st.cache_data(ttl=86400)
 def get_all_taiwan_stocks_dict():
   all_stocks = {}
@@ -511,9 +628,6 @@ def get_stock_display_name(raw_input, stock_id):
   return f"{stock_id}"
 
 
-# ------------------------------------------------------------------------------
-# 🛡️ 官方族群名稱實體定錨函式
-# ------------------------------------------------------------------------------
 def resolve_official_sector_name(stock_id, ai_sector_tag=""):
   clean_id = parse_stock_input(stock_id)
 
@@ -576,9 +690,6 @@ if "last_predict_time" not in st.session_state:
   )
 
 
-# ==============================================================================
-# 🛡️ 風護模組：警示 API 檢測
-# ==============================================================================
 @st.cache_data(ttl=1800)
 def check_stock_warning_status(stock_id):
   clean_id = parse_stock_input(stock_id)
@@ -665,13 +776,16 @@ def call_gemini_with_retry(prompt, max_retries=2):
   raise ValueError(f"Gemini API 呼叫失敗 [{last_err}]")
 
 
-def diagnose_premarket_intelligence(macro_data, target_date_str):
+def diagnose_premarket_intelligence(
+    macro_data, night_fut_data, target_date_str
+):
   prompt_premarket = f"""
     請作為華爾街資深盤前情報官與台股策略總監，基準日期：{target_date_str}。
     當前全球宏觀指標：{macro_data}。
+    【台指期夜盤最即時數據 (期交所雙源校驗)】：收盤價 {night_fut_data['close']}，變動：{night_fut_data['change_str']} (校驗狀態: {night_fut_data['audit_status']})。
 
-    請針對昨夜美股、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
-    若宏觀數據呈現顯著避險（如費半重挫、VIX暴漲或原油飆升），請於摘要中明確警示「高風險不宜盲目開倉」。
+    請針對昨夜美股、台指期夜盤、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
+    若宏觀或台指期夜盤呈現顯著避險（如夜盤重挫、費半重挫或VIX暴漲），請於摘要中明確警示「高風險不宜盲目開倉」。
     請回傳 JSON 格式：
     {{
       "summary": "簡短 100 字盤前重點摘要...",
@@ -1217,20 +1331,14 @@ def get_stock_chip(stock_id, target_date_str):
   return pd.DataFrame()
 
 
-# ------------------------------------------------------------------------------
-# 🛡️ 盤前避險族群硬性黑名單 (Hard Ban Filter) 與籌碼檢測
-# ------------------------------------------------------------------------------
 def is_chip_and_defense_valid(stock_id, target_date_str):
   clean_id = parse_stock_input(stock_id)
 
-  # 🚨 核心新功能：【盤前避險族群硬性黑名單（Hard Ban Filter）】
-  # 檢視盤前情報，若提示「避開高估值/科技/半導體」，硬性攔截相關高位階科技股
   avoid_sectors = st.session_state.get("premarket_avoid", [])
   avoid_str = "".join(avoid_sectors)
 
   if any(k in avoid_str for k in ["科技", "半導體", "高估值"]):
     official_sector = resolve_official_sector_name(clean_id)
-    # 若屬於半導體設備、半導體封測或高位階 IC 類別，直接 Hard Ban！
     if official_sector in [
         "半導體設備",
         "半導體封測",
@@ -1255,11 +1363,9 @@ def is_chip_and_defense_valid(stock_id, target_date_str):
     trust_buy = parse_num(latest_row.get("投信", 0))
     total_buy = parse_num(latest_row.get("三大法人合計", 0))
 
-    # 硬性剔除：三大法人單日賣超 > 300 張且投信未加碼者剔除！（如萬潤投信-489張）
     if total_buy < -300 and trust_buy <= 0:
       return False
 
-    # 若投信呈現顯著賣超 (-100 張以上)，即使外資買超也視為籌碼鬆動，剔除！
     if trust_buy < -100:
       return False
 
@@ -1276,11 +1382,9 @@ def is_chip_and_defense_valid(stock_id, target_date_str):
 
 
 def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str):
-  # 1. 第一關：盤前硬性黑名單與籌碼面二次校驗
   if not is_chip_and_defense_valid(stock_id, target_date_str):
     return False, None
 
-  # 2. 第二關：價格有效性與防爆過濾
   p_info = get_realtime_tw_price_info(stock_id)
   if not p_info:
     return False, None
@@ -1294,7 +1398,6 @@ def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str):
   if max_price > 0 and real_p > max_price:
     return False, None
 
-  # 3. 第三關：技術面型態檢測 (排除死亡交叉與大黑K)
   _, kd_info = calculate_kd(stock_id, period_type="日線")
   if isinstance(kd_info, dict):
     kd_signal = kd_info.get("signal", "")
@@ -1305,9 +1408,9 @@ def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str):
 
 
 # ==============================================================================
-# 🚨 市場風控熔斷檢測機制
+# 🚨 市場風控熔斷檢測機制 (結合台指期夜盤)
 # ==============================================================================
-def check_market_risk_regime(macro_data):
+def check_market_risk_regime(macro_data, night_fut_data):
   risk_score = 0
   risk_reasons = []
 
@@ -1316,6 +1419,14 @@ def check_market_risk_regime(macro_data):
       return float(re.sub(r"[^\d.-]", "", val_str))
     except Exception:
       return 0.0
+
+  # 1. 檢測台指期夜盤
+  night_chg = night_fut_data.get("change_val", 0.0)
+  if night_chg < -300:
+    risk_score += 2
+    risk_reasons.append(
+        f"台指期夜盤重挫 ({night_fut_data['change_str']})"
+    )
 
   sox_chg = parse_change(macro_data.get("費城半導體", {}).get("change", "0"))
   if sox_chg < -1.2:
@@ -1334,24 +1445,15 @@ def check_market_risk_regime(macro_data):
     risk_score += 1
     risk_reasons.append(f"WTI 原油急漲 ({oil_chg:+.2f}%)")
 
-  tnx_chg = parse_change(
-      macro_data.get("美10年債殖利率", {}).get("change", "0")
-  )
-  if tnx_chg > 1.5:
-    risk_score += 1
-    risk_reasons.append(f"美債殖利率飆升 ({tnx_chg:+.2f}%)")
-
   if risk_score >= 2:
     return True, risk_reasons
 
   return False, []
 
 
-# ------------------------------------------------------------------------------
-# 選股名單生成（含盤前避險黑名單、籌碼強化、官方定錨與進場彈性）
-# ------------------------------------------------------------------------------
 def generate_daily_picks(
     macro_data,
+    night_fut_data,
     sector_data,
     min_price,
     max_price,
@@ -1359,7 +1461,9 @@ def generate_daily_picks(
     selected_masters,
     target_date_str,
 ):
-  is_danger, danger_reasons = check_market_risk_regime(macro_data)
+  is_danger, danger_reasons = check_market_risk_regime(
+      macro_data, night_fut_data
+  )
   if is_danger:
     reason_str = " | ".join(danger_reasons)
     return [{
@@ -1371,7 +1475,7 @@ def generate_daily_picks(
         "建議進場": "建議保持現金/觀望",
         "波段停利/防護提示": (
             f"警示原因：{reason_str}。"
-            " 全球 Risk-Off 避險情緒高漲，系統已自動啟動風控保護，中斷選股！"
+            " 全球及台指夜盤 Risk-Off 避險情緒高漲，系統已自動啟動風控保護！"
         ),
         "波段期間": "觀望",
     }]
@@ -1444,6 +1548,7 @@ def generate_daily_picks(
       + "大盤環境："
       + str(macro_data)
       + "\n"
+      + f"台指期夜盤狀況: {night_fut_data['close']} ({night_fut_data['change_str']})\n"
       + premarket_focus_str
       + "\n"
       + premarket_avoid_str
@@ -1452,7 +1557,7 @@ def generate_daily_picks(
       "1."
       " 【籌碼面與避險硬性要求】：請優先挑選『三大法人/投信買超鎖碼』之標的；【嚴禁挑選盤前提示避開之族群】！\n"
       "2."
-      " 【族群名稱精準化】：『族群』名稱請採用證交所官方標準產業分類，【嚴禁使用『高殖利率』、『防禦族群』等受股價波動影響之非標準標籤】！\n"
+      " 【族群名稱精準化】：『族群』名稱請採用證交所官方標準產業分類，【嚴禁使用非標準標籤】！\n"
       "請精選 10 檔最具備波段攻擊潛力、籌碼集中且多頭型態之標的名單，預估上漲率請給予"
       " 68%-88% 之間的數值。\n"
       "請回傳 JSON 陣列格式如：\n"
@@ -1475,7 +1580,6 @@ def generate_daily_picks(
     if not stock_id:
       continue
 
-    # 執行包含「盤前避險黑名單」在內的三關安全檢測
     valid, real_p = is_valid_stock_fast(
         stock_id, min_price, max_price, target_date_str
     )
@@ -1503,7 +1607,6 @@ def generate_daily_picks(
           kd_info.get("5MA", real_p) if isinstance(kd_info, dict) else real_p
       )
 
-      # 💡 過熱進場區間彈性優化：多頭強勢股進場區間設為 5MA~現價
       if bias_20 > 15.0 or bias_60 > 15.0:
         p_low = round(min(ma5_val, real_p * 0.96), 1)
         p_high = round(real_p * 0.985, 1)
@@ -1516,9 +1619,7 @@ def generate_daily_picks(
         target_p = round(real_p * 1.08, 1)
         item["波段停利/防護提示"] = f"目標 {target_p:.1f} (達標即落袋)"
 
-      # 🛡️ 官方定錨處理，徹底根治族群誤標
       item["族群"] = resolve_official_sector_name(stock_id, item.get("族群", ""))
-
       item["當前實價"] = f"{real_p:.2f}"
       item["建議進場"] = f"{p_low:.1f}-{p_high:.1f}"
 
@@ -1537,7 +1638,6 @@ def generate_daily_picks(
     if len(final_results) >= 3:
       break
 
-  # 後備強勢股檢測（需通過盤前避險黑名單與籌碼檢測）
   fallback_candidates = [
       "1301",
       "1303",
@@ -1710,12 +1810,6 @@ def ai_single_stock_analysis(
         "技術數據不足"
     )
 
-  vol_hint = (
-      "當前成交量尚未爆發，若量能不及 1.2"
-      " 倍，建議於『建議進場區間下限』逢低掛單佈局，切勿開高追價。"
-      if vol_ratio < 1.2
-      else "成交量順利放大，具備攻擊量能！"
-  )
   premarket_context = (
       f"【最新情報動態】：聚焦族群 {st.session_state.premarket_focus} /"
       f" 避險族群 {st.session_state.premarket_avoid} | 摘要:"
@@ -1918,6 +2012,7 @@ st.sidebar.markdown(
 )
 
 macro_data = get_macro_data(target_date_str)
+night_fut_data = get_night_futures_double_check()
 sector_data = get_taiwan_sector_performance(target_date_str)
 
 st.sidebar.markdown(
@@ -1972,15 +2067,19 @@ if st.sidebar.button(
     use_container_width=True,
 ):
   get_macro_data.clear()
+  get_night_futures_double_check.clear()
   get_realtime_tw_price_info.clear()
   calculate_kd.clear()
 
   with st.spinner(
-      "🤖 第一階段：正在即時擷取盤中最新美股ADR、費半、油價與產業情報..."
+      "🤖 第一階段：正在即時擷取期交所台指夜盤、美股ADR、費半、油價與產業情報..."
   ):
     try:
       macro_data = get_macro_data(target_date_str)
-      p_data = diagnose_premarket_intelligence(macro_data, target_date_str)
+      night_fut_data = get_night_futures_double_check()
+      p_data = diagnose_premarket_intelligence(
+          macro_data, night_fut_data, target_date_str
+      )
       st.session_state.premarket_summary = p_data.get("summary", "")
       st.session_state.premarket_focus = p_data.get("focus_sectors", [])
       st.session_state.premarket_avoid = p_data.get("avoid_sectors", [])
@@ -1989,11 +2088,12 @@ if st.sidebar.button(
 
   with st.spinner(
       "🤖"
-      " 第二階段：結合盤前避險黑名單、官方定錨分類、籌碼過濾與大師條件，進行全市場精準選股..."
+      " 第二階段：結合夜盤訊號、盤前避險黑名單、官方定錨與籌碼過濾，進行精準選股..."
   ):
     try:
       picks_data = generate_daily_picks(
           macro_data,
+          night_fut_data,
           sector_data,
           min_price,
           max_price,
@@ -2068,10 +2168,21 @@ btn_analyze_stock = st.sidebar.button(
 # 主畫面看板
 st.subheader(f"🌐 全球宏觀與風險避險指標看板 ({target_date_str})")
 
-cols = st.columns([1, 1, 1, 1, 1, 1])
-idx = 0
+cols = st.columns([1.2, 1, 1, 1, 1, 1, 1])
+
+# 新增「台指期夜盤 (雙源對照)」指標卡片
+with cols[0]:
+  st.metric(
+      label="台指期夜盤 (05:00)",
+      value=night_fut_data["close"],
+      delta=night_fut_data["change_str"],
+      delta_color="inverse",
+  )
+  st.caption(f"<small>{night_fut_data['audit_status']}</small>", unsafe_allow_html=True)
+
+idx = 1
 for name, info in macro_data.items():
-  with cols[idx % 6]:
+  with cols[idx % 7]:
     st.metric(
         label=name,
         value=info["val"],
@@ -2083,10 +2194,12 @@ for name, info in macro_data.items():
 st.divider()
 
 # 風控熔斷警示 banner
-is_danger, danger_reasons = check_market_risk_regime(macro_data)
+is_danger, danger_reasons = check_market_risk_regime(
+    macro_data, night_fut_data
+)
 if is_danger:
   st.error(
-      f"🚨 **【AI 市場風控熔斷機制啟動】全球市場 Risk-Off 避險情緒高漲，今日不宜進行任何多頭買進操作！**\n\n"
+      f"🚨 **【AI 市場風控熔斷機制啟動】全球市場與台指夜盤 Risk-Off 避險情緒高漲，今日不宜進行任何多頭買進操作！**\n\n"
       f"**觸發原因**：{' | '.join(danger_reasons)}\n\n"
       f"**操盤紀律建議**：大盤系統性風險偏高，強行選股勝率極低！建議保持 100% 現金，或對既有持股執行反彈減碼保護。"
   )
