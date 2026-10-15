@@ -2101,7 +2101,6 @@ def ai_single_stock_analysis(
 # 主 UI 邏輯
 # ==============================================================================
 
-# 1. 修正主標題 (更新為：全球總經與台股資金流曲線評估系統)
 st.title("📈 全球總經與台股資金流曲線評估系統")
 
 taiwan_now = get_taiwan_now()
@@ -2275,7 +2274,7 @@ btn_analyze_stock = st.sidebar.button(
 
 
 # ==============================================================================
-# 📈 全球總經資金流指標看板與對比折線圖 (已移除重複標題，資料自動向上順移[cite: 5])
+# 📈 全球總經資金流指標看板與對比折線圖 (指標完全對齊上方8大總經項目)
 # ==============================================================================
 st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
@@ -2310,7 +2309,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # 觀察天數 Slider[cite: 4]
 days_selected = st.slider("選擇圖表觀察天數 (天) :", 14, 90, 30, step=1)
 
-# 還原 4 欄直排核取方塊 (st.checkbox) 勾選樣式 (參照 martix.app.py[cite: 4, 6])
+# 4 欄直排 Checkbox（已將「美元/台幣 TWD」替換為「台指期夜盤」，精準對齊上方總經 8 項）[cite: 4, 6]
 st.markdown("**選擇要在折線圖中對比的指標 :**")
 chk_cols = st.columns(4)
 
@@ -2324,16 +2323,11 @@ with chk_cols[1]:
 
 with chk_cols[2]:
   show_vix = st.checkbox("恐慌指數 VIX", value=True)
-  show_twd = st.checkbox("美元/台幣 TWD", value=False)
+  show_night = st.checkbox("台指期夜盤", value=False)
 
 with chk_cols[3]:
   show_wti = st.checkbox("WTI 原油", value=False)
   show_gold = st.checkbox("黃金現貨 Gold", value=False)
-
-# 補植台指期夜盤選項
-c_extra1, _ = st.columns([1, 3])
-with c_extra1:
-  show_night = st.checkbox("台指期夜盤", value=False)
 
 # 抓取歷史對比曲線數據 (修復階梯方波，保持光滑趨勢[cite: 8])
 norm_trends_df = get_macro_history_trends_normalized(days=days_selected)
@@ -2344,10 +2338,9 @@ cols_map = {
     "美元指數 DXY": ("美元指數 DXY", "#1890ff", 2.0, "dot", show_dxy),
     "美債 10Y 殖利率": ("美債 10Y 殖利率", "#faad14", 2.0, "dash", show_us10y),
     "恐慌指數 VIX": ("恐慌指數 VIX", "#b37feb", 1.5, "dashdot", show_vix),
-    "美元/台幣 TWD": ("美元/台幣 TWD", "#eb2f96", 2.0, "dot", show_twd),
+    "台指期夜盤": ("台指期夜盤", "#ff4d4f", 2.5, "solid", show_night),
     "WTI 原油": ("WTI 原油", "#13c2c2", 1.5, "solid", show_wti),
     "黃金現貨 Gold": ("黃金現貨 Gold", "#fadb14", 1.5, "solid", show_gold),
-    "台指期夜盤": ("台指期夜盤", "#ff4d4f", 2.5, "solid", show_night),
 }
 
 fig_trends = go.Figure()
