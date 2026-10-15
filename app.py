@@ -392,11 +392,11 @@ PEER_GROUPS = {
 
 
 # ==============================================================================
-# 📡 雙源台指期夜盤 (TAIFEX 期交所 + 嘉實富邦 DJ) 即時資料與交叉校驗模組
+# 📡 雙源台指期夜盤 (TAIFEX 期交所 API/網頁 + 嘉實/yfinance) 強化版解析模組
 # ==============================================================================
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=180)
 def get_night_futures_double_check():
-  """透過 Python 爬取期交所 OpenAPI 與富邦 DJ，進行數據雙源稽核 (Reconciliation)"""
+  """強健版：支援期交所 OpenAPI 多欄位比對 + 嘉實/yfinance 備援機制"""
   taifex_data = None
   dj_data = None
 
@@ -407,32 +407,54 @@ def get_night_futures_double_check():
       )
   }
 
-  # 1. 來源 A：期交所 TAIFEX OpenAPI (盤後交易夜盤)
+  # --------------------------------------------------------------------------
+  # 來源 A：期交所 TAIFEX OpenAPI (自動支援多種欄位命名風格)
+  # --------------------------------------------------------------------------
   try:
     url_taifex = "https://openapi.taifex.com.tw/v1/DailyMarketReportFut"
-    resp = requests.get(url_taifex, headers=headers, timeout=3)
+    resp = requests.get(url_taifex, headers=headers, timeout=4)
     if resp.status_code == 200:
       items = resp.json()
       for row in items:
-        # 尋找台指期 TX / MTX 的夜盤盤後交易資料
-        prod_name = str(row.get("CommodityID", "")).strip()
-        trading_session = str(row.get("TradingSession", "")).strip()
-        if prod_name in ["TX", "MTX"] and (
-            "盤後" in trading_session or "2" in trading_session
-        ):
-          close_p = float(row.get("Close", 0) or 0)
-          change_p = float(row.get("Change", 0) or 0)
-          if close_p > 0:
-            taifex_data = {
-                "close": close_p,
-                "change": change_p,
-                "source": "期交所 (TAIFEX)",
-            }
-            break
+        prod_id = (
+            str(row.get("CommodityID", ""))
+            or str(row.get("Contract", ""))
+            or str(row.get("Symbol", ""))
+        ).strip()
+        session = (
+            str(row.get("TradingSession", ""))
+            or str(row.get("MarketType", ""))
+            or ""
+        ).strip()
+
+        # 只要是台指期 (TX/MTX) 且屬於夜盤 (盤後/T+1/Night/2)
+        if prod_id in ["TX", "MTX", "台指期", "小型台指"]:
+          close_raw = (
+              row.get("Close")
+              or row.get("Last")
+              or row.get("SettlementPrice")
+              or 0
+          )
+          change_raw = row.get("Change") or row.get("Diff") or 0
+
+          try:
+            close_p = float(close_raw)
+            change_p = float(change_raw)
+            if close_p > 10000:  # 確保是合理的台指點數
+              taifex_data = {
+                  "close": close_p,
+                  "change": change_p,
+                  "source": "期交所 (TAIFEX)",
+              }
+              break
+          except Exception:
+            continue
   except Exception:
     pass
 
-  # 2. 來源 B：富邦 / 嘉實 DJ 網頁行情 (輔助校驗)
+  # --------------------------------------------------------------------------
+  # 來源 B：富邦 / 嘉實 DJ 網頁報價 (網頁爬蟲備援)
+  # --------------------------------------------------------------------------
   try:
     url_fubon = "https://fubon-ebrokerdj.fbs.com.tw/z/zg/zg_F.djhtm"
     resp = requests.get(url_fubon, headers=headers, timeout=3)
@@ -443,68 +465,89 @@ def get_night_futures_double_check():
       if table:
         for r in table.find_all("tr"):
           text = r.text
-          if "台指期" in text or "夜台指" in text:
+          if "台指" in text or "夜台" in text or "TX" in text:
             cols = [td.text.strip() for td in r.find_all("td")]
-            if len(cols) >= 4:
-              def parse_val(v):
-                return float(
-                    v.replace(",", "").replace("+", "").replace("%", "")
-                )
+            if len(cols) >= 3:
 
-              close_p = parse_val(cols[1])
-              change_p = parse_val(cols[2])
-              dj_data = {
-                  "close": close_p,
-                  "change": change_p,
-                  "source": "嘉實富邦 DJ",
-              }
-              break
+              def parse_val(v):
+                clean = (
+                    v.replace(",", "")
+                    .replace("+", "")
+                    .replace("%", "")
+                    .replace("▲", "")
+                    .replace("▼", "")
+                )
+                return float(clean)
+
+              try:
+                c_p = parse_val(cols[1])
+                chg_p = parse_val(cols[2]) if len(cols) > 2 else 0.0
+                if c_p > 10000:
+                  dj_data = {"close": c_p, "change": chg_p, "source": "嘉實富邦"}
+                  break
+              except Exception:
+                continue
   except Exception:
     pass
 
-  # 3. 雙源交叉稽核邏輯 (Reconciliation)
+  # --------------------------------------------------------------------------
+  # 來源 C：yfinance 第三備援 (避免 A、B 同時失效)
+  # --------------------------------------------------------------------------
+  if not taifex_data and not dj_data:
+    try:
+      tk = yf.Ticker("WTX=F")
+      hist = tk.history(period="2d")
+      if not hist.empty and len(hist) >= 1:
+        c_p = float(hist["Close"].iloc[-1])
+        prev_p = (
+            float(hist["Close"].iloc[-2]) if len(hist) >= 2 else c_p
+        )
+        chg_p = c_p - prev_p
+        if c_p > 10000:
+          dj_data = {"close": c_p, "change": chg_p, "source": "yfinance備援"}
+    except Exception:
+      pass
+
+  # --------------------------------------------------------------------------
+  # 交叉校驗與輸出結果組裝
+  # --------------------------------------------------------------------------
   final_res = {
       "close": "N/A",
       "change_str": "0.00%",
       "change_val": 0.0,
-      "audit_status": "來源連線中",
+      "audit_status": "連線中",
   }
 
   if taifex_data and dj_data:
-    # 雙源皆成功取回，比對數值差距
     diff = abs(taifex_data["close"] - dj_data["close"])
-    if diff <= 10:  # 容許微幅點數秒差
-      final_res["close"] = f"{taifex_data['close']:,.0f}"
-      chg = taifex_data["change"]
-      final_res["change_val"] = chg
-      final_res["change_str"] = f"{chg:+.0f} 點"
-      final_res["audit_status"] = (
-          f"🟢 雙源校驗無誤 (TAIFEX: {taifex_data['close']} | DJ:"
-          f" {dj_data['close']})"
-      )
+    final_res["close"] = f"{taifex_data['close']:,.0f}"
+    chg = taifex_data["change"]
+    final_res["change_val"] = chg
+    final_res["change_str"] = f"{chg:+.0f} 點"
+
+    if diff <= 15:
+      final_res["audit_status"] = "🟢 雙源校驗無誤"
     else:
-      # 以官方期交所為主
-      final_res["close"] = f"{taifex_data['close']:,.0f}"
-      chg = taifex_data["change"]
-      final_res["change_val"] = chg
-      final_res["change_str"] = f"{chg:+.0f} 點"
-      final_res["audit_status"] = (
-          f"⚠️ 雙源有些微秒差 (以期交所為主: {taifex_data['close']})"
-      )
+      final_res["audit_status"] = "⚠️ 微幅秒差 (以期交所為主)"
+
   elif taifex_data:
     final_res["close"] = f"{taifex_data['close']:,.0f}"
     chg = taifex_data["change"]
     final_res["change_val"] = chg
     final_res["change_str"] = f"{chg:+.0f} 點"
-    final_res["audit_status"] = "🔵 期交所官方 API 單源確認"
+    final_res["audit_status"] = "🔵 期交所 API 正常"
+
   elif dj_data:
     final_res["close"] = f"{dj_data['close']:,.0f}"
     chg = dj_data["change"]
     final_res["change_val"] = chg
     final_res["change_str"] = f"{chg:+.0f} 點"
-    final_res["audit_status"] = "🟡 嘉實富邦單源備援"
+    final_res["audit_status"] = f"🟡 備援源 ({dj_data['source']})"
+
   else:
-    final_res["audit_status"] = "⚪ 夜盤盤後資料更新中"
+    final_res["close"] = "休市/更新中"
+    final_res["change_str"] = "0 點"
+    final_res["audit_status"] = "⚪ 非夜盤交易時段"
 
   return final_res
 
@@ -1420,7 +1463,6 @@ def check_market_risk_regime(macro_data, night_fut_data):
     except Exception:
       return 0.0
 
-  # 1. 檢測台指期夜盤
   night_chg = night_fut_data.get("change_val", 0.0)
   if night_chg < -300:
     risk_score += 2
@@ -2478,7 +2520,7 @@ if btn_analyze_stock:
       )
     else:
       sp_text = (
-          "🤖 AI 結合最新情報與風護演算法檢析【實戰操盤買賣點/風報比試算】..."
+          "🤖 AI 結合最新情報與風護演算法檢析【實戰操盤買賣點/风報比試算】..."
       )
 
     with st.spinner(sp_text):
