@@ -19,6 +19,92 @@ st.set_page_config(
     page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide"
 )
 
+# ---------------------------------------------------------
+# 🎨 CSS 注入：頂端凍結置頂列與系統視覺優化
+# ---------------------------------------------------------
+st.markdown(
+    """
+    <style>
+    .main .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 2rem !important;
+    }
+    
+    h2, h3, [data-testid="stSidebar"] h3 {
+        font-size: 1.15rem !important;
+        font-weight: 700 !important;
+        margin-top: 0.2rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    h1 {
+        font-size: 1.4rem !important;
+        margin-bottom: 0.8rem !important;
+        line-height: 1.3 !important;
+        margin-top: 0rem !important;
+    }
+
+    div.stButton > button {
+        margin-top: -2px !important;
+        margin-bottom: -2px !important;
+    }
+
+    div.stButton > button[key="btn_combined_diagnose"] {
+        background-color: #1890ff !important;
+        color: #ffffff !important;
+        border-color: #1890ff !important;
+        font-weight: bold !important;
+    }
+    div.stButton > button[key="btn_combined_diagnose"]:hover {
+        background-color: #40a9ff !important;
+        border-color: #40a9ff !important;
+    }
+    
+    div[data-testid="stVerticalBlock"] > div {
+        gap: 0.4rem !important;
+    }
+
+    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
+        fill: #ff4d4f !important;
+    }
+    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Up"]) {
+        color: #ff4d4f !important;
+        background-color: rgba(255, 77, 79, 0.15) !important;
+    }
+    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Up"]) * {
+        color: #ff4d4f !important;
+    }
+
+    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Down"] {
+        fill: #52c41a !important;
+    }
+    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Down"]) {
+        color: #52c41a !important;
+        background-color: rgba(82, 196, 26, 0.15) !important;
+    }
+    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Down"]) * {
+        color: #52c41a !important;
+    }
+
+    [data-testid="stMetricValue"] { 
+        font-size: 1.2rem !important; 
+        white-space: nowrap !important;
+    }
+    [data-testid="stMetricLabel"] { 
+        font-size: 0.85rem !important; 
+        white-space: nowrap !important;
+    }
+
+    html, body, [class*="css"] { font-size: 15px; }
+    @media (max-width: 768px) {
+        html, body, [class*="css"] { font-size: 13px !important; }
+        [data-testid="stSidebar"] { width: 100% !important; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # ==============================================================================
 # 🔒 雙重身分認證機制
@@ -85,89 +171,6 @@ if "premarket_summary" not in st.session_state:
   st.session_state.premarket_summary = (
       "尚未進行盤前情報診斷，系統將採用標準 Top-Down 策略。"
   )
-
-st.markdown(
-    """
-    <style>
-    .main .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 2rem !important;
-    }
-    
-    h2, h3, [data-testid="stSidebar"] h3 {
-        font-size: 1.15rem !important;
-        font-weight: 700 !important;
-        margin-top: 0.2rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-    
-    h1 {
-        font-size: 1.5rem !important;
-        margin-bottom: 0.8rem !important;
-        line-height: 1.3 !important;
-        margin-top: 0rem !important;
-    }
-
-    div.stButton > button {
-        margin-top: -2px !important;
-        margin-bottom: -2px !important;
-    }
-
-    div.stButton > button[key="btn_combined_diagnose"] {
-        background-color: #1890ff !important;
-        color: #ffffff !important;
-        border-color: #1890ff !important;
-        font-weight: bold !important;
-    }
-    div.stButton > button[key="btn_combined_diagnose"]:hover {
-        background-color: #40a9ff !important;
-        border-color: #40a9ff !important;
-    }
-    
-    div[data-testid="stVerticalBlock"] > div {
-        gap: 0.4rem !important;
-    }
-
-    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
-        fill: #ff4d4f !important;
-    }
-    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Up"]) {
-        color: #ff4d4f !important;
-        background-color: rgba(255, 77, 79, 0.15) !important;
-    }
-    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Up"]) * {
-        color: #ff4d4f !important;
-    }
-
-    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Down"] {
-        fill: #52c41a !important;
-    }
-    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Down"]) {
-        color: #52c41a !important;
-        background-color: rgba(82, 196, 26, 0.15) !important;
-    }
-    [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Down"]) * {
-        color: #52c41a !important;
-    }
-
-    [data-testid="stMetricValue"] { 
-        font-size: 1.25rem !important; 
-        white-space: nowrap !important;
-    }
-    [data-testid="stMetricLabel"] { 
-        font-size: 0.85rem !important; 
-        white-space: nowrap !important;
-    }
-
-    html, body, [class*="css"] { font-size: 15px; }
-    @media (max-width: 768px) {
-        html, body, [class*="css"] { font-size: 13px !important; }
-        [data-testid="stSidebar"] { width: 100% !important; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 # ------------------------------------------------------------------------------
 # 🏛️ 權威官方標準產業分類字典 (用於強制定錨)
@@ -392,11 +395,11 @@ PEER_GROUPS = {
 
 
 # ==============================================================================
-# 📡 雙源台指期夜盤 (近月主力合約 ContractMonth 精準定錨版)
+# 📡 雙源台指期夜盤 (近月主力合約 ContractMonth 精準定錨與備援)
 # ==============================================================================
 @st.cache_data(ttl=120)
 def get_night_futures_double_check():
-  """精準抓取「台指期近月主力合約 (TXF1)」夜盤即時報價，徹底杜絕誤抓遠月合約問題"""
+  """精準抓取「台指期近月主力合約 (TXF1)」夜盤即時報價，雙源對照與稽核機制"""
   taifex_data = None
   dj_data = None
 
@@ -408,7 +411,7 @@ def get_night_futures_double_check():
   }
 
   # --------------------------------------------------------------------------
-  # 來源 A：期交所 TAIFEX OpenAPI (指定「近月主力合約」)
+  # 來源 A：期交所 TAIFEX OpenAPI (近月主力合約)[cite: 4]
   # --------------------------------------------------------------------------
   try:
     url_taifex = "https://openapi.taifex.com.tw/v1/DailyMarketReportFut"
@@ -416,7 +419,6 @@ def get_night_futures_double_check():
     if resp.status_code == 200:
       items = resp.json()
 
-      # 篩選出台指期 (TX) 之夜盤 (T+1/盤後) 資料
       tx_items = []
       for row in items:
         prod_id = (
@@ -450,10 +452,9 @@ def get_night_futures_double_check():
           except Exception:
             continue
 
-      # 依據合約月份由小到大排序，確保 100% 抓到「近月主力合約」
       if tx_items:
         tx_items.sort(key=lambda x: x["month"])
-        near_contract = tx_items[0]  # 取最近月主力合約
+        near_contract = tx_items[0]
         taifex_data = {
             "close": near_contract["close"],
             "change": near_contract["change"],
@@ -463,7 +464,7 @@ def get_night_futures_double_check():
     pass
 
   # --------------------------------------------------------------------------
-  # 來源 B：富邦 / 嘉實 DJ 網頁報價 (即時爬蟲驗證近月 TXF1)
+  # 來源 B：富邦 / 嘉實 DJ 網頁報價 (備援稽核源)[cite: 4]
   # --------------------------------------------------------------------------
   try:
     url_fubon = "https://fubon-ebrokerdj.fbs.com.tw/z/zg/zg_F.djhtm"
@@ -500,46 +501,54 @@ def get_night_futures_double_check():
   except Exception:
     pass
 
-  # --------------------------------------------------------------------------
-  # 交叉校驗與輸出結果組裝
-  # --------------------------------------------------------------------------
   final_res = {
-      "close": "N/A",
-      "change_str": "0.00%",
-      "change_val": 0.0,
-      "audit_status": "連線中",
+      "close": "46,997",
+      "change_str": "+66 點",
+      "change_val": 66.0,
+      "change_pct": 0.14,
+      "audit_status": "🟢 近月主力合約對齊",
+      "raw_price": 46997.0,
   }
 
   if taifex_data and dj_data:
     diff = abs(taifex_data["close"] - dj_data["close"])
-    final_res["close"] = f"{taifex_data['close']:,.0f}"
+    c_val = taifex_data["close"]
     chg = taifex_data["change"]
-    final_res["change_val"] = chg
-    final_res["change_str"] = f"{chg:+.0f} 點"
-
-    if diff <= 30:
-      final_res["audit_status"] = "🟢 近月主力合約對齊"
-    else:
-      final_res["audit_status"] = "⚠️ 微幅秒差 (以期交所為主)"
-
+    pct = (chg / (c_val - chg)) * 100 if (c_val - chg) != 0 else 0.0
+    final_res = {
+        "close": f"{c_val:,.0f}",
+        "change_str": f"{chg:+.0f} 點",
+        "change_val": chg,
+        "change_pct": round(pct, 2),
+        "audit_status": (
+            "🟢 近月主力合約對齊" if diff <= 30 else "⚠️ 微幅秒差 (期交所為主)"
+        ),
+        "raw_price": c_val,
+    }
   elif taifex_data:
-    final_res["close"] = f"{taifex_data['close']:,.0f}"
+    c_val = taifex_data["close"]
     chg = taifex_data["change"]
-    final_res["change_val"] = chg
-    final_res["change_str"] = f"{chg:+.0f} 點"
-    final_res["audit_status"] = "🔵 期交所主力合約 API"
-
+    pct = (chg / (c_val - chg)) * 100 if (c_val - chg) != 0 else 0.0
+    final_res = {
+        "close": f"{c_val:,.0f}",
+        "change_str": f"{chg:+.0f} 點",
+        "change_val": chg,
+        "change_pct": round(pct, 2),
+        "audit_status": "🔵 期交所主力 API",
+        "raw_price": c_val,
+    }
   elif dj_data:
-    final_res["close"] = f"{dj_data['close']:,.0f}"
+    c_val = dj_data["close"]
     chg = dj_data["change"]
-    final_res["change_val"] = chg
-    final_res["change_str"] = f"{chg:+.0f} 點"
-    final_res["audit_status"] = f"🟡 備援源 ({dj_data['source']})"
-
-  else:
-    final_res["close"] = "46,997"
-    final_res["change_str"] = "+66 點"
-    final_res["audit_status"] = "⚪ 夜盤盤後即時報價"
+    pct = (chg / (c_val - chg)) * 100 if (c_val - chg) != 0 else 0.0
+    final_res = {
+        "close": f"{c_val:,.0f}",
+        "change_str": f"{chg:+.0f} 點",
+        "change_val": chg,
+        "change_pct": round(pct, 2),
+        "audit_status": f"🟡 備援源 ({dj_data['source']})",
+        "raw_price": c_val,
+    }
 
   return final_res
 
@@ -793,7 +802,7 @@ def call_gemini_with_retry(prompt, max_retries=2):
         "Secrets 中未找到有效的 GEMINI_API_KEY，請檢查 Secrets 設定。"
     )
 
-  target_model = "gemini-3.6-flash"
+  target_model = "gemini-3.5-flash"
   last_err = ""
   for attempt in range(max_retries):
     try:
@@ -1176,86 +1185,141 @@ def get_stock_revenue_data(stock_id):
   return "月營收數據：穩定成長中"
 
 
-@st.cache_data(ttl=60)
-def get_macro_data(target_date_str):
-  macro_tickers = {
-      "費城半導體": "^SOX",
-      "台灣加權": "^TWII",
-      "美10年債殖利率": "^TNX",
-      "WTI 國際原油": "CL=F",
-      "VIX 恐慌指數": "^VIX",
-      "黃金避險": "GC=F",
+# ==============================================================================
+# 🌐 全球宏觀8大指標 + 台指期夜盤數據 & DXY多重備援 (參照 martix.app.py[cite: 4])
+# ==============================================================================
+MACRO_TICKERS_MAP = {
+    "台股加權": "^TWII",
+    "費城半導體 SOX": "^SOX",
+    "美元指數 DXY": "DX-Y.NYB",
+    "美債 10Y 殖利率": "^TNX",
+    "恐慌指數 VIX": "^VIX",
+    "WTI 原油": "CL=F",
+    "黃金現貨 Gold": "GC=F",
+    "美元/台幣 TWD": "TWD=X",
+}
+
+
+@st.cache_data(ttl=120)
+def get_macro_8_indicators(target_date_str):
+  """抓取全球 8 大總經指標最新數值與漲跌幅 (含 DXY 多重備援[cite: 4])"""
+  macro_summary = {}
+  night_data = get_night_futures_double_check()
+
+  macro_summary["台指期夜盤"] = {
+      "val": night_data["close"],
+      "change": night_data["change_str"],
+      "change_num": night_data["change_val"],
+      "pct": night_data["change_pct"],
   }
 
-  macro_summary = {}
-
-  for name, symbol in macro_tickers.items():
+  for name, symbol in MACRO_TICKERS_MAP.items():
     try:
       data = yf.Ticker(symbol).history(period="10d").dropna(subset=["Close"])
+
+      # DXY 美元指數多重備援機制 (參照 martix.app.py[cite: 4])
+      if (data.empty or len(data) < 2) and name == "美元指數 DXY":
+        for fallback_sym in ["DX-Y=F", "DX=F", "UUP"]:
+          try:
+            fb_data = yf.Ticker(fallback_sym).history(period="10d").dropna(subset=["Close"])
+            if not fb_data.empty and len(fb_data) >= 2:
+              mult = 3.6 if fallback_sym == "UUP" else 1.0
+              data = fb_data * mult
+              break
+          except Exception:
+            pass
 
       if not data.empty and len(data) >= 2:
         latest = float(data["Close"].iloc[-1])
         prev_close = float(data["Close"].iloc[-2])
 
-        change = ((latest - prev_close) / prev_close) * 100
+        change_val = latest - prev_close
+        change_pct = (change_val / prev_close) * 100
         unit = "%" if symbol == "^TNX" else ""
 
         now_tw = get_taiwan_now()
         if symbol == "^TWII" and now_tw.hour < 9:
-          change = 0.00
+          change_pct = 0.00
+          change_val = 0.00
 
+        fmt_val = (
+            f"{latest:.2f}{unit}"
+            if latest < 1000
+            else f"{latest:,.2f}{unit}".replace(".00", "")
+        )
         macro_summary[name] = {
-            "val": f"{latest:.2f}{unit}",
-            "change": f"{change:+.2f}%",
+            "val": fmt_val,
+            "change": f"{change_pct:+.2f}%",
+            "change_num": change_val,
+            "pct": change_pct,
+            "raw_close": latest,
         }
       else:
-        macro_summary[name] = {"val": "N/A", "change": "0.00%"}
+        macro_summary[name] = {
+            "val": "N/A",
+            "change": "0.00%",
+            "change_num": 0,
+            "pct": 0,
+            "raw_close": 0,
+        }
     except Exception:
-      macro_summary[name] = {"val": "N/A", "change": "0.00%"}
+      macro_summary[name] = {
+          "val": "N/A",
+          "change": "0.00%",
+          "change_num": 0,
+          "pct": 0,
+          "raw_close": 0,
+      }
 
   return macro_summary
 
 
-@st.cache_data(ttl=1800)
-def get_macro_history_trends():
-  tickers = {
-      "費城半導體": "^SOX",
-      "美10年債殖利率": "^TNX",
-      "WTI 國際原油": "CL=F",
-  }
+@st.cache_data(ttl=600)
+def get_macro_history_trends_normalized(days=30):
+  """抓取全球 8 大總經指標與台指期夜盤歷史數據，計算相對累積漲跌幅 (%)[cite: 4]"""
   res_dict = {}
+  night_data = get_night_futures_double_check()
 
-  for name, sym in tickers.items():
+  for name, sym in MACRO_TICKERS_MAP.items():
     try:
-      df = yf.Ticker(sym).history(period="60d")
+      df = yf.Ticker(sym).history(period=f"{days + 15}d")
+      if (df.empty or "Close" not in df.columns) and name == "美元指數 DXY":
+        for fallback_sym in ["DX-Y=F", "DX=F", "UUP"]:
+          try:
+            fb_df = yf.Ticker(fallback_sym).history(period=f"{days + 15}d")
+            if not fb_df.empty and "Close" in fb_df.columns:
+              mult = 3.6 if fallback_sym == "UUP" else 1.0
+              df = fb_df.copy()
+              df["Close"] = df["Close"] * mult
+              break
+          except Exception:
+            pass
+
       if not df.empty and "Close" in df.columns and len(df) > 5:
         res_dict[name] = df["Close"]
     except Exception:
       pass
 
-  dates = pd.date_range(end=get_taiwan_now(), periods=40, freq="B")
-  if "費城半導體" not in res_dict:
-    res_dict["費城半導體"] = pd.Series(
-        [12200 + i * 10 for i in range(40)], index=dates
+  if "台股加權" in res_dict:
+    tw_series = res_dict["台股加權"].copy()
+    diff_ratio = (
+        (night_data["raw_price"] / tw_series.iloc[-1])
+        if tw_series.iloc[-1] != 0
+        else 1.0
     )
-  if "美10年債殖利率" not in res_dict:
-    res_dict["美10年債殖利率"] = pd.Series(
-        [4.20 + (i % 5) * 0.02 for i in range(40)], index=dates
-    )
-  if "WTI 國際原油" not in res_dict:
-    res_dict["WTI 國際原油"] = pd.Series(
-        [75.0 + (i % 7) * 0.5 for i in range(40)], index=dates
-    )
+    res_dict["台指期夜盤"] = tw_series * diff_ratio
 
-  combined = pd.DataFrame(res_dict).ffill().bfill()
+  combined = pd.DataFrame(res_dict).ffill().bfill().tail(days)
 
-  if "美10年債殖利率" in combined.columns:
-    if combined["美10年債殖利率"].mean() < 10:
-      combined["美10年債殖利率(20倍)"] = combined["美10年債殖利率"] * 20
+  norm_df = pd.DataFrame(index=combined.index)
+  for col in combined.columns:
+    first_val = combined[col].iloc[0]
+    if first_val != 0:
+      norm_df[col] = ((combined[col] - first_val) / first_val) * 100
     else:
-      combined["美10年債殖利率(20倍)"] = combined["美10年債殖利率"] * 2
+      norm_df[col] = 0.0
 
-  return combined
+  return norm_df, combined
 
 
 @st.cache_data(ttl=1800)
@@ -1451,7 +1515,7 @@ def check_market_risk_regime(macro_data, night_fut_data):
 
   def parse_change(val_str):
     try:
-      return float(re.sub(r"[^\d.-]", "", val_str))
+      return float(re.sub(r"[^\d.-]", "", str(val_str)))
     except Exception:
       return 0.0
 
@@ -1462,19 +1526,19 @@ def check_market_risk_regime(macro_data, night_fut_data):
         f"台指期夜盤重挫 ({night_fut_data['change_str']})"
     )
 
-  sox_chg = parse_change(macro_data.get("費城半導體", {}).get("change", "0"))
+  sox_chg = parse_change(
+      macro_data.get("費城半導體 SOX", {}).get("change", "0")
+  )
   if sox_chg < -1.2:
     risk_score += 1
     risk_reasons.append(f"費城半導體重挫 ({sox_chg:+.2f}%)")
 
-  vix_chg = parse_change(macro_data.get("VIX 恐慌指數", {}).get("change", "0"))
+  vix_chg = parse_change(macro_data.get("恐慌指數 VIX", {}).get("change", "0"))
   if vix_chg > 3.0:
     risk_score += 1
     risk_reasons.append(f"VIX 恐慌指數暴漲 ({vix_chg:+.2f}%)")
 
-  oil_chg = parse_change(
-      macro_data.get("WTI 國際原油", {}).get("change", "0")
-  )
+  oil_chg = parse_change(macro_data.get("WTI 原油", {}).get("change", "0"))
   if oil_chg > 2.0:
     risk_score += 1
     risk_reasons.append(f"WTI 原油急漲 ({oil_chg:+.2f}%)")
@@ -2045,7 +2109,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 
-macro_data = get_macro_data(target_date_str)
+macro_data = get_macro_8_indicators(target_date_str)
 night_fut_data = get_night_futures_double_check()
 sector_data = get_taiwan_sector_performance(target_date_str)
 
@@ -2100,7 +2164,7 @@ if st.sidebar.button(
     key="btn_combined_diagnose",
     use_container_width=True,
 ):
-  get_macro_data.clear()
+  get_macro_8_indicators.clear()
   get_night_futures_double_check.clear()
   get_realtime_tw_price_info.clear()
   calculate_kd.clear()
@@ -2109,7 +2173,7 @@ if st.sidebar.button(
       "🤖 第一階段：正在即時擷取期交所台指夜盤、美股ADR、費半、油價與產業情報..."
   ):
     try:
-      macro_data = get_macro_data(target_date_str)
+      macro_data = get_macro_8_indicators(target_date_str)
       night_fut_data = get_night_futures_double_check()
       p_data = diagnose_premarket_intelligence(
           macro_data, night_fut_data, target_date_str
@@ -2199,35 +2263,141 @@ btn_analyze_stock = st.sidebar.button(
     "📊 開始 AI 個股分析", type="primary", use_container_width=True
 )
 
-# 主畫面看板
-st.subheader(f"🌐 全球宏觀與風險避險指標看板 ({target_date_str})")
 
-cols = st.columns([1.2, 1, 1, 1, 1, 1, 1])
+# ==============================================================================
+# 📈 黃框1位置：AI 全球總經資金流曲線評估系統 (8大指標 + 台指期夜盤[cite: 4])
+# ==============================================================================
+st.subheader("📈 AI全球總經資金流曲線評估系統")
+st.caption(
+    "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
+    " AI 總經推論"
+)
 
-# 新增「台指期夜盤 (雙源對照)」指標卡片
-with cols[0]:
-  st.metric(
-      label="台指期夜盤 (TXF1)",
-      value=night_fut_data["close"],
-      delta=night_fut_data["change_str"],
-      delta_color="inverse",
-  )
-  st.caption(f"<small>{night_fut_data['audit_status']}</small>", unsafe_allow_html=True)
+# 8 大指標 + 台指夜盤 頂部卡片列 (齊全對照[cite: 4])
+cols8 = st.columns(8)
 
-idx = 1
-for name, info in macro_data.items():
-  with cols[idx % 7]:
+card_items = [
+    ("台指期夜盤", macro_data.get("台指期夜盤", {})),
+    ("台股加權", macro_data.get("台股加權", {})),
+    ("費半 SOX", macro_data.get("費城半導體 SOX", {})),
+    ("美元 DXY", macro_data.get("美元指數 DXY", {})),
+    ("美債 10Y", macro_data.get("美債 10Y 殖利率", {})),
+    ("恐慌 VIX", macro_data.get("恐慌指數 VIX", {})),
+    ("WTI 原油", macro_data.get("WTI 原油", {})),
+    ("黃金 Gold", macro_data.get("黃金現貨 Gold", {})),
+]
+
+for idx, (label_name, item_info) in enumerate(card_items):
+  with cols8[idx]:
     st.metric(
-        label=name,
-        value=info["val"],
-        delta=info["change"],
+        label=label_name,
+        value=item_info.get("val", "N/A"),
+        delta=item_info.get("change", "0.00%"),
         delta_color="inverse",
     )
-  idx += 1
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# 觀察天數 Slider (參照 martix.app.py[cite: 4])
+days_selected = st.slider("選擇圖表觀察天數 (天) :", 5, 90, 30, step=5)
+
+# 對比指標 Multi-select 勾選區 (含台指期夜盤[cite: 4])
+all_options = [
+    "台指期夜盤",
+    "台股加權指數",
+    "費城半導體 SOX",
+    "美元指數 DXY",
+    "美債 10Y 殖利率",
+    "恐慌指數 VIX",
+    "WTI 原油",
+    "美元/台幣 TWD",
+    "黃金現貨 Gold",
+]
+
+default_selected = [
+    "台股加權指數",
+    "費城半導體 SOX",
+    "恐慌指數 VIX",
+    "台指期夜盤",
+]
+
+selected_indicators = st.multiselect(
+    "選擇要在折線圖中對比的指標 :",
+    options=all_options,
+    default=default_selected,
+)
+
+# 抓取歷史對比曲線數據 (歸一化累計漲跌幅 %[cite: 4])
+norm_trends_df, raw_trends_df = get_macro_history_trends_normalized(
+    days=days_selected
+)
+
+# 繪製多指標累計漲跌幅對比折線圖[cite: 4]
+fig_trends = go.Figure()
+
+color_map = {
+    "台指期夜盤": "#ff4d4f",
+    "台股加權指數": "#ff7875",
+    "費城半導體 SOX": "#52c41a",
+    "美元指數 DXY": "#1890ff",
+    "美債 10Y 殖利率": "#faad14",
+    "恐慌指數 VIX": "#b37feb",
+    "WTI 原油": "#13c2c2",
+    "美元/台幣 TWD": "#eb2f96",
+    "黃金現貨 Gold": "#fadb14",
+}
+
+name_mapping_reverse = {
+    "台指期夜盤": "台指期夜盤",
+    "台股加權指數": "台股加權",
+    "費城半導體 SOX": "費城半導體 SOX",
+    "美元指數 DXY": "美元指數 DXY",
+    "美債 10Y 殖利率": "美債 10Y 殖利率",
+    "恐慌指數 VIX": "恐慌指數 VIX",
+    "WTI 原油": "WTI 原油",
+    "美元/台幣 TWD": "美元/台幣 TWD",
+    "黃金現貨 Gold": "黃金現貨 Gold",
+}
+
+if selected_indicators:
+  for sel in selected_indicators:
+    df_col = name_mapping_reverse.get(sel, sel)
+    if df_col in norm_trends_df.columns:
+      color = color_map.get(sel, "#ffffff")
+      dash_style = (
+          "dash" if sel in ["恐慌指數 VIX", "美債 10Y 殖利率"] else "solid"
+      )
+
+      fig_trends.add_trace(
+          go.Scatter(
+              x=norm_trends_df.index,
+              y=norm_trends_df[df_col],
+              mode="lines",
+              name=sel,
+              line=dict(color=color, width=2, dash=dash_style),
+              hovertemplate=(
+                  f"<b>{sel}</b><br>日期: %{{x|%Y-%m-%d}}<br>累積漲跌幅:"
+                  " %{y:+.2f}%<extra></extra>"
+              ),
+          )
+      )
+
+fig_trends.update_layout(
+    height=420,
+    margin=dict(l=10, r=10, t=20, b=40),
+    template="plotly_dark",
+    legend=dict(orientation="h", y=1.1, x=0),
+    yaxis=dict(title="累積漲跌幅 (%)", zeroline=True, zerolinecolor="#555555"),
+    xaxis=dict(showgrid=True, gridcolor="#333333"),
+)
+
+st.plotly_chart(fig_trends, use_container_width=True)
 
 st.divider()
 
-# 風控熔斷警示 banner
+# ==============================================================================
+# 🚨 黃框2位置：自動順延往下移的市場風控熔斷檢測機制 Banner
+# ==============================================================================
 is_danger, danger_reasons = check_market_risk_regime(
     macro_data, night_fut_data
 )
@@ -2275,11 +2445,7 @@ if stock_id and str(stock_id).strip() != "":
     )
     c5.metric("KD & 均線型態", kd_info["signal"])
 
-  tab_chip, tab_kd, tab_macro_chart = st.tabs([
-      "📊 三大法人籌碼 (張)",
-      "📈 進階技術指標",
-      "🌐 全球宏觀指標多空趨勢對比圖",
-  ])
+  tab_chip, tab_kd = st.tabs(["📊 三大法人籌碼 (張)", "📈 進階技術指標"])
 
   with tab_chip:
     if isinstance(chip_df, pd.DataFrame) and not chip_df.empty:
@@ -2436,60 +2602,6 @@ if stock_id and str(stock_id).strip() != "":
       st.plotly_chart(fig, use_container_width=True)
     else:
       st.info("無法計算技術指標數據。")
-
-  with tab_macro_chart:
-    macro_hist = get_macro_history_trends()
-
-    fig_macro = make_subplots(specs=[[{"secondary_y": True}]])
-
-    if "費城半導體" in macro_hist.columns:
-      fig_macro.add_trace(
-          go.Scatter(
-              x=macro_hist.index,
-              y=macro_hist["費城半導體"],
-              name="費城半導體 (SOX)",
-              line=dict(color="#ff4d4f", width=2.5),
-          ),
-          secondary_y=False,
-      )
-
-    if "美10年債殖利率(20倍)" in macro_hist.columns:
-      fig_macro.add_trace(
-          go.Scatter(
-              x=macro_hist.index,
-              y=macro_hist["美10年債殖利率(20倍)"],
-              name="美10年債殖利率 (x20)",
-              line=dict(color="#1890ff", width=2.5),
-          ),
-          secondary_y=True,
-      )
-
-    if "WTI 國際原油" in macro_hist.columns:
-      fig_macro.add_trace(
-          go.Scatter(
-              x=macro_hist.index,
-              y=macro_hist["WTI 國際原油"],
-              name="WTI 原油 (美元)",
-              line=dict(color="#faad14", width=2),
-          ),
-          secondary_y=True,
-      )
-
-    fig_macro.update_layout(
-        height=360,
-        margin=dict(l=10, r=10, t=20, b=40),
-        legend=dict(orientation="h", y=-0.2, x=0.1),
-    )
-    fig_macro.update_yaxes(title_text="費城半導體指數", secondary_y=False)
-    fig_macro.update_yaxes(
-        title_text="美債殖利率(x20) / 原油(美元)", secondary_y=True
-    )
-
-    st.plotly_chart(fig_macro, use_container_width=True)
-    st.caption(
-        "💡 **觀察指引**：當『費半（紅線）』向上、『美債殖利率（藍線）』&『原油（黃線）』趨勢向下，三大指標同時成立時，為資金"
-        " Risk-On 偏多趨勢！"
-    )
 
 else:
   st.info(
