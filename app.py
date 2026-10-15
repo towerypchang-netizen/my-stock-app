@@ -16,7 +16,7 @@ import yfinance as yf
 
 # 設定網頁標題與寬版佈局
 st.set_page_config(
-    page_title="AI 全球宏觀與台股 Top-Down 策略分析系統", layout="wide"
+    page_title="全球總經與台股資金流曲線評估系統", layout="wide"
 )
 
 # ---------------------------------------------------------
@@ -1276,7 +1276,7 @@ def get_macro_8_indicators(target_date_str):
 
 @st.cache_data(ttl=600)
 def get_macro_history_trends_normalized(days=30):
-  """抓取全球 8 大總經指標與台指期夜盤歷史數據，計算相對累積漲跌幅 (%)[cite: 4]"""
+  """抓取全球 8 大總經指標與台指期夜盤歷史數據，計算相對累積漲跌幅 (%) (修復階梯方波問題[cite: 8])"""
   res_dict = {}
   night_data = get_night_futures_double_check()
 
@@ -1296,7 +1296,11 @@ def get_macro_history_trends_normalized(days=30):
             pass
 
       if not df.empty and "Close" in df.columns and len(df) > 5:
-        res_dict[name] = df["Close"]
+        # 去除時區並僅保留真實收盤價序列
+        s = df["Close"].dropna()
+        if isinstance(s.index, pd.DatetimeIndex):
+          s.index = s.index.tz_localize(None)
+        res_dict[name] = s
     except Exception:
       pass
 
@@ -1309,17 +1313,19 @@ def get_macro_history_trends_normalized(days=30):
     )
     res_dict["台指期夜盤"] = tw_series * diff_ratio
 
-  combined = pd.DataFrame(res_dict).ffill().bfill().tail(days)
+  # 合併為 DataFrame (不強行全域 ffill，避免將非交易日強制水平拉平形成方波[cite: 7, 8])
+  combined = pd.DataFrame(res_dict).tail(days)
 
+  # 逐欄計算相對於各自首筆有效資料的累積漲跌幅 (%)
   norm_df = pd.DataFrame(index=combined.index)
   for col in combined.columns:
-    first_val = combined[col].iloc[0]
-    if first_val != 0:
-      norm_df[col] = ((combined[col] - first_val) / first_val) * 100
-    else:
-      norm_df[col] = 0.0
+    valid_series = combined[col].dropna()
+    if not valid_series.empty:
+      first_val = valid_series.iloc[0]
+      if first_val != 0:
+        norm_df[col] = ((combined[col] - first_val) / first_val) * 100
 
-  return norm_df, combined
+  return norm_df
 
 
 @st.cache_data(ttl=1800)
@@ -2091,8 +2097,12 @@ def ai_single_stock_analysis(
   return call_gemini_with_retry(prompt)
 
 
+# ==============================================================================
 # 主 UI 邏輯
-st.title("📈 AI 全球宏觀與台股 Top-Down 策略分析系統")
+# ==============================================================================
+
+# 1. 修正主標題 (更新為：全球總經與台股資金流曲線評估系統)
+st.title("📈 全球總經與台股資金流曲線評估系統")
 
 taiwan_now = get_taiwan_now()
 target_date_str = taiwan_now.strftime("%Y-%m-%d")
@@ -2265,15 +2275,14 @@ btn_analyze_stock = st.sidebar.button(
 
 
 # ==============================================================================
-# 📈 黃框1位置：AI 全球總經資金流曲線評估系統 (8大指標 + 台指期夜盤[cite: 4])
+# 📈 全球總經資金流指標看板與對比折線圖 (已移除重複標題，資料自動向上順移[cite: 5])
 # ==============================================================================
-st.subheader("📈 AI全球總經資金流曲線評估系統")
 st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
     " AI 總經推論"
 )
 
-# 8 大指標 + 台指夜盤 頂部卡片列 (齊全對照[cite: 4])
+# 8 大指標 + 台指夜盤 頂部卡片列[cite: 4]
 cols8 = st.columns(8)
 
 card_items = [
@@ -2298,95 +2307,83 @@ for idx, (label_name, item_info) in enumerate(card_items):
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# 觀察天數 Slider (參照 martix.app.py[cite: 4])
-days_selected = st.slider("選擇圖表觀察天數 (天) :", 5, 90, 30, step=5)
+# 觀察天數 Slider[cite: 4]
+days_selected = st.slider("選擇圖表觀察天數 (天) :", 14, 90, 30, step=1)
 
-# 對比指標 Multi-select 勾選區 (含台指期夜盤[cite: 4])
-all_options = [
-    "台指期夜盤",
-    "台股加權指數",
-    "費城半導體 SOX",
-    "美元指數 DXY",
-    "美債 10Y 殖利率",
-    "恐慌指數 VIX",
-    "WTI 原油",
-    "美元/台幣 TWD",
-    "黃金現貨 Gold",
-]
+# 還原 4 欄直排核取方塊 (st.checkbox) 勾選樣式 (參照 martix.app.py[cite: 4, 6])
+st.markdown("**選擇要在折線圖中對比的指標 :**")
+chk_cols = st.columns(4)
 
-default_selected = [
-    "台股加權指數",
-    "費城半導體 SOX",
-    "恐慌指數 VIX",
-    "台指期夜盤",
-]
+with chk_cols[0]:
+  show_taiex = st.checkbox("台股加權指數", value=True)
+  show_sox = st.checkbox("費城半導體 SOX", value=True)
 
-selected_indicators = st.multiselect(
-    "選擇要在折線圖中對比的指標 :",
-    options=all_options,
-    default=default_selected,
-)
+with chk_cols[1]:
+  show_dxy = st.checkbox("美元指數 DXY", value=False)
+  show_us10y = st.checkbox("美債 10Y 殖利率", value=False)
 
-# 抓取歷史對比曲線數據 (歸一化累計漲跌幅 %[cite: 4])
-norm_trends_df, raw_trends_df = get_macro_history_trends_normalized(
-    days=days_selected
-)
+with chk_cols[2]:
+  show_vix = st.checkbox("恐慌指數 VIX", value=True)
+  show_twd = st.checkbox("美元/台幣 TWD", value=False)
 
-# 繪製多指標累計漲跌幅對比折線圖[cite: 4]
+with chk_cols[3]:
+  show_wti = st.checkbox("WTI 原油", value=False)
+  show_gold = st.checkbox("黃金現貨 Gold", value=False)
+
+# 補植台指期夜盤選項
+c_extra1, _ = st.columns([1, 3])
+with c_extra1:
+  show_night = st.checkbox("台指期夜盤", value=False)
+
+# 抓取歷史對比曲線數據 (修復階梯方波，保持光滑趨勢[cite: 8])
+norm_trends_df = get_macro_history_trends_normalized(days=days_selected)
+
+cols_map = {
+    "台股加權": ("台股加權指數", "#ff7875", 2.5, "solid", show_taiex),
+    "費城半導體 SOX": ("費半 SOX", "#52c41a", 2.0, "solid", show_sox),
+    "美元指數 DXY": ("美元指數 DXY", "#1890ff", 2.0, "dot", show_dxy),
+    "美債 10Y 殖利率": ("美債 10Y 殖利率", "#faad14", 2.0, "dash", show_us10y),
+    "恐慌指數 VIX": ("恐慌指數 VIX", "#b37feb", 1.5, "dashdot", show_vix),
+    "美元/台幣 TWD": ("美元/台幣 TWD", "#eb2f96", 2.0, "dot", show_twd),
+    "WTI 原油": ("WTI 原油", "#13c2c2", 1.5, "solid", show_wti),
+    "黃金現貨 Gold": ("黃金現貨 Gold", "#fadb14", 1.5, "solid", show_gold),
+    "台指期夜盤": ("台指期夜盤", "#ff4d4f", 2.5, "solid", show_night),
+}
+
 fig_trends = go.Figure()
 
-color_map = {
-    "台指期夜盤": "#ff4d4f",
-    "台股加權指數": "#ff7875",
-    "費城半導體 SOX": "#52c41a",
-    "美元指數 DXY": "#1890ff",
-    "美債 10Y 殖利率": "#faad14",
-    "恐慌指數 VIX": "#b37feb",
-    "WTI 原油": "#13c2c2",
-    "美元/台幣 TWD": "#eb2f96",
-    "黃金現貨 Gold": "#fadb14",
-}
-
-name_mapping_reverse = {
-    "台指期夜盤": "台指期夜盤",
-    "台股加權指數": "台股加權",
-    "費城半導體 SOX": "費城半導體 SOX",
-    "美元指數 DXY": "美元指數 DXY",
-    "美債 10Y 殖利率": "美債 10Y 殖利率",
-    "恐慌指數 VIX": "恐慌指數 VIX",
-    "WTI 原油": "WTI 原油",
-    "美元/台幣 TWD": "美元/台幣 TWD",
-    "黃金現貨 Gold": "黃金現貨 Gold",
-}
-
-if selected_indicators:
-  for sel in selected_indicators:
-    df_col = name_mapping_reverse.get(sel, sel)
-    if df_col in norm_trends_df.columns:
-      color = color_map.get(sel, "#ffffff")
-      dash_style = (
-          "dash" if sel in ["恐慌指數 VIX", "美債 10Y 殖利率"] else "solid"
-      )
-
+for col_key, (
+    disp_name,
+    color_hex,
+    width_px,
+    dash_style,
+    is_selected,
+) in cols_map.items():
+  if is_selected and col_key in norm_trends_df.columns:
+    s_data = norm_trends_df[col_key].dropna()
+    if not s_data.empty:
       fig_trends.add_trace(
           go.Scatter(
-              x=norm_trends_df.index,
-              y=norm_trends_df[df_col],
+              x=s_data.index,
+              y=s_data,
               mode="lines",
-              name=sel,
-              line=dict(color=color, width=2, dash=dash_style),
+              name=disp_name,
+              connectgaps=True,  # 跨國/跨假日自動斜線自然連線，杜絕方波階梯[cite: 8]
+              line=dict(color=color_hex, width=width_px, dash=dash_style),
               hovertemplate=(
-                  f"<b>{sel}</b><br>日期: %{{x|%Y-%m-%d}}<br>累積漲跌幅:"
+                  f"<b>{disp_name}</b><br>日期: %{{x|%Y-%m-%d}}<br>累積漲跌幅:"
                   " %{y:+.2f}%<extra></extra>"
               ),
           )
       )
 
 fig_trends.update_layout(
-    height=420,
+    height=450,
     margin=dict(l=10, r=10, t=20, b=40),
     template="plotly_dark",
-    legend=dict(orientation="h", y=1.1, x=0),
+    legend=dict(
+        orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+    ),
     yaxis=dict(title="累積漲跌幅 (%)", zeroline=True, zerolinecolor="#555555"),
     xaxis=dict(showgrid=True, gridcolor="#333333"),
 )
@@ -2396,7 +2393,7 @@ st.plotly_chart(fig_trends, use_container_width=True)
 st.divider()
 
 # ==============================================================================
-# 🚨 黃框2位置：自動順延往下移的市場風控熔斷檢測機制 Banner
+# 🚨 市場風控熔斷檢測機制 Banner (順延位於折線圖下方)
 # ==============================================================================
 is_danger, danger_reasons = check_market_risk_regime(
     macro_data, night_fut_data
