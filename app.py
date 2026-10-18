@@ -16,7 +16,7 @@ import yfinance as yf
 
 # 設定網頁標題與寬版佈局
 st.set_page_config(
-    page_title="全球總經與台股資金流 AI 戰情分析系統", layout="wide"
+    page_title="全球總經與台股資金流 AI 矩陣分析系統", layout="wide"
 )
 
 # ---------------------------------------------------------
@@ -2196,7 +2196,7 @@ def ai_single_stock_analysis(
 # 主 UI 邏輯
 # ==============================================================================
 
-st.title("📈 全球總經與台股資金流 AI 戰情分析系統")
+st.title("📈 全球總經與台股資金流 AI 矩陣分析系統")
 
 taiwan_now = get_taiwan_now()
 target_date_str = taiwan_now.strftime("%Y-%m-%d")
