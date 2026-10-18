@@ -1621,7 +1621,7 @@ def generate_daily_picks(
     custom_sector,
     selected_masters,
     target_date_str,
-    status_container,  # 👈 新增 UI 動態狀態傳遞容器
+    status_container,
 ):
   is_danger, danger_reasons = check_market_risk_regime(
       macro_data, night_fut_data
@@ -1647,13 +1647,11 @@ def generate_daily_picks(
         "波段期間": "觀望",
     }]
 
-  # 🟢 思維進度 1
   status_container.write(
       "🟢 **[第一階段]** 宏觀與台指夜盤連動分析完成：夜盤收"
       f" {night_fut_data['close']} ({night_fut_data['change_str']})，風控通過。"
   )
 
-  # 🟢 思維進度 2：掃描 24H 個股新聞
   status_container.write(
       "🟢 **[第二階段]** 正在即時擷取全市場焦點股近 24 小時新聞與法說會情報..."
   )
@@ -1716,7 +1714,6 @@ def generate_daily_picks(
       else ""
   )
 
-  # 🟢 思維進度 3：觸發 CoT (Chain of Thought) 提示詞
   status_container.write(
       "🟢 **[第三階段]** 正在啟動 Gemini 3.5 智慧模型，執行 Chain-of-Thought"
       " (CoT) 4 步驟邏輯推理..."
@@ -1759,7 +1756,6 @@ def generate_daily_picks(
   except Exception:
     picks = []
 
-  # 🟢 思維進度 4：硬性程式門檻二次過濾
   status_container.write(
       "🟢 **[第四階段]** AI 選股推演完成，正在進行最後技術面、實價與處置警示二次硬性檢驗..."
   )
@@ -2293,7 +2289,6 @@ if st.sidebar.button(
   get_realtime_tw_price_info.clear()
   calculate_kd.clear()
 
-  # 🧠 建立畫面上視覺化的思維鏈 (CoT) 動態狀態儀表板
   status_cot = st.status(
       "🧠 AI 正在啟動深層思維鏈 (Chain-of-Thought) 全維度思考推演...",
       expanded=True,
@@ -2319,7 +2314,7 @@ if st.sidebar.button(
           custom_sector,
           selected_masters,
           target_date_str,
-          status_container=status_cot,  # 傳遞狀態儀表板
+          status_container=status_cot,
       )
       st.session_state.daily_picks = pd.DataFrame(picks_data)
       st.session_state.last_predict_time = get_taiwan_now().strftime(
@@ -2395,10 +2390,8 @@ st.caption(
     " AI 總經推論"
 )
 
-# 🎯 四大分類主卡片 (第一排)
 card_cols = st.columns(4)
 
-# 1. 亞太大盤 (預設顯示：台股加權)
 with card_cols[0]:
   st.markdown(
       '<div class="main-card-box"><div'
@@ -2431,7 +2424,6 @@ with card_cols[0]:
           delta_color="inverse",
       )
 
-# 2. 美國大盤 (預設顯示：費城半導體)
 with card_cols[1]:
   st.markdown(
       '<div class="main-card-box"><div'
@@ -2478,7 +2470,6 @@ with card_cols[1]:
           delta_color="inverse",
       )
 
-# 3. 利率匯率 (預設顯示：美債 10Y)
 with card_cols[2]:
   st.markdown(
       '<div class="main-card-box"><div'
@@ -2511,7 +2502,6 @@ with card_cols[2]:
           delta_color="inverse",
       )
 
-# 4. 避險商品 (預設顯示：恐慌 VIX)
 with card_cols[3]:
   st.markdown(
       '<div class="main-card-box"><div'
@@ -2546,10 +2536,8 @@ with card_cols[3]:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# 觀察天數 Slider
 days_selected = st.slider("選擇圖表觀察天數 (天) :", 14, 90, 30, step=1)
 
-# Checkbox 選擇排版 (4 欄平衡排版)
 st.markdown("**選擇要在折線圖中對比的指標 :**")
 chk_cols = st.columns(4)
 
@@ -2574,10 +2562,8 @@ with chk_cols[3]:
   show_wti = st.checkbox("WTI 原油", value=False)
   show_gold = st.checkbox("黃金現貨 Gold", value=False)
 
-# 抓取獨立歷史對比曲線數據
 norm_trends_df = get_macro_history_trends_normalized(days=days_selected)
 
-# 🎨 重新校驗深色背景 (plotly_dark) 之超高對比度美股四大指數與總經配色
 cols_map = {
     "台股加權": (
         "台股加權指數",
@@ -2586,7 +2572,7 @@ cols_map = {
         "solid",
         show_taiex,
         "lines",
-    ),  # 🔴 鮮豔純紅 (加粗主線)
+    ),
     "費城半導體 SOX": (
         "費半 SOX",
         "#00ff66",
@@ -2594,7 +2580,7 @@ cols_map = {
         "solid",
         show_sox,
         "lines",
-    ),  # 🟢 亮毒綠色
+    ),
     "道瓊工業 DJI": (
         "道瓊 DJI",
         "#ffd700",
@@ -2602,7 +2588,7 @@ cols_map = {
         "solid",
         show_dji,
         "lines",
-    ),  # 🟡 亮金黃色
+    ),
     "標普 500 S&P500": (
         "標普 500",
         "#00f5d4",
@@ -2610,7 +2596,7 @@ cols_map = {
         "solid",
         show_sp500,
         "lines",
-    ),  # 🟢 亮綠青色
+    ),
     "那斯達克 NASDAQ": (
         "那斯達克",
         "#e0aaff",
@@ -2618,7 +2604,7 @@ cols_map = {
         "dash",
         show_nasdaq,
         "lines",
-    ),  # 🟣 亮螢光紫 + 虛線
+    ),
     "羅素 2000 RUT": (
         "羅素 2000",
         "#ff6b6b",
@@ -2626,7 +2612,7 @@ cols_map = {
         "dashdot",
         show_rut,
         "lines",
-    ),  # 🔴 珊瑚紅 + 點劃線
+    ),
     "美聯儲 13W 短貼率": (
         "美聯儲 13W 短貼",
         "#00bbf9",
@@ -2634,7 +2620,7 @@ cols_map = {
         "dot",
         show_irx,
         "lines",
-    ),  # 🔷 天藍色 + 密點線
+    ),
     "日經 225 N225": (
         "日經 225",
         "#00e5ff",
@@ -2642,7 +2628,7 @@ cols_map = {
         "solid",
         show_nikkei,
         "lines",
-    ),  # 🔷 亮青藍色
+    ),
     "美債 10Y 殖利率": (
         "美債 10Y 殖利率",
         "#ff9900",
@@ -2650,7 +2636,7 @@ cols_map = {
         "dash",
         show_us10y,
         "lines",
-    ),  # 🟠 鮮豔橘黃 + 長虛線
+    ),
     "恐慌指數 VIX": (
         "恐慌指數 VIX",
         "#d870ff",
@@ -2658,7 +2644,7 @@ cols_map = {
         "dashdot",
         show_vix,
         "lines",
-    ),  # 🟣 亮紫粉色 + 點劃線
+    ),
     "美元指數 DXY": (
         "美元指數 DXY",
         "#2979ff",
@@ -2666,7 +2652,7 @@ cols_map = {
         "dot",
         show_dxy,
         "lines",
-    ),  # 🟦 天空純藍 + 密點線
+    ),
     "WTI 原油": (
         "WTI 原油",
         "#ff007f",
@@ -2674,7 +2660,7 @@ cols_map = {
         "solid",
         show_wti,
         "lines",
-    ),  # 鮮豔玫紅色
+    ),
     "黃金現貨 Gold": (
         "黃金現貨 Gold",
         "#ffee00",
@@ -2682,7 +2668,7 @@ cols_map = {
         "solid",
         show_gold,
         "lines",
-    ),  # 🟡 帝王亮黃
+    ),
 }
 
 fig_trends = go.Figure()
@@ -2707,8 +2693,8 @@ for col_key, (
               connectgaps=True,
               line=dict(color=color_hex, width=width_px, dash=dash_style),
               hovertemplate=(
-                  f"<b>{disp_name}</b><br>日期: %{{x|%Y-%m-%d}}<br>累積漲跌幅:"
-                  " %{y:+.2f}%<extra></extra>"
+                  f"<b>{disp_name}</b><br>日期:"
+                  " %{x|%Y-%m-%d}<br>累積漲跌幅: %{y:+.2f}%<extra></extra>"
               ),
           )
       )
@@ -2728,9 +2714,6 @@ st.plotly_chart(fig_trends, use_container_width=True)
 
 st.divider()
 
-# ==============================================================================
-# 🚨 市場風控熔斷檢測機制 Banner (順延位於折線圖下方)
-# ==============================================================================
 is_danger, danger_reasons = check_market_risk_regime(
     macro_data, night_fut_data
 )
@@ -2741,7 +2724,6 @@ if is_danger:
       f"**操盤紀律建議**：大盤系統性風險偏高，強行選股勝率極低！建議保持 100% 現金，或對既有持股執行反彈減碼保護。"
   )
 
-# 🛡️ 條件式尾盤 13:00 風護警示面板
 if stock_id and str(stock_id).strip() != "":
   warn_check = check_stock_warning_status(stock_id)
   if warn_check["status"] == "DISPOSITION":
@@ -2757,7 +2739,6 @@ if stock_id and str(stock_id).strip() != "":
         " 1:00 尾盤定型時，確認股價穩在建議進場區間且並未爆量跳水方可掛單！"
     )
 
-# 看板標題
 st.subheader(
     f"🔍 個股 ({display_title}) 三大法人籌碼與進階技術指標綜合分析看板"
 )
@@ -2868,3 +2849,112 @@ if stock_id and str(stock_id).strip() != "":
               mode="lines",
               name="D 值",
               line=dict(color="#1890ff", width=1.5),
+          ),
+          row=2,
+          col=1,
+      )
+      fig.add_trace(
+          go.Scatter(
+              x=kd_df.index,
+              y=kd_df["RSI"],
+              mode="lines",
+              name="RSI",
+              line=dict(color="#b37feb", width=1.5, dash="dot"),
+          ),
+          row=2,
+          col=1,
+      )
+      fig.add_hline(y=80, line_dash="dash", line_color="gray", row=2, col=1)
+      fig.add_hline(y=20, line_dash="dash", line_color="gray", row=2, col=1)
+
+      colors_macd = [
+          "#ff4d4f" if val >= 0 else "#52c41a" for val in kd_df["MACD_Hist"]
+      ]
+      fig.add_trace(
+          go.Bar(
+              x=kd_df.index,
+              y=kd_df["MACD_Hist"],
+              name="MACD 柱狀",
+              marker_color=colors_macd,
+          ),
+          row=3,
+          col=1,
+      )
+      fig.add_trace(
+          go.Scatter(
+              x=kd_df.index,
+              y=kd_df["DIF"],
+              mode="lines",
+              name="DIF (快線)",
+              line=dict(color="#faad14", width=1),
+          ),
+          row=3,
+          col=1,
+      )
+      fig.add_trace(
+          go.Scatter(
+              x=kd_df.index,
+              y=kd_df["MACD_Signal"],
+              mode="lines",
+              name="MACD (慢線)",
+              line=dict(color="#13c2c2", width=1),
+          ),
+          row=3,
+          col=1,
+      )
+
+      fig.update_layout(
+          height=600,
+          margin=dict(l=10, r=10, t=50, b=60),
+          legend=dict(orientation="h", y=-0.15, x=0),
+          template="plotly_dark",
+      )
+
+      for annotation in fig["layout"]["annotations"]:
+        annotation.update(font=dict(size=13, color="#e0e0e0"))
+
+      st.plotly_chart(fig, use_container_width=True)
+    else:
+      st.info("無法計算技術指標數據。")
+
+else:
+  st.info(
+      "請於左側輸入台股代碼或股名後檢視籌碼與進階技術指標看板"
+  )
+
+st.divider()
+
+if btn_analyze_stock:
+  if not raw_stock_input or str(raw_stock_input).strip() == "":
+    st.warning("請先在左側欄位輸入台股代碼或股名！")
+  else:
+    chip_df = get_stock_chip(stock_id, target_date_str)
+    _, kd_info = calculate_kd(stock_id, period_type=period_type)
+
+    if capital_mode == "既有持股 (已套牢/持有中)":
+      sp_text = (
+          "🤖 AI"
+          " 結合美股四大指數與情報檢析【既有持股套牢解套/停損脫手策略】..."
+      )
+    else:
+      sp_text = (
+          "🤖 AI 結合美股四大指數與情報檢析【實戰操盤買賣點/風報比試算】..."
+      )
+
+    with st.spinner(sp_text):
+      try:
+        report = ai_single_stock_analysis(
+            macro_data,
+            sector_data,
+            raw_stock_input,
+            chip_data=chip_df,
+            kd_info=kd_info,
+            period_type=period_type,
+            capital_mode=capital_mode,
+            price_or_capital=price_or_capital,
+            selected_masters=selected_masters,
+            target_date_str=target_date_str,
+        )
+        st.markdown(report)
+      except Exception as e:
+        st.error(f"分析生成失敗: {e}")
