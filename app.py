@@ -2547,7 +2547,7 @@ cols_map = {
     ),
     "道瓊工業 DJI": (
         "道瓊 DJI",
-        "#ffd700",
+        "#ffffff",
         2.0,
         "solid",
         show_dji,
@@ -2587,7 +2587,7 @@ cols_map = {
     ),
     "日經 225 N225": (
         "日經 225",
-        "#00e5ff",
+        "#1e90ff",
         2.0,
         "solid",
         show_nikkei,
