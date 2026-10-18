@@ -1729,7 +1729,7 @@ def generate_daily_picks(
     2. 【族群名稱精準化】：『族群』名稱請採用證交所官方標準產業分類，【嚴禁使用非標準標籤】！
 
     請精選最具備波段攻擊潛力、籌碼集中且多頭型態之標的名單，請回傳 JSON 陣列格式如：
-    [{"上漲率":"78%","族群":"塑化原料","股名":"台塑","股號":"1301","波段期間":"5-10天"}]
+    [{{"上漲率":"78%","族群":"塑化原料","股名":"台塑","股號":"1301","波段期間":"5-10天"}}]
     不要包含 Markdown 標記或額外贅詞。
     """
 
@@ -1769,12 +1769,11 @@ def generate_daily_picks(
       item["上漲率"] = f"{raw_pct:.0f}%"
 
       _, kd_info = calculate_kd(stock_id, period_type="日線")
-      bias_20 = (
-          kd_info.get("bias_20ma", 0.0) if isinstance(kd_info, dict) else 0.0
-      )
-      bias_60 = (
-          kd_info.get("bias_60ma", 0.0) if isinstance(kd_info, dict) else 0.0
-      )
+      try:
+        bias_20 = float(kd_info.get("bias_20ma", 0.0)) if isinstance(kd_info, dict) else 0.0
+        bias_60 = float(kd_info.get("bias_60ma", 0.0)) if isinstance(kd_info, dict) else 0.0
+      except Exception:
+        bias_20, bias_60 = 0.0, 0.0
       ma5_val = (
           kd_info.get("5MA", real_p) if isinstance(kd_info, dict) else real_p
       )
