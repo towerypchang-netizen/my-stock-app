@@ -64,21 +64,6 @@ st.markdown(
         gap: 0.4rem !important;
     }
 
-    /* 📦 核心主卡片容器外觀 */
-    .main-card-box {
-        border: 1px solid rgba(240, 242, 245, 0.15);
-        border-radius: 8px;
-        padding: 10px 14px 6px 14px;
-        background-color: rgba(255, 255, 255, 0.03);
-        margin-bottom: 4px;
-    }
-    .main-card-header {
-        font-size: 0.88rem !important;
-        font-weight: bold !important;
-        color: #1890ff !important;
-        margin-bottom: 6px !important;
-    }
-
     [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
         fill: #ff4d4f !important;
     }
@@ -95,7 +80,6 @@ st.markdown(
     }
     [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Down"]) {
         color: #52c41a !important;
-        background-color: rgba(82, 196, 26, 0.15) !important;
     }
     [data-testid="stMetricDelta"]:has(svg[data-testid="stMetricDeltaIcon-Down"]) * {
         color: #52c41a !important;
@@ -2383,7 +2367,7 @@ btn_analyze_stock = st.sidebar.button(
 
 
 # ==============================================================================
-# 📈 全球總經資金流指標看板 (主卡片 + 下拉抽屜版) 與對比折線圖
+# 📈 全球總經資金流指標看板 (整合式抽屜版) 與對比折線圖
 # ==============================================================================
 st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
@@ -2393,11 +2377,6 @@ st.caption(
 card_cols = st.columns(4)
 
 with card_cols[0]:
-  st.markdown(
-      '<div class="main-card-box"><div'
-      ' class="main-card-header">🌏 亞太大盤</div></div>',
-      unsafe_allow_html=True,
-  )
   item_taiex = macro_data.get("台股加權", {})
   st.metric(
       label="台股加權",
@@ -2405,7 +2384,7 @@ with card_cols[0]:
       delta=item_taiex.get("change", "0.00%"),
       delta_color="inverse",
   )
-  with st.expander("📂 展開：亞太其他指標"):
+  with st.expander("🌏 亞太大盤 展開其他指數"):
     col_a1, col_a2 = st.columns(2)
     with col_a1:
       item_night = macro_data.get("台指期夜盤", {})
@@ -2425,11 +2404,6 @@ with card_cols[0]:
       )
 
 with card_cols[1]:
-  st.markdown(
-      '<div class="main-card-box"><div'
-      ' class="main-card-header">🇺🇸 美國大盤</div></div>',
-      unsafe_allow_html=True,
-  )
   item_sox = macro_data.get("費城半導體 SOX", {})
   st.metric(
       label="費城半導體",
@@ -2437,7 +2411,7 @@ with card_cols[1]:
       delta=item_sox.get("change", "0.00%"),
       delta_color="inverse",
   )
-  with st.expander("📂 展開：美股四大指數"):
+  with st.expander("🇺🇸 美國大盤 展開美股四大指數"):
     col_u1, col_u2 = st.columns(2)
     with col_u1:
       item_dji = macro_data.get("道瓊工業 DJI", {})
@@ -2471,11 +2445,6 @@ with card_cols[1]:
       )
 
 with card_cols[2]:
-  st.markdown(
-      '<div class="main-card-box"><div'
-      ' class="main-card-header">🏦 利率匯率</div></div>',
-      unsafe_allow_html=True,
-  )
   item_10y = macro_data.get("美債 10Y 殖利率", {})
   st.metric(
       label="美債 10Y",
@@ -2483,7 +2452,7 @@ with card_cols[2]:
       delta=item_10y.get("change", "0.00%"),
       delta_color="inverse",
   )
-  with st.expander("📂 展開：政策利率與美元"):
+  with st.expander("🏦 利率匯率 展開政策利率與美元"):
     col_r1, col_r2 = st.columns(2)
     with col_r1:
       item_irx = macro_data.get("美聯儲 13W 短貼率", {})
@@ -2503,11 +2472,6 @@ with card_cols[2]:
       )
 
 with card_cols[3]:
-  st.markdown(
-      '<div class="main-card-box"><div'
-      ' class="main-card-header">🛡️ 避險商品</div></div>',
-      unsafe_allow_html=True,
-  )
   item_vix = macro_data.get("恐慌指數 VIX", {})
   st.metric(
       label="恐慌 VIX",
@@ -2515,7 +2479,7 @@ with card_cols[3]:
       delta=item_vix.get("change", "0.00%"),
       delta_color="inverse",
   )
-  with st.expander("📂 展開：原油與黃金"):
+  with st.expander("🛡️ 避險商品 展開原油與黃金"):
     col_h1, col_h2 = st.columns(2)
     with col_h1:
       item_wti = macro_data.get("WTI 原油", {})
