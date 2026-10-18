@@ -2501,7 +2501,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 days_selected = st.slider("選擇圖表觀察天數 (天) :", 14, 90, 30, step=1)
 
-st.markdown("**選擇要在折線圖中對比的指標 :**")
+st.markdown("**折線圖進階指標對比選擇 :**")
 
 # 最上列常用 4 個核心指標 (一排 4 欄)
 top_cols = st.columns(4)
