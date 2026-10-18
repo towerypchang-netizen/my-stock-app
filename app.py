@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# 🎨 CSS 注入：頂端凍結置頂列、分組卡片邊框與系統視覺優化
+# 🎨 CSS 注入：頂端凍結置頂列、主卡片與下拉抽屜視覺優化
 # ---------------------------------------------------------
 st.markdown(
     """
@@ -64,22 +64,19 @@ st.markdown(
         gap: 0.4rem !important;
     }
 
-    /* 📦 分組卡片邊框外觀設定 */
-    .macro-group-box {
-        border: 1px solid rgba(255, 255, 255, 0.12);
+    /* 📦 核心主卡片容器外觀 */
+    .main-card-box {
+        border: 1px solid rgba(240, 242, 245, 0.15);
         border-radius: 8px;
-        padding: 10px 12px 6px 12px;
-        background-color: rgba(255, 255, 255, 0.02);
-        margin-bottom: 12px;
+        padding: 10px 14px 6px 14px;
+        background-color: rgba(255, 255, 255, 0.03);
+        margin-bottom: 4px;
     }
-    .macro-group-title {
+    .main-card-header {
         font-size: 0.88rem !important;
         font-weight: bold !important;
         color: #1890ff !important;
         margin-bottom: 6px !important;
-        display: flex;
-        align-items: center;
-        gap: 4px;
     }
 
     [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
@@ -105,15 +102,15 @@ st.markdown(
     }
 
     [data-testid="stMetricValue"] { 
-        font-size: 1.02rem !important; 
+        font-size: 1.1rem !important; 
         white-space: nowrap !important;
     }
     [data-testid="stMetricLabel"] { 
-        font-size: 0.76rem !important; 
+        font-size: 0.8rem !important; 
         white-space: nowrap !important;
     }
     [data-testid="stMetricDelta"] {
-        font-size: 0.75rem !important;
+        font-size: 0.78rem !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
@@ -1220,7 +1217,7 @@ MACRO_TICKERS_MAP = {
     "標普 500 S&P500": "^GSPC",
     "那斯達克 NASDAQ": "^IXIC",
     "羅素 2000 RUT": "^RUT",
-    "美聯儲 13W 短貼率": "^IRX",  # 👈 新增：美聯儲政策利率代言指標
+    "美聯儲 13W 短貼率": "^IRX",
     "美債 10Y 殖利率": "^TNX",
     "美元指數 DXY": "DX-Y.NYB",
     "恐慌指數 VIX": "^VIX",
@@ -2331,115 +2328,161 @@ btn_analyze_stock = st.sidebar.button(
 
 
 # ==============================================================================
-# 📈 全球總經資金流指標看板 (邊框分組區塊版) 與對比折線圖
+# 📈 全球總經資金流指標看板 (主卡片 + 下拉抽屜版) 與對比折線圖
 # ==============================================================================
 st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
     " AI 總經推論"
 )
 
-# 🧱 [分組邊框卡片區塊 1]：🇺🇸 美國大盤
-st.markdown(
-    """
-    <div class="macro-group-box">
-        <div class="macro-group-title">🇺🇸 美國大盤 (US Equities)</div>
-    """,
-    unsafe_allow_html=True,
-)
-u_cols = st.columns(5)
-us_items = [
-    ("費半 SOX", macro_data.get("費城半導體 SOX", {})),
-    ("道瓊 DJI", macro_data.get("道瓊工業 DJI", {})),
-    ("標普 500", macro_data.get("標普 500 S&P500", {})),
-    ("那斯達克", macro_data.get("那斯達克 NASDAQ", {})),
-    ("羅素 2000", macro_data.get("羅素 2000 RUT", {})),
-]
-for idx, (label_name, item_info) in enumerate(us_items):
-  with u_cols[idx]:
-    st.metric(
-        label=label_name,
-        value=item_info.get("val", "N/A"),
-        delta=item_info.get("change", "0.00%"),
-        delta_color="inverse",
-    )
-st.markdown("</div>", unsafe_allow_html=True)
+# 🎯 四大分類主卡片 (第一排)
+card_cols = st.columns(4)
 
-
-# 🧱 [分組邊框卡片區塊 2 & 3]：🌏 亞太大盤 與 🏦 利率政策 (雙欄並排)
-col_left, col_right = st.columns([1.5, 1.0])
-
-with col_left:
+# 1. 亞太大盤 (預設顯示：台股加權)
+with card_cols[0]:
   st.markdown(
-      """
-        <div class="macro-group-box">
-            <div class="macro-group-title">🌏 亞太大盤 (Asia-Pacific)</div>
-        """,
+      '<div class="main-card-box"><div'
+      ' class="main-card-header">🌏 亞太大盤</div></div>',
       unsafe_allow_html=True,
   )
-  a_cols = st.columns(3)
-  asia_items = [
-      ("台股加權", macro_data.get("台股加權", {})),
-      ("台指期夜盤", macro_data.get("台指期夜盤", {})),
-      ("日經 225", macro_data.get("日經 225 N225", {})),
-  ]
-  for idx, (label_name, item_info) in enumerate(asia_items):
-    with a_cols[idx]:
+  item_taiex = macro_data.get("台股加權", {})
+  st.metric(
+      label="台股加權",
+      value=item_taiex.get("val", "N/A"),
+      delta=item_taiex.get("change", "0.00%"),
+      delta_color="inverse",
+  )
+  with st.expander("📂 展開：亞太其他指標"):
+    col_a1, col_a2 = st.columns(2)
+    with col_a1:
+      item_night = macro_data.get("台指期夜盤", {})
       st.metric(
-          label=label_name,
-          value=item_info.get("val", "N/A"),
-          delta=item_info.get("change", "0.00%"),
+          label="台指期夜盤",
+          value=item_night.get("val", "N/A"),
+          delta=item_night.get("change", "0.00%"),
           delta_color="inverse",
       )
-  st.markdown("</div>", unsafe_allow_html=True)
+    with col_a2:
+      item_nikkei = macro_data.get("日經 225 N225", {})
+      st.metric(
+          label="日經 225",
+          value=item_nikkei.get("val", "N/A"),
+          delta=item_nikkei.get("change", "0.00%"),
+          delta_color="inverse",
+      )
 
-with col_right:
+# 2. 美國大盤 (預設顯示：費城半導體)
+with card_cols[1]:
   st.markdown(
-      """
-        <div class="macro-group-box">
-            <div class="macro-group-title">🏦 利率政策 (Rates & Fed)</div>
-        """,
+      '<div class="main-card-box"><div'
+      ' class="main-card-header">🇺🇸 美國大盤</div></div>',
       unsafe_allow_html=True,
   )
-  r_cols = st.columns(2)
-  rate_items = [
-      ("美聯儲 13W 短貼", macro_data.get("美聯儲 13W 短貼率", {})),
-      ("美債 10Y", macro_data.get("美債 10Y 殖利率", {})),
-  ]
-  for idx, (label_name, item_info) in enumerate(rate_items):
-    with r_cols[idx]:
+  item_sox = macro_data.get("費城半導體 SOX", {})
+  st.metric(
+      label="費城半導體",
+      value=item_sox.get("val", "N/A"),
+      delta=item_sox.get("change", "0.00%"),
+      delta_color="inverse",
+  )
+  with st.expander("📂 展開：美股四大指數"):
+    col_u1, col_u2 = st.columns(2)
+    with col_u1:
+      item_dji = macro_data.get("道瓊工業 DJI", {})
       st.metric(
-          label=label_name,
-          value=item_info.get("val", "N/A"),
-          delta=item_info.get("change", "0.00%"),
+          label="道瓊 DJI",
+          value=item_dji.get("val", "N/A"),
+          delta=item_dji.get("change", "0.00%"),
           delta_color="inverse",
       )
-  st.markdown("</div>", unsafe_allow_html=True)
+      item_sp = macro_data.get("標普 500 S&P500", {})
+      st.metric(
+          label="標普 500",
+          value=item_sp.get("val", "N/A"),
+          delta=item_sp.get("change", "0.00%"),
+          delta_color="inverse",
+      )
+    with col_u2:
+      item_nas = macro_data.get("那斯達克 NASDAQ", {})
+      st.metric(
+          label="那斯達克",
+          value=item_nas.get("val", "N/A"),
+          delta=item_nas.get("change", "0.00%"),
+          delta_color="inverse",
+      )
+      item_rut = macro_data.get("羅素 2000 RUT", {})
+      st.metric(
+          label="羅素 2000",
+          value=item_rut.get("val", "N/A"),
+          delta=item_rut.get("change", "0.00%"),
+          delta_color="inverse",
+      )
 
+# 3. 利率匯率 (預設顯示：美債 10Y)
+with card_cols[2]:
+  st.markdown(
+      '<div class="main-card-box"><div'
+      ' class="main-card-header">🏦 利率匯率</div></div>',
+      unsafe_allow_html=True,
+  )
+  item_10y = macro_data.get("美債 10Y 殖利率", {})
+  st.metric(
+      label="美債 10Y",
+      value=item_10y.get("val", "N/A"),
+      delta=item_10y.get("change", "0.00%"),
+      delta_color="inverse",
+  )
+  with st.expander("📂 展開：政策利率與美元"):
+    col_r1, col_r2 = st.columns(2)
+    with col_r1:
+      item_irx = macro_data.get("美聯儲 13W 短貼率", {})
+      st.metric(
+          label="美聯儲 13W",
+          value=item_irx.get("val", "N/A"),
+          delta=item_irx.get("change", "0.00%"),
+          delta_color="inverse",
+      )
+    with col_r2:
+      item_dxy = macro_data.get("美元指數 DXY", {})
+      st.metric(
+          label="美元 DXY",
+          value=item_dxy.get("val", "N/A"),
+          delta=item_dxy.get("change", "0.00%"),
+          delta_color="inverse",
+      )
 
-# 🧱 [分組邊框卡片區塊 4]：🛡️ 避險與商品流向
-st.markdown(
-    """
-    <div class="macro-group-box">
-        <div class="macro-group-title">🛡️ 避險與商品流向 (Hedging & Commodities)</div>
-    """,
-    unsafe_allow_html=True,
-)
-h_cols = st.columns(4)
-hedge_items = [
-    ("美元 DXY", macro_data.get("美元指數 DXY", {})),
-    ("恐慌 VIX", macro_data.get("恐慌指數 VIX", {})),
-    ("WTI 原油", macro_data.get("WTI 原油", {})),
-    ("黃金 Gold", macro_data.get("黃金現貨 Gold", {})),
-]
-for idx, (label_name, item_info) in enumerate(hedge_items):
-  with h_cols[idx]:
-    st.metric(
-        label=label_name,
-        value=item_info.get("val", "N/A"),
-        delta=item_info.get("change", "0.00%"),
-        delta_color="inverse",
-    )
-st.markdown("</div>", unsafe_allow_html=True)
+# 4. 避險商品 (預設顯示：恐慌 VIX)
+with card_cols[3]:
+  st.markdown(
+      '<div class="main-card-box"><div'
+      ' class="main-card-header">🛡️ 避險商品</div></div>',
+      unsafe_allow_html=True,
+  )
+  item_vix = macro_data.get("恐慌指數 VIX", {})
+  st.metric(
+      label="恐慌 VIX",
+      value=item_vix.get("val", "N/A"),
+      delta=item_vix.get("change", "0.00%"),
+      delta_color="inverse",
+  )
+  with st.expander("📂 展開：原油與黃金"):
+    col_h1, col_h2 = st.columns(2)
+    with col_h1:
+      item_wti = macro_data.get("WTI 原油", {})
+      st.metric(
+          label="WTI 原油",
+          value=item_wti.get("val", "N/A"),
+          delta=item_wti.get("change", "0.00%"),
+          delta_color="inverse",
+      )
+    with col_h2:
+      item_gold = macro_data.get("黃金現貨 Gold", {})
+      st.metric(
+          label="黃金 Gold",
+          value=item_gold.get("val", "N/A"),
+          delta=item_gold.get("change", "0.00%"),
+          delta_color="inverse",
+      )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
