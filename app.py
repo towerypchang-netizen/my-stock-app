@@ -2370,8 +2370,7 @@ btn_analyze_stock = st.sidebar.button(
 # 📈 全球總經資金流指標看板 (整合式抽屜版) 與對比折線圖
 # ==============================================================================
 st.caption(
-    "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
-    " AI 總經推論"
+    "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance"
 )
 
 card_cols = st.columns(4)
