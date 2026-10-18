@@ -1606,11 +1606,12 @@ def generate_daily_picks(
     selected_masters,
     target_date_str,
     status_container,
+    enable_risk_cb=True
 ):
   is_danger, danger_reasons = check_market_risk_regime(
       macro_data, night_fut_data
   )
-  if is_danger:
+  if is_danger and enable_risk_cb:
     reason_str = " | ".join(danger_reasons)
     status_container.update(
         label="🚨 市場啟動風控熔斷，避險空倉！",
@@ -2262,6 +2263,13 @@ with p_col2:
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
+st.sidebar.markdown("**風控與選股策略機制**")
+enable_risk_circuit_breaker = st.sidebar.checkbox(
+    "啟用大盤風控熔斷機制",
+    value=True,
+    help="勾選時：當大盤或美股重挫時自動暫停多頭選股；取消勾選時：大盤重挫仍強制選股，尋找逆勢強勢股。",
+)
+
 if st.sidebar.button(
     "AI 執行最新情報分析預測上漲機率最高前三檔",
     type="primary",
@@ -2299,6 +2307,7 @@ if st.sidebar.button(
           selected_masters,
           target_date_str,
           status_container=status_cot,
+          enable_risk_cb=enable_risk_circuit_breaker
       )
       st.session_state.daily_picks = pd.DataFrame(picks_data)
       st.session_state.last_predict_time = get_taiwan_now().strftime(
