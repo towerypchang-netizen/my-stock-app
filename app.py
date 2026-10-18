@@ -87,12 +87,15 @@ st.markdown(
     }
 
     [data-testid="stMetricValue"] { 
-        font-size: 1.15rem !important; 
+        font-size: 0.95rem !important; 
         white-space: nowrap !important;
     }
     [data-testid="stMetricLabel"] { 
-        font-size: 0.8rem !important; 
+        font-size: 0.72rem !important; 
         white-space: nowrap !important;
+    }
+    [data-testid="stMetricDelta"] {
+        font-size: 0.72rem !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
@@ -2323,10 +2326,10 @@ card_items = [
     ("台指期夜盤", macro_data.get("台指期夜盤", {})),
     ("日經 225", macro_data.get("日經 225 N225", {})),
     ("費半 SOX", macro_data.get("費城半導體 SOX", {})),
-    ("道瓊 DJI", macro_data.get("道瓊工業 DJI", {})),  # 👈 新增
-    ("標普 500", macro_data.get("標普 500 S&P500", {})),  # 👈 新增
-    ("那斯達克", macro_data.get("那斯達克 NASDAQ", {})),  # 👈 新增
-    ("羅素 2000", macro_data.get("羅素 2000 RUT", {})),  # 👈 新增
+    ("道瓊 DJI", macro_data.get("道瓊工業 DJI", {})),
+    ("標普 500", macro_data.get("標普 500 S&P500", {})),
+    ("那斯達克", macro_data.get("那斯達克 NASDAQ", {})),
+    ("羅素 2000", macro_data.get("羅素 2000 RUT", {})),
     ("美債 10Y", macro_data.get("美債 10Y 殖利率", {})),
     ("美元 DXY", macro_data.get("美元指數 DXY", {})),
     ("恐慌 VIX", macro_data.get("恐慌指數 VIX", {})),
