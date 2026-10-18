@@ -2502,28 +2502,33 @@ st.markdown("<br>", unsafe_allow_html=True)
 days_selected = st.slider("選擇圖表觀察天數 (天) :", 14, 90, 30, step=1)
 
 st.markdown("**選擇要在折線圖中對比的指標 :**")
-chk_cols = st.columns(4)
 
-with chk_cols[0]:
+# 最上列常用 4 個核心指標 (一排 4 欄)
+top_cols = st.columns(4)
+with top_cols[0]:
   show_taiex = st.checkbox("台股加權指數", value=True)
+with top_cols[1]:
   show_sox = st.checkbox("費城半導體 SOX", value=True)
-  show_dji = st.checkbox("道瓊工業 DJI", value=False)
-  show_sp500 = st.checkbox("標普 500 S&P500", value=True)
-
-with chk_cols[1]:
+with top_cols[2]:
   show_nasdaq = st.checkbox("那斯達克 NASDAQ", value=True)
-  show_rut = st.checkbox("羅素 2000 RUT", value=False)
-  show_nikkei = st.checkbox("日經 225 N225", value=False)
-
-with chk_cols[2]:
-  show_irx = st.checkbox("美聯儲 13W 短貼率", value=False)
-  show_us10y = st.checkbox("美債 10Y 殖利率", value=False)
+with top_cols[3]:
   show_vix = st.checkbox("恐慌指數 VIX", value=True)
 
-with chk_cols[3]:
-  show_dxy = st.checkbox("美元指數 DXY", value=False)
-  show_wti = st.checkbox("WTI 原油", value=False)
-  show_gold = st.checkbox("黃金現貨 Gold", value=False)
+# 抽屜式收納其他進階指標
+with st.expander("其他進階指標"):
+  chk_cols = st.columns(3)
+  with chk_cols[0]:
+    show_dji = st.checkbox("道瓊工業 DJI", value=False)
+    show_sp500 = st.checkbox("標普 500 S&P500", value=False)
+    show_rut = st.checkbox("羅素 2000 RUT", value=False)
+  with chk_cols[1]:
+    show_nikkei = st.checkbox("日經 225 N225", value=False)
+    show_irx = st.checkbox("美聯儲 13W 短貼率", value=False)
+    show_us10y = st.checkbox("美債 10Y 殖利率", value=False)
+  with chk_cols[2]:
+    show_dxy = st.checkbox("美元指數 DXY", value=False)
+    show_wti = st.checkbox("WTI 原油", value=False)
+    show_gold = st.checkbox("黃金現貨 Gold", value=False)
 
 norm_trends_df = get_macro_history_trends_normalized(days=days_selected)
 
