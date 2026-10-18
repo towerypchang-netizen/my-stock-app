@@ -2384,7 +2384,7 @@ with card_cols[0]:
       delta=item_taiex.get("change", "0.00%"),
       delta_color="inverse",
   )
-  with st.expander("🌏 亞太大盤 展開其他指數"):
+  with st.expander("🌏 展開 亞太大盤指數"):
     col_a1, col_a2 = st.columns(2)
     with col_a1:
       item_night = macro_data.get("台指期夜盤", {})
@@ -2411,7 +2411,7 @@ with card_cols[1]:
       delta=item_sox.get("change", "0.00%"),
       delta_color="inverse",
   )
-  with st.expander("🇺🇸 美國大盤 展開美股四大指數"):
+  with st.expander("🇺🇸 展開 美股四大指數"):
     col_u1, col_u2 = st.columns(2)
     with col_u1:
       item_dji = macro_data.get("道瓊工業 DJI", {})
@@ -2452,7 +2452,7 @@ with card_cols[2]:
       delta=item_10y.get("change", "0.00%"),
       delta_color="inverse",
   )
-  with st.expander("🏦 利率匯率 展開政策利率與美元"):
+  with st.expander("🏦 展開 國際美元利率"):
     col_r1, col_r2 = st.columns(2)
     with col_r1:
       item_irx = macro_data.get("美聯儲 13W 短貼率", {})
@@ -2479,7 +2479,7 @@ with card_cols[3]:
       delta=item_vix.get("change", "0.00%"),
       delta_color="inverse",
   )
-  with st.expander("🛡️ 避險商品 展開原油與黃金"):
+  with st.expander("🛡️ 展開 避險商品指標"):
     col_h1, col_h2 = st.columns(2)
     with col_h1:
       item_wti = macro_data.get("WTI 原油", {})
