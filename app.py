@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# 🎨 CSS 注入：頂端凍結置頂列與系統視覺優化
+# 🎨 CSS 注入：頂端凍結置頂列、分組卡片邊框與系統視覺優化
 # ---------------------------------------------------------
 st.markdown(
     """
@@ -64,6 +64,24 @@ st.markdown(
         gap: 0.4rem !important;
     }
 
+    /* 📦 分組卡片邊框外觀設定 */
+    .macro-group-box {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        padding: 10px 12px 6px 12px;
+        background-color: rgba(255, 255, 255, 0.02);
+        margin-bottom: 12px;
+    }
+    .macro-group-title {
+        font-size: 0.88rem !important;
+        font-weight: bold !important;
+        color: #1890ff !important;
+        margin-bottom: 6px !important;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
     [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
         fill: #ff4d4f !important;
     }
@@ -87,15 +105,15 @@ st.markdown(
     }
 
     [data-testid="stMetricValue"] { 
-        font-size: 0.95rem !important; 
+        font-size: 1.02rem !important; 
         white-space: nowrap !important;
     }
     [data-testid="stMetricLabel"] { 
-        font-size: 0.72rem !important; 
+        font-size: 0.76rem !important; 
         white-space: nowrap !important;
     }
     [data-testid="stMetricDelta"] {
-        font-size: 0.72rem !important;
+        font-size: 0.75rem !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
@@ -831,10 +849,10 @@ def diagnose_premarket_intelligence(
 ):
   prompt_premarket = f"""
     請作為華爾街資深盤前情報官與台股策略總監，基準日期：{target_date_str}。
-    當前全球宏觀指標 (含美股四大指數、費半與羅素2000)：{macro_data}。
+    當前全球宏觀指標 (含美股四大指數、美聯儲13W短貼率、費半與羅素2000)：{macro_data}。
     【台指期夜盤最即時數據 (期交所雙源校驗)】：收盤價 {night_fut_data['close']}，變動：{night_fut_data['change_str']} (校驗狀態: {night_fut_data['audit_status']})。
 
-    請針對昨夜美股四大指數（道瓊、標普500、那斯達克、羅素2000）、費半、台指期夜盤、日經225、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
+    請針對昨夜美股四大指數（道瓊、標普500、那斯達克、羅素2000）、費半、台指期夜盤、日經225、美聯儲利率趨勢、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
     若宏觀或台指期夜盤呈現顯著避險（如夜盤重挫、費半重挫或VIX暴漲），請於摘要中明確警示「高風險不宜盲目開倉」。
     請回傳 JSON 格式：
     {{
@@ -1192,18 +1210,19 @@ def get_stock_revenue_data(stock_id):
 
 
 # ==============================================================================
-# 🌐 全球宏觀 11 大指標 (含美股四大指數) + 台指期夜盤數據
+# 🌐 全球宏觀指標 (含美股四大指數、美聯儲 13W 短貼率) + 台指期夜盤數據
 # ==============================================================================
 MACRO_TICKERS_MAP = {
     "台股加權": "^TWII",
     "日經 225 N225": "^N225",
     "費城半導體 SOX": "^SOX",
-    "道瓊工業 DJI": "^DJI",  # 👈 新增道瓊工業指數
-    "標普 500 S&P500": "^GSPC",  # 👈 新增標普 500
-    "那斯達克 NASDAQ": "^IXIC",  # 👈 新增那斯達克
-    "羅素 2000 RUT": "^RUT",  # 👈 新增羅素 2000
-    "美元指數 DXY": "DX-Y.NYB",
+    "道瓊工業 DJI": "^DJI",
+    "標普 500 S&P500": "^GSPC",
+    "那斯達克 NASDAQ": "^IXIC",
+    "羅素 2000 RUT": "^RUT",
+    "美聯儲 13W 短貼率": "^IRX",  # 👈 新增：美聯儲政策利率代言指標
     "美債 10Y 殖利率": "^TNX",
+    "美元指數 DXY": "DX-Y.NYB",
     "恐慌指數 VIX": "^VIX",
     "WTI 原油": "CL=F",
     "黃金現貨 Gold": "GC=F",
@@ -1244,7 +1263,7 @@ def get_macro_11_indicators(target_date_str):
 
         change_val = latest - prev_close
         change_pct = (change_val / prev_close) * 100
-        unit = "%" if symbol == "^TNX" else ""
+        unit = "%" if symbol in ["^TNX", "^IRX"] else ""
 
         now_tw = get_taiwan_now()
         if symbol == "^TWII" and now_tw.hour < 9:
@@ -1295,6 +1314,7 @@ def get_macro_history_trends_normalized(days=30):
       "標普 500 S&P500": "^GSPC",
       "那斯達克 NASDAQ": "^IXIC",
       "羅素 2000 RUT": "^RUT",
+      "美聯儲 13W 短貼率": "^IRX",
       "日經 225 N225": "^N225",
       "美元指數 DXY": "DX-Y.NYB",
       "美債 10Y 殖利率": "^TNX",
@@ -2095,7 +2115,7 @@ def ai_single_stock_analysis(
       + mode_instruction
       + "\n=== 第二部分：【全維度詳細分析報告內文】 ===\n"
       "1."
-      " 全球宏觀與美股大勢：條列解析美股四大指數(道瓊/標普500/那斯達克/羅素2000)、費半、VIX與資金流向（Risk-On"
+      " 全球宏觀與美股大勢：條列解析美股四大指數(道瓊/標普500/那斯達克/羅素2000)、美聯儲利率趨勢、費半、VIX與資金流向（Risk-On"
       " / Risk-Off 狀態）。\n"
       "2."
       " 基本面價值評估、長線前瞻估值與催化劑日曆：\n"
@@ -2216,7 +2236,7 @@ if st.sidebar.button(
 
   with st.spinner(
       "🤖"
-      " 第一階段：正在即時擷取期交所台指夜盤、美股四大指數、費半、油價與產業情報..."
+      " 第一階段：正在即時擷取期交所台指夜盤、美股四大指數、美聯儲利率、費半與產業情報..."
   ):
     try:
       macro_data = get_macro_11_indicators(target_date_str)
@@ -2311,40 +2331,115 @@ btn_analyze_stock = st.sidebar.button(
 
 
 # ==============================================================================
-# 📈 全球總經資金流指標看板與對比折線圖 (擴充為 13 大指標)
+# 📈 全球總經資金流指標看板 (邊框分組區塊版) 與對比折線圖
 # ==============================================================================
 st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
     " AI 總經推論"
 )
 
-# 🎯 13 大指標卡片列（由左至右精準順序排版）
-cols13 = st.columns(13)
-
-card_items = [
-    ("台股加權", macro_data.get("台股加權", {})),
-    ("台指期夜盤", macro_data.get("台指期夜盤", {})),
-    ("日經 225", macro_data.get("日經 225 N225", {})),
+# 🧱 [分組邊框卡片區塊 1]：🇺🇸 美國大盤
+st.markdown(
+    """
+    <div class="macro-group-box">
+        <div class="macro-group-title">🇺🇸 美國大盤 (US Equities)</div>
+    """,
+    unsafe_allow_html=True,
+)
+u_cols = st.columns(5)
+us_items = [
     ("費半 SOX", macro_data.get("費城半導體 SOX", {})),
     ("道瓊 DJI", macro_data.get("道瓊工業 DJI", {})),
     ("標普 500", macro_data.get("標普 500 S&P500", {})),
     ("那斯達克", macro_data.get("那斯達克 NASDAQ", {})),
     ("羅素 2000", macro_data.get("羅素 2000 RUT", {})),
-    ("美債 10Y", macro_data.get("美債 10Y 殖利率", {})),
-    ("美元 DXY", macro_data.get("美元指數 DXY", {})),
-    ("恐慌 VIX", macro_data.get("恐慌指數 VIX", {})),
-    ("WTI 原油", macro_data.get("WTI 原油", {})),
-    ("黃金 Gold", macro_data.get("黃金現貨 Gold", {})),
 ]
-
-for idx, (label_name, item_info) in enumerate(card_items):
-  with cols13[idx]:
+for idx, (label_name, item_info) in enumerate(us_items):
+  with u_cols[idx]:
     st.metric(
         label=label_name,
         value=item_info.get("val", "N/A"),
         delta=item_info.get("change", "0.00%"),
         delta_color="inverse",
     )
+st.markdown("</div>", unsafe_allow_html=True)
+
+
+# 🧱 [分組邊框卡片區塊 2 & 3]：🌏 亞太大盤 與 🏦 利率政策 (雙欄並排)
+col_left, col_right = st.columns([1.5, 1.0])
+
+with col_left:
+  st.markdown(
+      """
+        <div class="macro-group-box">
+            <div class="macro-group-title">🌏 亞太大盤 (Asia-Pacific)</div>
+        """,
+      unsafe_allow_html=True,
+  )
+  a_cols = st.columns(3)
+  asia_items = [
+      ("台股加權", macro_data.get("台股加權", {})),
+      ("台指期夜盤", macro_data.get("台指期夜盤", {})),
+      ("日經 225", macro_data.get("日經 225 N225", {})),
+  ]
+  for idx, (label_name, item_info) in enumerate(asia_items):
+    with a_cols[idx]:
+      st.metric(
+          label=label_name,
+          value=item_info.get("val", "N/A"),
+          delta=item_info.get("change", "0.00%"),
+          delta_color="inverse",
+      )
+  st.markdown("</div>", unsafe_allow_html=True)
+
+with col_right:
+  st.markdown(
+      """
+        <div class="macro-group-box">
+            <div class="macro-group-title">🏦 利率政策 (Rates & Fed)</div>
+        """,
+      unsafe_allow_html=True,
+  )
+  r_cols = st.columns(2)
+  rate_items = [
+      ("美聯儲 13W 短貼", macro_data.get("美聯儲 13W 短貼率", {})),
+      ("美債 10Y", macro_data.get("美債 10Y 殖利率", {})),
+  ]
+  for idx, (label_name, item_info) in enumerate(rate_items):
+    with r_cols[idx]:
+      st.metric(
+          label=label_name,
+          value=item_info.get("val", "N/A"),
+          delta=item_info.get("change", "0.00%"),
+          delta_color="inverse",
+      )
+  st.markdown("</div>", unsafe_allow_html=True)
+
+
+# 🧱 [分組邊框卡片區塊 4]：🛡️ 避險與商品流向
+st.markdown(
+    """
+    <div class="macro-group-box">
+        <div class="macro-group-title">🛡️ 避險與商品流向 (Hedging & Commodities)</div>
+    """,
+    unsafe_allow_html=True,
+)
+h_cols = st.columns(4)
+hedge_items = [
+    ("美元 DXY", macro_data.get("美元指數 DXY", {})),
+    ("恐慌 VIX", macro_data.get("恐慌指數 VIX", {})),
+    ("WTI 原油", macro_data.get("WTI 原油", {})),
+    ("黃金 Gold", macro_data.get("黃金現貨 Gold", {})),
+]
+for idx, (label_name, item_info) in enumerate(hedge_items):
+  with h_cols[idx]:
+    st.metric(
+        label=label_name,
+        value=item_info.get("val", "N/A"),
+        delta=item_info.get("change", "0.00%"),
+        delta_color="inverse",
+    )
+st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -2359,14 +2454,15 @@ with chk_cols[0]:
   show_taiex = st.checkbox("台股加權指數", value=True)
   show_sox = st.checkbox("費城半導體 SOX", value=True)
   show_dji = st.checkbox("道瓊工業 DJI", value=False)
+  show_sp500 = st.checkbox("標普 500 S&P500", value=True)
 
 with chk_cols[1]:
-  show_sp500 = st.checkbox("標普 500 S&P500", value=True)
   show_nasdaq = st.checkbox("那斯達克 NASDAQ", value=True)
   show_rut = st.checkbox("羅素 2000 RUT", value=False)
+  show_nikkei = st.checkbox("日經 225 N225", value=False)
 
 with chk_cols[2]:
-  show_nikkei = st.checkbox("日經 225 N225", value=True)
+  show_irx = st.checkbox("美聯儲 13W 短貼率", value=False)
   show_us10y = st.checkbox("美債 10Y 殖利率", value=False)
   show_vix = st.checkbox("恐慌指數 VIX", value=True)
 
@@ -2428,6 +2524,14 @@ cols_map = {
         show_rut,
         "lines",
     ),  # 🔴 珊瑚紅 + 點劃線
+    "美聯儲 13W 短貼率": (
+        "美聯儲 13W 短貼",
+        "#00bbf9",
+        2.0,
+        "dot",
+        show_irx,
+        "lines",
+    ),  # 🔷 天藍色 + 密點線
     "日經 225 N225": (
         "日經 225",
         "#00e5ff",
