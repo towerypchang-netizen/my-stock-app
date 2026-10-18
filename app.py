@@ -2563,7 +2563,7 @@ cols_map = {
     ),
     "那斯達克 NASDAQ": (
         "那斯達克",
-        "#e0aaff",
+        "#ffff00",
         2.0,
         "dash",
         show_nasdaq,
