@@ -87,11 +87,11 @@ st.markdown(
     }
 
     [data-testid="stMetricValue"] { 
-        font-size: 1.2rem !important; 
+        font-size: 1.15rem !important; 
         white-space: nowrap !important;
     }
     [data-testid="stMetricLabel"] { 
-        font-size: 0.85rem !important; 
+        font-size: 0.8rem !important; 
         white-space: nowrap !important;
     }
 
@@ -222,6 +222,7 @@ OFFICIAL_STOCK_SECTOR_MAP = {
     "2408": "記憶體",
     "2344": "記憶體",
     "3260": "記憶體",
+    "9955": "綠能環保",
 }
 
 FORBIDDEN_SECTOR_TAGS = [
@@ -320,6 +321,10 @@ STOCK_NAME_TO_ID = {
     "國喬": "1312",
     "三福化": "4755",
     "亞力": "1514",
+    "佳龍": "9955",
+    "中碳": "1723",
+    "兆豐金": "2886",
+    "中鋼": "2002",
 }
 
 STOCK_ID_TO_NAME = {v: k for k, v in STOCK_NAME_TO_ID.items()}
@@ -335,6 +340,8 @@ LARGE_CAP_STOCKS = [
     "2891",
     "3711",
     "2303",
+    "2886",
+    "2002",
 ]
 
 PEER_GROUPS = {
@@ -388,9 +395,9 @@ PEER_GROUPS = {
     ],
     "記憶體/模組": ["3260", "2408", "2344"],
     "航運": ["2603", "2609", "2615"],
-    "金控": ["2881", "2882", "2891"],
-    "重電/綠能": ["1514", "6869", "1513", "1504"],
-    "塑化原料/特化": ["6505", "1301", "1303", "1312", "4755"],
+    "金控": ["2881", "2882", "2891", "2886"],
+    "重電/綠能/環保": ["1514", "6869", "1513", "1504", "9955"],
+    "塑化原料/特化": ["6505", "1301", "1303", "1312", "4755", "1723"],
 }
 
 
@@ -410,9 +417,7 @@ def get_night_futures_double_check():
       )
   }
 
-  # --------------------------------------------------------------------------
   # 來源 A：期交所 TAIFEX OpenAPI
-  # --------------------------------------------------------------------------
   try:
     url_taifex = "https://openapi.taifex.com.tw/v1/DailyMarketReportFut"
     resp = requests.get(url_taifex, headers=headers, timeout=4)
@@ -463,9 +468,7 @@ def get_night_futures_double_check():
   except Exception:
     pass
 
-  # --------------------------------------------------------------------------
   # 來源 B：富邦 / 嘉實 DJ 網頁報價
-  # --------------------------------------------------------------------------
   try:
     url_fubon = "https://fubon-ebrokerdj.fbs.com.tw/z/zg/zg_F.djhtm"
     resp = requests.get(url_fubon, headers=headers, timeout=3)
@@ -825,10 +828,10 @@ def diagnose_premarket_intelligence(
 ):
   prompt_premarket = f"""
     請作為華爾街資深盤前情報官與台股策略總監，基準日期：{target_date_str}。
-    當前全球宏觀指標：{macro_data}。
+    當前全球宏觀指標 (含美股四大指數、費半與羅素2000)：{macro_data}。
     【台指期夜盤最即時數據 (期交所雙源校驗)】：收盤價 {night_fut_data['close']}，變動：{night_fut_data['change_str']} (校驗狀態: {night_fut_data['audit_status']})。
 
-    請針對昨夜美股、台指期夜盤、日經225、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
+    請針對昨夜美股四大指數（道瓊、標普500、那斯達克、羅素2000）、費半、台指期夜盤、日經225、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
     若宏觀或台指期夜盤呈現顯著避險（如夜盤重挫、費半重挫或VIX暴漲），請於摘要中明確警示「高風險不宜盲目開倉」。
     請回傳 JSON 格式：
     {{
@@ -847,7 +850,7 @@ def diagnose_premarket_intelligence(
   except Exception:
     return {
         "summary": (
-            "盤前總經與美股走勢平穩，維持科技權值與熱門題材輪動。"
+            "盤前美股四大指數走勢平穩，科技與藍籌輪動有序，台股維持主流個股輪動。"
         ),
         "focus_sectors": ["AI伺服器", "PCB", "半導體設備"],
         "avoid_sectors": [],
@@ -1186,12 +1189,16 @@ def get_stock_revenue_data(stock_id):
 
 
 # ==============================================================================
-# 🌐 全球宏觀9大指標 + 台指期夜盤數據
+# 🌐 全球宏觀 11 大指標 (含美股四大指數) + 台指期夜盤數據
 # ==============================================================================
 MACRO_TICKERS_MAP = {
     "台股加權": "^TWII",
     "日經 225 N225": "^N225",
     "費城半導體 SOX": "^SOX",
+    "道瓊工業 DJI": "^DJI",  # 👈 新增道瓊工業指數
+    "標普 500 S&P500": "^GSPC",  # 👈 新增標普 500
+    "那斯達克 NASDAQ": "^IXIC",  # 👈 新增那斯達克
+    "羅素 2000 RUT": "^RUT",  # 👈 新增羅素 2000
     "美元指數 DXY": "DX-Y.NYB",
     "美債 10Y 殖利率": "^TNX",
     "恐慌指數 VIX": "^VIX",
@@ -1202,7 +1209,7 @@ MACRO_TICKERS_MAP = {
 
 
 @st.cache_data(ttl=120)
-def get_macro_9_indicators(target_date_str):
+def get_macro_11_indicators(target_date_str):
   macro_summary = {}
   night_data = get_night_futures_double_check()
 
@@ -1275,12 +1282,16 @@ def get_macro_9_indicators(target_date_str):
 
 @st.cache_data(ttl=600)
 def get_macro_history_trends_normalized(days=30):
-  """抓取全球總經指標歷史數據 (已移除重疊之夜盤歷史，加入日經225)"""
+  """抓取全球總經與美股四大指數歷史數據 (進行正規化相對比較)"""
   res_dict = {}
 
   ticker_history_map = {
       "台股加權": "^TWII",
       "費城半導體 SOX": "^SOX",
+      "道瓊工業 DJI": "^DJI",
+      "標普 500 S&P500": "^GSPC",
+      "那斯達克 NASDAQ": "^IXIC",
+      "羅素 2000 RUT": "^RUT",
       "日經 225 N225": "^N225",
       "美元指數 DXY": "DX-Y.NYB",
       "美債 10Y 殖利率": "^TNX",
@@ -1649,7 +1660,7 @@ def generate_daily_picks(
       + sector_limit_str
       + "。\n"
       + master_prompt_str
-      + "大盤環境："
+      + "大盤環境 (含美股四大指數與總經)："
       + str(macro_data)
       + "\n"
       + f"台指期夜盤狀況: {night_fut_data['close']} ({night_fut_data['change_str']})\n"
@@ -1751,6 +1762,8 @@ def generate_daily_picks(
       "2330",
       "2317",
       "2382",
+      "2886",
+      "2002",
   ]
   for f_id in fallback_candidates:
     if len(final_results) >= 3:
@@ -2078,8 +2091,9 @@ def ai_single_stock_analysis(
       + ")\n\n"
       + mode_instruction
       + "\n=== 第二部分：【全維度詳細分析報告內文】 ===\n"
-      "1. 全球宏觀與科技大勢：條列解析費半、VIX與資金流向（Risk-On /"
-      " Risk-Off 狀態）。\n"
+      "1."
+      " 全球宏觀與美股大勢：條列解析美股四大指數(道瓊/標普500/那斯達克/羅素2000)、費半、VIX與資金流向（Risk-On"
+      " / Risk-Off 狀態）。\n"
       "2."
       " 基本面價值評估、長線前瞻估值與催化劑日曆：\n"
       "   - 追蹤分析法說會與基本面優秀趨勢：評估近 3~5 年"
@@ -2102,7 +2116,7 @@ def ai_single_stock_analysis(
       " MoM/YoY 之連動強度。\n"
       "5."
       " 5MA/20MA月線格局、美股戰術指標與三期均線矩陣診斷：\n"
-      "   - 美股四大指數 (道瓊/費半/那指/S&P500) 即時戰術結構評估。\n"
+      "   - 美股四大指數 (道瓊/標普500/那斯達克/羅素2000) 及費半即時戰術結構評估。\n"
       "   - 長(200MA)/中(55MA)/短(20MA) 三條移動平均線結構與對應乖離率"
       " (BIAS) 判斷：多頭格局 (20MA > 55MA > 200MA) 或空頭/修正格局"
       " (200MA > 55MA > 20MA)。\n"
@@ -2137,7 +2151,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 
-macro_data = get_macro_9_indicators(target_date_str)
+macro_data = get_macro_11_indicators(target_date_str)
 night_fut_data = get_night_futures_double_check()
 sector_data = get_taiwan_sector_performance(target_date_str)
 
@@ -2192,16 +2206,17 @@ if st.sidebar.button(
     key="btn_combined_diagnose",
     use_container_width=True,
 ):
-  get_macro_9_indicators.clear()
+  get_macro_11_indicators.clear()
   get_night_futures_double_check.clear()
   get_realtime_tw_price_info.clear()
   calculate_kd.clear()
 
   with st.spinner(
-      "🤖 第一階段：正在即時擷取期交所台指夜盤、美股ADR、費半、油價與產業情報..."
+      "🤖"
+      " 第一階段：正在即時擷取期交所台指夜盤、美股四大指數、費半、油價與產業情報..."
   ):
     try:
-      macro_data = get_macro_9_indicators(target_date_str)
+      macro_data = get_macro_11_indicators(target_date_str)
       night_fut_data = get_night_futures_double_check()
       p_data = diagnose_premarket_intelligence(
           macro_data, night_fut_data, target_date_str
@@ -2293,21 +2308,25 @@ btn_analyze_stock = st.sidebar.button(
 
 
 # ==============================================================================
-# 📈 全球總經資金流指標看板與對比折線圖
+# 📈 全球總經資金流指標看板與對比折線圖 (擴充為 13 大指標)
 # ==============================================================================
 st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | Gemini"
     " AI 總經推論"
 )
 
-# 🎯 9 大指標卡片列（由左至右精準順序排版）
-cols9 = st.columns(9)
+# 🎯 13 大指標卡片列（由左至右精準順序排版）
+cols13 = st.columns(13)
 
 card_items = [
     ("台股加權", macro_data.get("台股加權", {})),
     ("台指期夜盤", macro_data.get("台指期夜盤", {})),
     ("日經 225", macro_data.get("日經 225 N225", {})),
     ("費半 SOX", macro_data.get("費城半導體 SOX", {})),
+    ("道瓊 DJI", macro_data.get("道瓊工業 DJI", {})),  # 👈 新增
+    ("標普 500", macro_data.get("標普 500 S&P500", {})),  # 👈 新增
+    ("那斯達克", macro_data.get("那斯達克 NASDAQ", {})),  # 👈 新增
+    ("羅素 2000", macro_data.get("羅素 2000 RUT", {})),  # 👈 新增
     ("美債 10Y", macro_data.get("美債 10Y 殖利率", {})),
     ("美元 DXY", macro_data.get("美元指數 DXY", {})),
     ("恐慌 VIX", macro_data.get("恐慌指數 VIX", {})),
@@ -2316,7 +2335,7 @@ card_items = [
 ]
 
 for idx, (label_name, item_info) in enumerate(card_items):
-  with cols9[idx]:
+  with cols13[idx]:
     st.metric(
         label=label_name,
         value=item_info.get("val", "N/A"),
@@ -2329,30 +2348,34 @@ st.markdown("<br>", unsafe_allow_html=True)
 # 觀察天數 Slider
 days_selected = st.slider("選擇圖表觀察天數 (天) :", 14, 90, 30, step=1)
 
-# Checkbox 選擇排版
+# Checkbox 選擇排版 (4 欄平衡排版)
 st.markdown("**選擇要在折線圖中對比的指標 :**")
 chk_cols = st.columns(4)
 
 with chk_cols[0]:
   show_taiex = st.checkbox("台股加權指數", value=True)
   show_sox = st.checkbox("費城半導體 SOX", value=True)
+  show_dji = st.checkbox("道瓊工業 DJI", value=False)
 
 with chk_cols[1]:
-  show_nikkei = st.checkbox("日經 225 N225", value=True)
-  show_us10y = st.checkbox("美債 10Y 殖利率", value=False)
+  show_sp500 = st.checkbox("標普 500 S&P500", value=True)
+  show_nasdaq = st.checkbox("那斯達克 NASDAQ", value=True)
+  show_rut = st.checkbox("羅素 2000 RUT", value=False)
 
 with chk_cols[2]:
+  show_nikkei = st.checkbox("日經 225 N225", value=True)
+  show_us10y = st.checkbox("美債 10Y 殖利率", value=False)
   show_vix = st.checkbox("恐慌指數 VIX", value=True)
-  show_dxy = st.checkbox("美元指數 DXY", value=False)
 
 with chk_cols[3]:
+  show_dxy = st.checkbox("美元指數 DXY", value=False)
   show_wti = st.checkbox("WTI 原油", value=False)
   show_gold = st.checkbox("黃金現貨 Gold", value=False)
 
 # 抓取獨立歷史對比曲線數據
 norm_trends_df = get_macro_history_trends_normalized(days=days_selected)
 
-# 🎨 重新校驗深色背景 (plotly_dark) 之超高對比度配色與線形對應
+# 🎨 重新校驗深色背景 (plotly_dark) 之超高對比度美股四大指數與總經配色
 cols_map = {
     "台股加權": (
         "台股加權指數",
@@ -2370,6 +2393,38 @@ cols_map = {
         show_sox,
         "lines",
     ),  # 🟢 亮毒綠色
+    "道瓊工業 DJI": (
+        "道瓊 DJI",
+        "#ffd700",
+        2.0,
+        "solid",
+        show_dji,
+        "lines",
+    ),  # 🟡 亮金黃色
+    "標普 500 S&P500": (
+        "標普 500",
+        "#00f5d4",
+        2.0,
+        "solid",
+        show_sp500,
+        "lines",
+    ),  # 🟢 亮綠青色
+    "那斯達克 NASDAQ": (
+        "那斯達克",
+        "#e0aaff",
+        2.0,
+        "dash",
+        show_nasdaq,
+        "lines",
+    ),  # 🟣 亮螢光紫 + 虛線
+    "羅素 2000 RUT": (
+        "羅素 2000",
+        "#ff6b6b",
+        1.8,
+        "dashdot",
+        show_rut,
+        "lines",
+    ),  # 🔴 珊瑚紅 + 點劃線
     "日經 225 N225": (
         "日經 225",
         "#00e5ff",
@@ -2688,11 +2743,11 @@ if btn_analyze_stock:
     if capital_mode == "既有持股 (已套牢/持有中)":
       sp_text = (
           "🤖 AI"
-          " 結合最新情報與風護演算法檢析【既有持股套牢解套/停損脫手策略】..."
+          " 結合美股四大指數與情報檢析【既有持股套牢解套/停損脫手策略】..."
       )
     else:
       sp_text = (
-          "🤖 AI 結合最新情報與風護演算法檢析【實戰操盤買賣點/風報比試算】..."
+          "🤖 AI 結合美股四大指數與情報檢析【實戰操盤買賣點/風報比試算】..."
       )
 
     with st.spinner(sp_text):
