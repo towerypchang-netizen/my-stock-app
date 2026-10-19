@@ -2904,6 +2904,10 @@ if btn_analyze_stock:
   if not raw_stock_input or str(raw_stock_input).strip() == "":
     st.warning("請先在左側欄位輸入台股代碼或股名！")
   else:
+      # 💡 強制清除股價與 KD 快取，確保右側報告抓到最新成交價
+    get_realtime_tw_price_info.clear()
+    calculate_kd.clear()
+      
     chip_df = get_stock_chip(stock_id, target_date_str)
     _, kd_info = calculate_kd(stock_id, period_type=period_type)
 
