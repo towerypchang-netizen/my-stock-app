@@ -2254,11 +2254,11 @@ with p_col2:
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
-st.sidebar.markdown("**風控與選股策略機制**")
+st.sidebar.markdown("**風險控管機制**")
 enable_risk_circuit_breaker = st.sidebar.checkbox(
-    "啟用大盤風控熔斷機制",
+    "啟用大盤風險控管熔斷機制",
     value=True,
-    help="勾選時：當大盤或美股重挫時自動暫停多頭選股；取消勾選時：大盤重挫仍強制選股，尋找逆勢強勢股。",
+    help="勾選時：當大盤或美股重挫時暫停預測選股；取消勾選時：大盤重挫仍強制選股，尋找逆勢強勢股。",
 )
 
 if st.sidebar.button(
