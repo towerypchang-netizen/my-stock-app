@@ -1929,15 +1929,6 @@ def ai_single_stock_analysis(
         else real_price
     )
 
-    if bias_20 > 15.0 or bias_60 > 15.0:
-      p_low = round(ma20_val * 0.99, 1)
-      p_high = round(ma20_val * 1.02, 1)
-      overheat_warning_str = (
-          "【風護風控警示 - 高檔過熱】：當前月線正乖離率高達"
-          f" {bias_20:+f}% (> +15%)！追高風險極高，系統已強制將建議買進區間下修至"
-          f" 20MA 月線支撐附近 ({p_low}元 ~ {p_high}元)。"
-      )
-    else:
       p_low = round(real_price * 0.985, 1)
       p_high = round(real_price * 1.005, 1)
       overheat_warning_str = ""
