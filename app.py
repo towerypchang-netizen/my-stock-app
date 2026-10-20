@@ -1929,9 +1929,9 @@ def ai_single_stock_analysis(
         else real_price
     )
 
-      p_low = round(real_price * 0.985, 1)
-      p_high = round(real_price * 1.005, 1)
-      overheat_warning_str = ""
+    p_low = round(real_price * 0.985, 1)
+    p_high = round(real_price * 1.005, 1)
+    overheat_warning_str = ""
 
     p_mid = round((p_low + p_high) / 2, 2)
     target_p = round(real_price * 1.08, 1)
