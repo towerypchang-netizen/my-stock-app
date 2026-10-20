@@ -2254,7 +2254,6 @@ with p_col2:
 min_price = min_price_input if min_price_input is not None else 0
 max_price = max_price_input if max_price_input is not None else 0
 
-st.sidebar.markdown("**風險控管機制**")
 enable_risk_circuit_breaker = st.sidebar.checkbox(
     "啟用大盤風險控管熔斷機制",
     value=True,
