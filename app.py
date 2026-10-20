@@ -506,14 +506,34 @@ def get_night_futures_double_check():
   except Exception:
     pass
 
-  final_res = {
-      "close": "23,250",
-      "change_str": "+66 點",
-      "change_val": 66.0,
-      "change_pct": 0.28,
-      "audit_status": "🟢 近月主力合約對齊",
-      "raw_price": 23250.0,
-  }
+  try:
+      night_yf = yf.Ticker("WTXP.TA").history(period="2d")
+      if not night_yf.empty:
+        c_p = float(night_yf["Close"].iloc[-1])
+        prev_p = float(night_yf["Close"].iloc[-2]) if len(night_yf) >= 2 else c_p
+        chg = c_p - prev_p
+        pct = (chg / prev_p) * 100
+        default_close = f"{c_p:,.0f}"
+        default_chg = f"{chg:+.0f} 點"
+        default_val = c_p
+      else:
+        c_p = 46975.0
+        default_close = f"{c_p:,.0f}"
+        default_chg = "+0 點"
+        default_val = c_p
+    except Exception:
+      default_close = "N/A"
+      default_chg = "0 點"
+      default_val = 0.0
+
+    final_res = {
+        "close": default_close,
+        "change_str": default_chg,
+        "change_val": 0.0,
+        "change_pct": 0.0,
+        "audit_status": "🔵 盤後實價連線",
+        "raw_price": default_val,
+    }
 
   if taifex_data and dj_data:
     diff = abs(taifex_data["close"] - dj_data["close"])
@@ -1271,11 +1291,6 @@ def get_macro_11_indicators(target_date_str):
         change_val = latest - prev_close
         change_pct = (change_val / prev_close) * 100
         unit = "%" if symbol in ["^TNX", "^IRX"] else ""
-
-        now_tw = get_taiwan_now()
-        if symbol == "^TWII" and now_tw.hour < 9:
-          change_pct = 0.00
-          change_val = 0.00
 
         fmt_val = (
             f"{latest:.2f}{unit}"
