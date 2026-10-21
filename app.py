@@ -505,7 +505,6 @@ def get_night_futures_double_check():
                 continue
   except Exception:
     pass
-
   try:
       night_yf = yf.Ticker("WTXP.TA").history(period="2d")
       if not night_yf.empty:
@@ -521,19 +520,19 @@ def get_night_futures_double_check():
         default_close = f"{c_p:,.0f}"
         default_chg = "+0 點"
         default_val = c_p
-    except Exception:
+  except Exception:
       default_close = "N/A"
       default_chg = "0 點"
       default_val = 0.0
-
-    final_res = {
-        "close": default_close,
-        "change_str": default_chg,
-        "change_val": 0.0,
-        "change_pct": 0.0,
-        "audit_status": "🔵 盤後實價連線",
-        "raw_price": default_val,
-    }
+        
+  final_res = {
+      "close": default_close,
+      "change_str": default_chg,
+      "change_val": 0.0,
+      "change_pct": 0.0,
+      "audit_status": "🔵 盤後實價連線",
+      "raw_price": default_val,
+  }
 
   if taifex_data and dj_data:
     diff = abs(taifex_data["close"] - dj_data["close"])
