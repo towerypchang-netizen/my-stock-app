@@ -738,6 +738,7 @@ def get_taiwan_now():
   return datetime.utcnow() + timedelta(hours=8)
 
 
+# 🌟【修改點 1】：預設預測名單改為 5 筆
 if "daily_picks" not in st.session_state:
   st.session_state.daily_picks = pd.DataFrame(
       columns=[
@@ -750,7 +751,7 @@ if "daily_picks" not in st.session_state:
           "波段停利/防護提示",
           "波段期間",
       ],
-      data=[["--%", "---", "---", "---", "---", "---", "---", "---"] for _ in range(3)],
+      data=[["--%", "---", "---", "---", "---", "---", "---", "---"] for _ in range(5)],
   )
 
 if "last_predict_time" not in st.session_state:
@@ -1258,7 +1259,7 @@ MACRO_TICKERS_MAP = {
 
 
 def fetch_tw_yahoo_web_quote(symbol_raw):
-  """直接對台灣 Yahoo 股市發起請求，拿取網頁畫面上的正則定案價/昨收價[cite: 31]"""
+  """直接對台灣 Yahoo 股市發起請求，拿取網頁畫面上的正則定案價/昨收價"""
   symbol_map = {
       "^TWII": "%5ETWII",
       "^N225": "%5EN225",
@@ -1340,7 +1341,7 @@ def get_macro_11_indicators(target_date_str):
 
   for name, symbol in MACRO_TICKERS_MAP.items():
     try:
-      # 優先使用「台灣 Yahoo 股市」網頁 API 爬取[cite: 31]
+      # 優先使用「台灣 Yahoo 股市」網頁 API 爬取
       tw_data = fetch_tw_yahoo_web_quote(symbol)
 
       latest = None
@@ -1792,6 +1793,7 @@ def generate_daily_picks(
       " (CoT) 4 步驟邏輯推理..."
   )
 
+  # 🌟【修改點 2】：提示詞改為要求精選 5 檔
   prompt_select = f"""
     請作為頂級華爾街台股選股操盤手與總經策略長，基準日期：{target_date_str}。
     價格條件：{price_limit_str}。
@@ -1816,7 +1818,7 @@ def generate_daily_picks(
     1. 【籌碼面與避險硬性要求】：請優先挑選『三大法人/投信買超鎖碼』之標的；【嚴禁挑選盤前提示避開之族群】！
     2. 【族群名稱精準化】：『族群』名稱請採用證交所官方標準產業分類，【嚴禁使用非標準標籤】！
 
-    請精選最具備波段攻擊潛力、籌碼集中且多頭型態之標的名單，請回傳 JSON 陣列格式如：
+    請精選 5 檔最具備波段攻擊潛力、籌碼集中且多頭型態之標的名單，請回傳 JSON 陣列格式如：
     [{{"上漲率":"78%","族群":"塑化原料","股名":"台塑","股號":"1301","波段期間":"5-10天"}}]
     不要包含 Markdown 標記或額外贅詞。
     """
@@ -1904,9 +1906,12 @@ def generate_daily_picks(
           item["波段期間"] = "5-10天"
 
       final_results.append(item)
-    if len(final_results) >= 3:
+
+    # 🌟【修改點 3】：收滿 5 檔時跳出
+    if len(final_results) >= 5:
       break
 
+  # 🌟【修改點 4】：擴增備援候選池，並限制補齊至 5 檔
   fallback_candidates = [
       "1301",
       "1303",
@@ -1918,9 +1923,11 @@ def generate_daily_picks(
       "2382",
       "2886",
       "2002",
+      "2454",
+      "2308",
   ]
   for f_id in fallback_candidates:
-    if len(final_results) >= 3:
+    if len(final_results) >= 5:
       break
     if any(res.get("股號") == f_id for res in final_results):
       continue
@@ -1943,7 +1950,8 @@ def generate_daily_picks(
           "波段期間": "5-10天",
       })
 
-  while len(final_results) < 3:
+  # 🌟【修改點 5】：保底機制確保輸出達到 5 檔
+  while len(final_results) < 5:
     p_info = get_realtime_tw_price_info("1301")
     rp = p_info["real_price"] if p_info else 80.0
     pl = round(rp * 0.985, 1)
@@ -2270,8 +2278,9 @@ macro_data = get_macro_11_indicators(target_date_str)
 night_fut_data = get_night_futures_double_check()
 sector_data = get_taiwan_sector_performance(target_date_str)
 
+# 🌟【修改點 6】：側邊欄標題改為前五檔
 st.sidebar.markdown(
-    f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲率最高前三檔"
+    f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲率最高前五檔"
 )
 
 st.sidebar.markdown("**指定產業族群或題材 (選填)**")
@@ -2324,7 +2333,7 @@ enable_risk_circuit_breaker = st.sidebar.checkbox(
 )
 
 if st.sidebar.button(
-    "AI 執行最新情報分析預測上漲機率最高前三檔",
+    "AI 執行最新情報分析預測上漲機率最高前五檔",
     type="primary",
     key="btn_combined_diagnose",
     use_container_width=True,
