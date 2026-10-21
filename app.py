@@ -106,7 +106,7 @@ st.markdown(
     }
 
     /* ---------------------------------------------------------
-       🛡️ 抽屜內部 Metric 強制還原小字體（確保不截斷 ...）
+       🛡️ 抽屜內部 Metric 強制還原小字體（確保不截斷）
        --------------------------------------------------------- */
     [data-testid="stExpander"] [data-testid="stMetricLabel"] p,
     [data-testid="stExpander"] [data-testid="stMetricLabel"] {
@@ -520,7 +520,7 @@ def get_night_futures_double_check():
               try:
                 c_p = parse_val(cols[1])
                 chg_p = parse_val(cols[2]) if len(cols) > 2 else 0.0
-                if 15000 <= c_p <= 35000:
+                if 15000 <= c_p <= 55000:
                   dj_data = {"close": c_p, "change": chg_p, "source": "嘉實/CMoney"}
                   break
               except Exception:
@@ -1367,22 +1367,28 @@ def get_macro_11_indicators(target_date_str):
       change_val = 0.0
       change_pct = 0.0
 
-      if tw_data:
+      if tw_data and tw_data.get("price", 0) > 0:
         latest = tw_data["price"]
         prev_close = tw_data["prev_close"]
         change_val = tw_data["change"]
         change_pct = tw_data["pct"]
-      else:
+
+      # 💡 針對日經 225 等指數的備援與昨收防錯機制[cite: 15, 16]
+      if latest is None or (
+          prev_close and abs(latest - prev_close) < 1e-5 and name == "日經 225 N225"
+      ):
         ticker = yf.Ticker(symbol)
-        data = ticker.history(period="5d").dropna(subset=["Close"])
+        data = ticker.history(period="7d").dropna(subset=["Close"])
         if not data.empty and len(data) >= 2:
           latest = float(data["Close"].iloc[-1])
           prev_close = float(data["Close"].iloc[-2])
           change_val = latest - prev_close
-          change_pct = (change_val / prev_close) * 100
+          change_pct = (
+              (change_val / prev_close) * 100 if prev_close > 0 else 0.0
+          )
 
       if latest is not None and prev_close is not None and prev_close > 0:
-        # 💡 精準呈現 恐慌指數 VIX 為小數點後 4 位 (如 16.7600)
+        # 💡 精準呈現 恐慌指數 VIX 為小數點後 4 位
         if name == "恐慌指數 VIX":
           fmt_val = f"{latest:.4f}"
         else:
@@ -2994,7 +3000,6 @@ if btn_analyze_stock:
   if not raw_stock_input or str(raw_stock_input).strip() == "":
     st.warning("請先在左側欄位輸入台股代碼或股名！")
   else:
-    # 💡 強制點擊時重新抓取 VIX 與價格最新值
     get_macro_11_indicators.clear()
     get_realtime_tw_price_info.clear()
     calculate_kd.clear()
