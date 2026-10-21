@@ -1257,7 +1257,7 @@ MACRO_TICKERS_MAP = {
 }
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def get_macro_11_indicators(target_date_str):
   macro_summary = {}
   night_data = get_night_futures_double_check()
@@ -1272,52 +1272,66 @@ def get_macro_11_indicators(target_date_str):
   for name, symbol in MACRO_TICKERS_MAP.items():
     try:
       ticker = yf.Ticker(symbol)
+      latest = None
+      prev_close = None
 
-      # === 步驟 1: 嘗試抓取即時跳動價 (適用於盤中開盤時間) ===
-      rt_latest = None
-      rt_prev = None
+      # === 策略 1：優先抓取 1 分鐘即時 K 線 (適用於盤中即時報價) ===
       try:
-        fast = ticker.fast_info
-        price = fast.get("last_price") or fast.get("regularMarketPrice")
-        prev = fast.get("previous_close") or fast.get("regularMarketPreviousClose")
-        if price is not None and price > 0:
-          rt_latest = float(price)
-        if prev is not None and prev > 0:
-          rt_prev = float(prev)
+        df_rt = ticker.history(period="1d", interval="1m").dropna(subset=["Close"])
+        if not df_rt.empty and len(df_rt) >= 1:
+          latest = float(df_rt["Close"].iloc[-1])
+          fast = ticker.fast_info
+          prev_close = fast.get("previous_close") or fast.get("regularMarketPreviousClose")
       except Exception:
         pass
 
-      # === 步驟 2: 抓取歷史日 K 線 (作為定案價與備援數據) ===
-      data = ticker.history(period="7d").dropna(subset=["Close"])
+      # === 策略 2：若盤中即時報價失敗或為盤後/清晨，降級使用歷史日 K 線 ===
+      if latest is None or prev_close is None or prev_close <= 0:
+        data = ticker.history(period="7d").dropna(subset=["Close"])
 
-      # 針對美元指數提供備援連線
-      if (data.empty or len(data) < 2) and name == "美元指數 DXY":
-        for fallback_sym in ["DX-Y=F", "DX=F", "UUP"]:
-          try:
-            fb_data = yf.Ticker(fallback_sym).history(period="7d").dropna(subset=["Close"])
-            if not fb_data.empty and len(fb_data) >= 2:
-              mult = 3.6 if fallback_sym == "UUP" else 1.0
-              data = fb_data * mult
-              break
-          except Exception:
-            pass
+        # 針對美元指數備援
+        if (data.empty or len(data) < 2) and name == "美元指數 DXY":
+          for fallback_sym in ["DX-Y=F", "DX=F", "UUP"]:
+            try:
+              fb_data = yf.Ticker(fallback_sym).history(period="7d").dropna(subset=["Close"])
+              if not fb_data.empty and len(fb_data) >= 2:
+                mult = 3.6 if fallback_sym == "UUP" else 1.0
+                data = fb_data * mult
+                break
+            except Exception:
+              pass
 
-      # 清除清晨/未開盤時段 Volume=0 的無效預備列
-      if not data.empty and len(data) >= 2:
-        last_vol = data["Volume"].iloc[-1]
-        if pd.isna(last_vol) or last_vol <= 0:
-          data = data.iloc[:-1]
+        # 剔除清晨/未開盤時段 Volume=0 的無效預備列
+        if not data.empty and len(data) >= 2:
+          last_vol = data["Volume"].iloc[-1]
+          if pd.isna(last_vol) or last_vol <= 0:
+            data = data.iloc[:-1]
 
-      # === 步驟 3: 精準判定最終使用數值 ===
-      if rt_latest is not None and rt_prev is not None and rt_prev > 0:
-        latest = rt_latest
-        prev_close = rt_prev
-      elif not data.empty and len(data) >= 2:
-        latest = float(data["Close"].iloc[-1])
-        prev_close = float(data["Close"].iloc[-2])
-      elif not data.empty:
-        latest = float(data["Close"].iloc[-1])
-        prev_close = latest
+        if not data.empty and len(data) >= 2:
+          latest = float(data["Close"].iloc[-1])
+          prev_close = float(data["Close"].iloc[-2])
+        elif not data.empty:
+          latest = float(data["Close"].iloc[-1])
+          prev_close = latest
+
+      # === 策略 3: 計算並格式化 ===
+      if latest is not None and prev_close is not None and prev_close > 0:
+        change_val = latest - prev_close
+        change_pct = (change_val / prev_close) * 100
+        unit = "%" if symbol in ["^TNX", "^IRX"] else ""
+
+        fmt_val = (
+            f"{latest:.2f}{unit}"
+            if latest < 1000
+            else f"{latest:,.2f}{unit}".replace(".00", "")
+        )
+        macro_summary[name] = {
+            "val": fmt_val,
+            "change": f"{change_pct:+.2f}%",
+            "change_num": change_val,
+            "pct": change_pct,
+            "raw_close": latest,
+        }
       else:
         macro_summary[name] = {
             "val": "N/A",
@@ -1326,25 +1340,6 @@ def get_macro_11_indicators(target_date_str):
             "pct": 0,
             "raw_close": 0,
         }
-        continue
-
-      # === 步驟 4: 計算漲跌點數與百分比 ===
-      change_val = latest - prev_close
-      change_pct = (change_val / prev_close) * 100 if prev_close != 0 else 0.0
-      unit = "%" if symbol in ["^TNX", "^IRX"] else ""
-
-      fmt_val = (
-          f"{latest:.2f}{unit}"
-          if latest < 1000
-          else f"{latest:,.2f}{unit}".replace(".00", "")
-      )
-      macro_summary[name] = {
-          "val": fmt_val,
-          "change": f"{change_pct:+.2f}%",
-          "change_num": change_val,
-          "pct": change_pct,
-          "raw_close": latest,
-      }
     except Exception:
       macro_summary[name] = {
           "val": "N/A",
