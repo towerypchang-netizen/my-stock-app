@@ -1256,39 +1256,39 @@ MACRO_TICKERS_MAP = {
     "美元/台幣 TWD": "TWD=X",
 }
 
-# 台灣 Yahoo 股市對應的官方符號 ID 映射表
-TW_YAHOO_SYMBOL_MAP = {
-    "^TWII": "%5ETWII",
-    "^N225": "%5EN225",
-    "^SOX": "%5ESOX",
-    "^DJI": "%5EDJI",
-    "^GSPC": "%5EGSPC",
-    "^IXIC": "%5EIXIC",
-    "^RUT": "%5ERUT",
-    "^IRX": "%5EIRX",
-    "^TNX": "%5ETNX",
-    "DX-Y.NYB": "DX-Y.NYB",
-    "^VIX": "%5EVIX",
-    "CL=F": "CL%3DF",
-    "GC=F": "GC%3DF",
-    "TWD=X": "TWD%3DX",
-}
 
+def fetch_tw_yahoo_web_quote(symbol_raw):
+  """直接對台灣 Yahoo 股市發起請求，拿取網頁畫面上的正則定案價/昨收價[cite: 31]"""
+  symbol_map = {
+      "^TWII": "%5ETWII",
+      "^N225": "%5EN225",
+      "^SOX": "%5ESOX",
+      "^DJI": "%5EDJI",
+      "^GSPC": "%5EGSPC",
+      "^IXIC": "%5EIXIC",
+      "^RUT": "%5ERUT",
+      "^IRX": "%5EIRX",
+      "^TNX": "%5ETNX",
+      "DX-Y.NYB": "DX-Y.NYB",
+      "^VIX": "%5EVIX",
+      "CL=F": "CL%3DF",
+      "GC=F": "GC%3DF",
+      "TWD=X": "TWD%3DX",
+  }
 
-def fetch_tw_yahoo_stock_api(symbol_encoded):
-  """直連台灣 Yahoo 股市前端官方 JSON API，取得與網頁完全相同的真實定案/盤中報價"""
-  url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}"
+  sym_encoded = symbol_map.get(symbol_raw, symbol_raw)
+  url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={sym_encoded}"
   headers = {
       "User-Agent": (
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
           " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       )
   }
+
   try:
-    resp = requests.get(url, headers=headers, timeout=2.5)
+    resp = requests.get(url, headers=headers, timeout=3)
     if resp.status_code == 200:
-      data = resp.json()
-      quote = data.get("data", {}).get("quote", {})
+      quote = resp.json().get("data", {}).get("quote", {})
       if quote:
         price = (
             quote.get("price")
@@ -1314,6 +1314,7 @@ def fetch_tw_yahoo_stock_api(symbol_encoded):
               if change_pct is not None
               else ((chg_val / prev_val) * 100)
           )
+
           return {
               "price": p_val,
               "prev_close": prev_val,
@@ -1339,50 +1340,26 @@ def get_macro_11_indicators(target_date_str):
 
   for name, symbol in MACRO_TICKERS_MAP.items():
     try:
-      tw_sym = TW_YAHOO_SYMBOL_MAP.get(symbol, symbol)
-      data_api = fetch_tw_yahoo_stock_api(tw_sym)
+      # 優先使用「台灣 Yahoo 股市」網頁 API 爬取[cite: 31]
+      tw_data = fetch_tw_yahoo_web_quote(symbol)
 
       latest = None
       prev_close = None
       change_val = 0.0
       change_pct = 0.0
 
-      if data_api:
-        latest = data_api["price"]
-        prev_close = data_api["prev_close"]
-        change_val = data_api["change"]
-        change_pct = data_api["pct"]
+      if tw_data:
+        latest = tw_data["price"]
+        prev_close = tw_data["prev_close"]
+        change_val = tw_data["change"]
+        change_pct = tw_data["pct"]
       else:
-        # === 備援機制：yfinance ===
+        # 備援：若爬蟲失敗才走 yfinance 邏輯
         ticker = yf.Ticker(symbol)
-        try:
-          df_rt = ticker.history(period="1d", interval="1m").dropna(
-              subset=["Close"]
-          )
-          if not df_rt.empty and len(df_rt) >= 1:
-            latest = float(df_rt["Close"].iloc[-1])
-            fast = ticker.fast_info
-            prev_close = fast.get("previous_close") or fast.get(
-                "regularMarketPreviousClose"
-            )
-        except Exception:
-          pass
-
-        if latest is None or prev_close is None or prev_close <= 0:
-          data = ticker.history(period="7d").dropna(subset=["Close"])
-          if not data.empty and len(data) >= 2:
-            last_vol = data["Volume"].iloc[-1]
-            if pd.isna(last_vol) or last_vol <= 0:
-              data = data.iloc[:-1]
-
-          if not data.empty and len(data) >= 2:
-            latest = float(data["Close"].iloc[-1])
-            prev_close = float(data["Close"].iloc[-2])
-          elif not data.empty:
-            latest = float(data["Close"].iloc[-1])
-            prev_close = latest
-
-        if latest is not None and prev_close is not None and prev_close > 0:
+        data = ticker.history(period="5d").dropna(subset=["Close"])
+        if not data.empty and len(data) >= 2:
+          latest = float(data["Close"].iloc[-1])
+          prev_close = float(data["Close"].iloc[-2])
           change_val = latest - prev_close
           change_pct = (change_val / prev_close) * 100
 
