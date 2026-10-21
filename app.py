@@ -85,49 +85,16 @@ st.markdown(
         color: #52c41a !important;
     }
 
-/* ---------------------------------------------------------
-       🎯 只放大黃框（外部）Metric，藍框（Expander 內部）保持原樣
-       --------------------------------------------------------- */
-    /* 1. 黃框：主看板 4 大數字與文字放大 */
-    div[data-testid="stHorizontalBlock"] > div:not(:has(div[data-testid="stExpander"])) div[data-testid="stMetricValue"] > div,
-    div[data-testid="stHorizontalBlock"] > div:not(:has(div[data-testid="stExpander"])) [data-testid="stMetricValue"] { 
-        font-size: 2.2rem !important;
-        font-weight: 900 !important;
-        line-height: 1.2 !important;
+    [data-testid="stMetricValue"] { 
+        font-size: 1.1rem !important; 
         white-space: nowrap !important;
     }
-
-    div[data-testid="stHorizontalBlock"] > div:not(:has(div[data-testid="stExpander"])) div[data-testid="stMetricLabel"] > div,
-    div[data-testid="stHorizontalBlock"] > div:not(:has(div[data-testid="stExpander"])) [data-testid="stMetricLabel"] { 
-        font-size: 1.25rem !important;
-        font-weight: 800 !important;
-        color: #ffffff !important;
+    [data-testid="stMetricLabel"] { 
+        font-size: 0.8rem !important; 
         white-space: nowrap !important;
     }
-
-    div[data-testid="stHorizontalBlock"] > div:not(:has(div[data-testid="stExpander"])) div[data-testid="stMetricDelta"] > div,
-    div[data-testid="stHorizontalBlock"] > div:not(:has(div[data-testid="stExpander"])) [data-testid="stMetricDelta"] {
-        font-size: 1.15rem !important;
-        font-weight: 800 !important;
-    }
-
-    /* 2. 藍框：下拉抽屜內部的 Metric 強制還原為適中大小，防止點數被截斷 (...) */
-    div[data-testid="stExpander"] [data-testid="stMetricValue"] > div,
-    div[data-testid="stExpander"] [data-testid="stMetricValue"] {
-        font-size: 1.05rem !important;
-        font-weight: 700 !important;
-    }
-
-    div[data-testid="stExpander"] [data-testid="stMetricLabel"] > div,
-    div[data-testid="stExpander"] [data-testid="stMetricLabel"] {
+    [data-testid="stMetricDelta"] {
         font-size: 0.78rem !important;
-        font-weight: 600 !important;
-    }
-
-    div[data-testid="stExpander"] [data-testid="stMetricDelta"] > div,
-    div[data-testid="stExpander"] [data-testid="stMetricDelta"] {
-        font-size: 0.75rem !important;
-        font-weight: 600 !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
