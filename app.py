@@ -1258,7 +1258,7 @@ def get_stock_revenue_data(stock_id):
 
 
 # ==============================================================================
-# 🌐 全球宏觀指標與穩健獨立資料源
+# 🌐 全球宏觀指標與雙源嚴格對齊
 # ==============================================================================
 MACRO_TICKERS_MAP = {
     "台股加權": "^TWII",
@@ -1279,7 +1279,25 @@ MACRO_TICKERS_MAP = {
 
 
 def fetch_twse_official_taiex():
-  """專屬台股加權指數：呼叫證交所 (TWSE) 官方 OpenAPI，防盤後資料歸零錯誤"""
+  """專屬台股加權指數：yfinance 歷史數據雙重備援，徹底修正昨收扣減計算錯誤[cite: 17, 18]"""
+  try:
+    ticker = yf.Ticker("^TWII")
+    data = ticker.history(period="7d").dropna(subset=["Close"])
+    if not data.empty and len(data) >= 2:
+      latest = float(data["Close"].iloc[-1])
+      prev_close = float(data["Close"].iloc[-2])
+      chg_val = latest - prev_close
+      pct_val = (chg_val / prev_close) * 100 if prev_close > 0 else 0.0
+      if latest > 10000:
+        return {
+            "price": latest,
+            "prev_close": prev_close,
+            "change": chg_val,
+            "pct": pct_val,
+        }
+  except Exception:
+    pass
+
   headers = {
       "User-Agent": (
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -1287,38 +1305,43 @@ def fetch_twse_official_taiex():
       )
   }
   try:
-    url = "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX20"
-    resp = requests.get(url, headers=headers, timeout=3)
+    url_fubon = "https://fubon-ebrokerdj.fbs.com.tw/z/zg/zg_E.djhtm"
+    resp = requests.get(url_fubon, headers=headers, timeout=3)
     if resp.status_code == 200:
-      data = resp.json()
-      if data and len(data) > 0:
-        for item in data:
-          name = item.get("Name", "")
-          if "發行量加權股價指數" in name or "加權指數" in name:
-            p_str = item.get("Index", "0").replace(",", "")
-            chg_str = item.get("Change", "0").replace(",", "")
-            sign = item.get("Sign", "")
-            p_val = float(p_str)
-            chg_val = float(chg_str)
-            if "-" in sign or "▼" in sign:
-              chg_val = -abs(chg_val)
-            else:
-              chg_val = abs(chg_val)
-            prev_val = p_val - chg_val
-            pct_val = (chg_val / prev_val) * 100 if prev_val > 0 else 0.0
-            return {
-                "price": p_val,
-                "prev_close": prev_val,
-                "change": chg_val,
-                "pct": pct_val,
-            }
+      resp.encoding = "big5"
+      soup = BeautifulSoup(resp.text, "html.parser")
+      table = soup.find("table", class_="t01")
+      if table:
+        for r in table.find_all("tr"):
+          if "加權" in r.text or "台股" in r.text:
+            cols = [td.text.strip() for td in r.find_all("td")]
+            if len(cols) >= 3:
+              p_val = float(cols[1].replace(",", ""))
+              chg_raw = (
+                  cols[2]
+                  .replace(",", "")
+                  .replace("+", "")
+                  .replace("▲", "")
+                  .replace("▼", "-")
+              )
+              chg_val = float(chg_raw)
+              prev_close = p_val - chg_val
+              pct_val = (chg_val / prev_close) * 100 if prev_close > 0 else 0.0
+              if p_val > 10000:
+                return {
+                    "price": p_val,
+                    "prev_close": prev_close,
+                    "change": chg_val,
+                    "pct": pct_val,
+                }
   except Exception:
     pass
+
   return None
 
 
 def fetch_nikkei225_realtime():
-  """專屬日經 225：解析嘉實/富邦全球指數 API，徹底避免盤後 API 抓到昨收"""
+  """專屬日經 225：解析嘉實/富邦全球指數 API，徹底避免盤後 API 抓到昨收[cite: 17, 18]"""
   headers = {
       "User-Agent": (
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -1326,7 +1349,6 @@ def fetch_nikkei225_realtime():
       )
   }
 
-  # 1. 第一備援：嘉實/富邦全球指數實時 API
   try:
     url_fubon = "https://fubon-ebrokerdj.fbs.com.tw/z/zg/zg_E.djhtm"
     resp = requests.get(url_fubon, headers=headers, timeout=3)
@@ -1360,7 +1382,6 @@ def fetch_nikkei225_realtime():
   except Exception:
     pass
 
-  # 2. 第二備援：yfinance 歷史紀錄歷史收盤點補位
   try:
     ticker = yf.Ticker("^N225")
     data = ticker.history(period="7d").dropna(subset=["Close"])
@@ -1465,7 +1486,7 @@ def get_macro_11_indicators(target_date_str):
     try:
       tw_data = None
 
-      # 💡 特化校驗：台股加權採用證交所官方 OpenAPI，日經 225 採用嘉實 API[cite: 18]
+      # 💡 特化校驗：台股加權採用完整歷史，日經 225 採用嘉實/富邦 API[cite: 17, 18]
       if name == "台股加權":
         tw_data = fetch_twse_official_taiex()
       elif name == "日經 225 N225":
@@ -2375,7 +2396,7 @@ def ai_single_stock_analysis(
       " 判斷：多頭格局 (20MA > 55MA > 200MA) 或空頭/修正格局 (200MA > 55MA >"
       " 20MA)。\n6. 各項進階技術性指標綜合圖表解說：\n   - 布林通道 (Bollinger"
       " Bands)：解讀通道口「擴張」 (強勢攻擊) 與「緊縮/擠壓」 (變盤前兆)"
-      " 之實戰意義與上/中/下軌型態。\n   - KD 指爆 & RSI(14)：解析高低檔交叉、高檔鈍化、超買超賣與背離訊號之延伸含意。\n   - MACD"
+      " 之實戰意義與上/中/下軌型態。\n   - KD 指標 & RSI(14)：解析高低檔交叉、高檔鈍化、超買超賣與背離訊號之延伸含意。\n   - MACD"
       " 動能柱與軌道變化：解析 DIF/MACD"
       " 零軸穿梭、雙線軌道變化與柱狀體縮放所代表的多空控盤力道。\n"
       + master_single_instruction
