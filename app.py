@@ -85,19 +85,30 @@ st.markdown(
         color: #52c41a !important;
     }
 
+    div[data-testid="stMetricValue"] > div,
+    div[data-testid="stMetricValue"] span,
     [data-testid="stMetricValue"] { 
-        font-size: 1.85rem !important;
-        font-weight: 800 !important;
+        font-size: 2.2rem !important;
+        font-weight: 900 !important;
+        line-height: 1.2 !important;
         white-space: nowrap !important;
     }
+
+    div[data-testid="stMetricLabel"] > div,
+    div[data-testid="stMetricLabel"] label,
+    div[data-testid="stMetricLabel"] p,
     [data-testid="stMetricLabel"] { 
-        font-size: 1.15rem !important;
-        font-weight: 700 !important;
+        font-size: 1.25rem !important;
+        font-weight: 800 !important;
+        color: #ffffff !important;
         white-space: nowrap !important;
     }
+
+    div[data-testid="stMetricDelta"] > div,
+    div[data-testid="stMetricDelta"] span,
     [data-testid="stMetricDelta"] {
-        font-size: 1.05rem !important;
-        font-weight: 700 !important;
+        font-size: 1.15rem !important;
+        font-weight: 800 !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
