@@ -1371,12 +1371,17 @@ def get_macro_11_indicators(target_date_str):
           change_pct = (change_val / prev_close) * 100
 
       if latest is not None and prev_close is not None and prev_close > 0:
-        unit = "%" if symbol in ["^TNX", "^IRX"] else ""
-        fmt_val = (
-            f"{latest:.2f}{unit}"
-            if latest < 1000
-            else f"{latest:,.2f}{unit}".replace(".00", "")
-        )
+        # 💡 單獨針對 恐慌指數 VIX 顯示小數點後 4 位
+        if name == "恐慌指數 VIX":
+          fmt_val = f"{latest:.4f}"
+        else:
+          unit = "%" if symbol in ["^TNX", "^IRX"] else ""
+          fmt_val = (
+              f"{latest:.2f}{unit}"
+              if latest < 1000
+              else f"{latest:,.2f}{unit}".replace(".00", "")
+          )
+
         macro_summary[name] = {
             "val": fmt_val,
             "change": f"{change_pct:+.2f}%",
