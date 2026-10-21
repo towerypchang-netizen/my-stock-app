@@ -86,15 +86,18 @@ st.markdown(
     }
 
     [data-testid="stMetricValue"] { 
-        font-size: 1.1rem !important; 
+        font-size: 1.45rem !important;
+        font-weight: 700 !important;
         white-space: nowrap !important;
     }
     [data-testid="stMetricLabel"] { 
-        font-size: 0.8rem !important; 
+        font-size: 0.95rem !important;
+        font-weight: 600 !important;
         white-space: nowrap !important;
     }
     [data-testid="stMetricDelta"] {
-        font-size: 0.78rem !important;
+        font-size: 0.88rem !important;
+        font-weight: 600 !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
