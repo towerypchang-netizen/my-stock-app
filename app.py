@@ -85,34 +85,24 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    /* 1. 頂部四大指標放大 */
-    div.block-container > div > div > div > div > div > div[data-testid="stMetricLabel"] p {
+    /* ---------------------------------------------------------
+       🎯 專屬頂部黃框四大指標放大（完全隔離，不干擾抽屜其他任何元件）
+       --------------------------------------------------------- */
+    .top-macro-card [data-testid="stMetricLabel"] p,
+    .top-macro-card [data-testid="stMetricLabel"] {
         font-size: 1.05rem !important;
         font-weight: 700 !important;
     }
-    div.block-container > div > div > div > div > div > div[data-testid="stMetricValue"] > div {
+
+    .top-macro-card [data-testid="stMetricValue"] > div,
+    .top-macro-card [data-testid="stMetricValue"] {
         font-size: 1.55rem !important;
         font-weight: 800 !important;
     }
-    div.block-container > div > div > div > div > div > div[data-testid="stMetricDelta"] {
+
+    .top-macro-card [data-testid="stMetricDelta"] {
         font-size: 0.9rem !important;
         font-weight: 600 !important;
-    }
-
-    /* 2. 強制還原抽屜內部字體大小，防止數字被截斷 (...) */
-    [data-testid="stExpander"] [data-testid="stMetricLabel"] p,
-    [data-testid="stExpander"] [data-testid="stMetricLabel"] {
-        font-size: 0.8rem !important;
-        font-weight: 500 !important;
-    }
-    [data-testid="stExpander"] [data-testid="stMetricValue"] > div,
-    [data-testid="stExpander"] [data-testid="stMetricValue"] {
-        font-size: 1.0rem !important;
-        font-weight: 600 !important;
-    }
-    [data-testid="stExpander"] [data-testid="stMetricDelta"] {
-        font-size: 0.75rem !important;
-        font-weight: 500 !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
@@ -756,7 +746,7 @@ def get_taiwan_now():
   return datetime.utcnow() + timedelta(hours=8)
 
 
-# 🌟【修改點 1】：預設預測名單改為 5 筆
+# 預設預測名單維持 5 筆
 if "daily_picks" not in st.session_state:
   st.session_state.daily_picks = pd.DataFrame(
       columns=[
@@ -934,7 +924,7 @@ def get_hot_stocks_24h_news_pack():
       "2881",
   ]
   news_pack = []
-  for s_id in hot_candidates[:6]:  # 精選 6 檔核心標的進行新聞掃描
+  for s_id in hot_candidates[:6]:
     tw_name = STOCK_ID_TO_NAME.get(s_id, s_id)
     n_titles = get_stock_news(s_id)
     if n_titles and n_titles != "無重大新聞":
@@ -1359,7 +1349,6 @@ def get_macro_11_indicators(target_date_str):
 
   for name, symbol in MACRO_TICKERS_MAP.items():
     try:
-      # 優先使用「台灣 Yahoo 股市」網頁 API 爬取
       tw_data = fetch_tw_yahoo_web_quote(symbol)
 
       latest = None
@@ -1373,7 +1362,6 @@ def get_macro_11_indicators(target_date_str):
         change_val = tw_data["change"]
         change_pct = tw_data["pct"]
       else:
-        # 備援：若爬蟲失敗才走 yfinance 邏輯
         ticker = yf.Ticker(symbol)
         data = ticker.history(period="5d").dropna(subset=["Close"])
         if not data.empty and len(data) >= 2:
@@ -1418,7 +1406,6 @@ def get_macro_11_indicators(target_date_str):
 
 @st.cache_data(ttl=600)
 def get_macro_history_trends_normalized(days=30):
-  """抓取全球總經與美股四大指數歷史數據 (進行正規化相對比較)"""
   res_dict = {}
 
   ticker_history_map = {
@@ -1464,7 +1451,6 @@ def get_macro_history_trends_normalized(days=30):
 
   combined = pd.DataFrame(res_dict).tail(days)
 
-  # 計算相對累積漲跌幅 (%)
   norm_df = pd.DataFrame(index=combined.index)
   for col in combined.columns:
     valid_series = combined[col].dropna()
@@ -1811,7 +1797,6 @@ def generate_daily_picks(
       " (CoT) 4 步驟邏輯推理..."
   )
 
-  # 🌟【修改點 2】：提示詞改為要求精選 5 檔
   prompt_select = f"""
     請作為頂級華爾街台股選股操盤手與總經策略長，基準日期：{target_date_str}。
     價格條件：{price_limit_str}。
@@ -1925,11 +1910,10 @@ def generate_daily_picks(
 
       final_results.append(item)
 
-    # 🌟【修改點 3】：收滿 5 檔時跳出
     if len(final_results) >= 5:
       break
 
-  # 🌟【修改點 4】：擴增備援候選池，並限制補齊至 5 檔
+  # 第一階段備援名單，補齊至 5 檔
   fallback_candidates = [
       "1301",
       "1303",
@@ -1968,7 +1952,7 @@ def generate_daily_picks(
           "波段期間": "5-10天",
       })
 
-  # 🌟【修改點 5】：保底機制確保輸出達到 5 檔
+  # 第二階段保底機制，強制補齊至 5 檔
   while len(final_results) < 5:
     p_info = get_realtime_tw_price_info("1301")
     rp = p_info["real_price"] if p_info else 80.0
@@ -2296,7 +2280,6 @@ macro_data = get_macro_11_indicators(target_date_str)
 night_fut_data = get_night_futures_double_check()
 sector_data = get_taiwan_sector_performance(target_date_str)
 
-# 🌟【修改點 6】：側邊欄標題改為前五檔
 st.sidebar.markdown(
     f"### 🎯 今日 [{st.session_state.last_predict_time}] AI 預估上漲率最高前五檔"
 )
@@ -2442,11 +2425,11 @@ else:
   capital_placeholder = "例如: 100000 (總預算)"
 
 capital_input = st.sidebar.number_input(
-    capital_label,
-    min_value=0,
-    value=None,
-    placeholder=capital_placeholder,
-    step=100,
+  capital_label,
+  min_value=0,
+  value=None,
+  placeholder=capital_placeholder,
+  step=100,
 )
 price_or_capital = capital_input if capital_input is not None else 0
 
@@ -2462,6 +2445,8 @@ st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance"
 )
 
+# 💡【頂部四大指標：使用獨立 top-macro-card class 包覆隔離】
+st.markdown('<div class="top-macro-card">', unsafe_allow_html=True)
 card_cols = st.columns(4)
 
 with card_cols[0]:
@@ -2472,6 +2457,39 @@ with card_cols[0]:
       delta=item_taiex.get("change", "0.00%"),
       delta_color="inverse",
   )
+
+with card_cols[1]:
+  item_sox = macro_data.get("費城半導體 SOX", {})
+  st.metric(
+      label="費城半導體",
+      value=item_sox.get("val", "N/A"),
+      delta=item_sox.get("change", "0.00%"),
+      delta_color="inverse",
+  )
+
+with card_cols[2]:
+  item_10y = macro_data.get("美債 10Y 殖利率", {})
+  st.metric(
+      label="美債 10Y",
+      value=item_10y.get("val", "N/A"),
+      delta=item_10y.get("change", "0.00%"),
+      delta_color="inverse",
+  )
+
+with card_cols[3]:
+  item_vix = macro_data.get("恐慌指數 VIX", {})
+  st.metric(
+      label="恐慌 VIX",
+      value=item_vix.get("val", "N/A"),
+      delta=item_vix.get("change", "0.00%"),
+      delta_color="inverse",
+  )
+st.markdown("</div>", unsafe_allow_html=True)  # 閉合隔離區塊
+
+# 💡【下方抽屜區：放在 top-macro-card 外部，字體 100% 不受放大影響】
+expander_cols = st.columns(4)
+
+with expander_cols[0]:
   with st.expander("🌏 亞太大盤指數"):
     col_a1, col_a2 = st.columns(2)
     with col_a1:
@@ -2491,14 +2509,7 @@ with card_cols[0]:
           delta_color="inverse",
       )
 
-with card_cols[1]:
-  item_sox = macro_data.get("費城半導體 SOX", {})
-  st.metric(
-      label="費城半導體",
-      value=item_sox.get("val", "N/A"),
-      delta=item_sox.get("change", "0.00%"),
-      delta_color="inverse",
-  )
+with expander_cols[1]:
   with st.expander("🇺🇸 美股四大指數"):
     col_u1, col_u2 = st.columns(2)
     with col_u1:
@@ -2532,14 +2543,7 @@ with card_cols[1]:
           delta_color="inverse",
       )
 
-with card_cols[2]:
-  item_10y = macro_data.get("美債 10Y 殖利率", {})
-  st.metric(
-      label="美債 10Y",
-      value=item_10y.get("val", "N/A"),
-      delta=item_10y.get("change", "0.00%"),
-      delta_color="inverse",
-  )
+with expander_cols[2]:
   with st.expander("🏦 國際美元利率"):
     col_r1, col_r2 = st.columns(2)
     with col_r1:
@@ -2559,14 +2563,7 @@ with card_cols[2]:
           delta_color="inverse",
       )
 
-with card_cols[3]:
-  item_vix = macro_data.get("恐慌指數 VIX", {})
-  st.metric(
-      label="恐慌 VIX",
-      value=item_vix.get("val", "N/A"),
-      delta=item_vix.get("change", "0.00%"),
-      delta_color="inverse",
-  )
+with expander_cols[3]:
   with st.expander("🛡️ 避險商品指標"):
     col_h1, col_h2 = st.columns(2)
     with col_h1:
@@ -2985,7 +2982,6 @@ if btn_analyze_stock:
   if not raw_stock_input or str(raw_stock_input).strip() == "":
     st.warning("請先在左側欄位輸入台股代碼或股名！")
   else:
-    # 💡 強制清除股價與 KD 快取，確保右側報告抓到最新成交價
     get_realtime_tw_price_info.clear()
     calculate_kd.clear()
 
