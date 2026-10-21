@@ -505,26 +505,27 @@ def get_night_futures_double_check():
                 continue
   except Exception:
     pass
+
   try:
-      night_yf = yf.Ticker("WTXP.TA").history(period="2d")
-      if not night_yf.empty:
-        c_p = float(night_yf["Close"].iloc[-1])
-        prev_p = float(night_yf["Close"].iloc[-2]) if len(night_yf) >= 2 else c_p
-        chg = c_p - prev_p
-        pct = (chg / prev_p) * 100
-        default_close = f"{c_p:,.0f}"
-        default_chg = f"{chg:+.0f} 點"
-        default_val = c_p
-      else:
-        c_p = 46975.0
-        default_close = f"{c_p:,.0f}"
-        default_chg = "+0 點"
-        default_val = c_p
+    night_yf = yf.Ticker("WTXP.TA").history(period="2d")
+    if not night_yf.empty:
+      c_p = float(night_yf["Close"].iloc[-1])
+      prev_p = float(night_yf["Close"].iloc[-2]) if len(night_yf) >= 2 else c_p
+      chg = c_p - prev_p
+      pct = (chg / prev_p) * 100
+      default_close = f"{c_p:,.0f}"
+      default_chg = f"{chg:+.0f} 點"
+      default_val = c_p
+    else:
+      c_p = 46975.0
+      default_close = f"{c_p:,.0f}"
+      default_chg = "+0 點"
+      default_val = c_p
   except Exception:
-      default_close = "N/A"
-      default_chg = "0 點"
-      default_val = 0.0
-        
+    default_close = "N/A"
+    default_chg = "0 點"
+    default_val = 0.0
+
   final_res = {
       "close": default_close,
       "change_str": default_chg,
@@ -1271,20 +1272,29 @@ def get_macro_11_indicators(target_date_str):
   for name, symbol in MACRO_TICKERS_MAP.items():
     try:
       ticker = yf.Ticker(symbol)
-      data = ticker.history(period="10d").dropna(subset=["Close"])
 
-      # 特別校正：若台股/日經清晨抓到未開盤的空資料，只要 Volume <= 0 或開高低收均相等就自動剔除
-      if symbol in ["^TWII", "^N225"] and not data.empty and len(data) >= 2:
-        last_vol = data["Volume"].iloc[-1]
-        is_zero_vol = pd.isna(last_vol) or last_vol <= 0
-        is_flat = data["High"].iloc[-1] == data["Low"].iloc[-1]
-        if is_zero_vol or is_flat:
-          data = data.iloc[:-1]
+      # === 步驟 1: 嘗試抓取即時跳動價 (適用於盤中開盤時間) ===
+      rt_latest = None
+      rt_prev = None
+      try:
+        fast = ticker.fast_info
+        price = fast.get("last_price") or fast.get("regularMarketPrice")
+        prev = fast.get("previous_close") or fast.get("regularMarketPreviousClose")
+        if price is not None and price > 0:
+          rt_latest = float(price)
+        if prev is not None and prev > 0:
+          rt_prev = float(prev)
+      except Exception:
+        pass
 
+      # === 步驟 2: 抓取歷史日 K 線 (作為定案價與備援數據) ===
+      data = ticker.history(period="7d").dropna(subset=["Close"])
+
+      # 針對美元指數提供備援連線
       if (data.empty or len(data) < 2) and name == "美元指數 DXY":
         for fallback_sym in ["DX-Y=F", "DX=F", "UUP"]:
           try:
-            fb_data = yf.Ticker(fallback_sym).history(period="10d").dropna(subset=["Close"])
+            fb_data = yf.Ticker(fallback_sym).history(period="7d").dropna(subset=["Close"])
             if not fb_data.empty and len(fb_data) >= 2:
               mult = 3.6 if fallback_sym == "UUP" else 1.0
               data = fb_data * mult
@@ -1292,26 +1302,22 @@ def get_macro_11_indicators(target_date_str):
           except Exception:
             pass
 
+      # 清除清晨/未開盤時段 Volume=0 的無效預備列
       if not data.empty and len(data) >= 2:
+        last_vol = data["Volume"].iloc[-1]
+        if pd.isna(last_vol) or last_vol <= 0:
+          data = data.iloc[:-1]
+
+      # === 步驟 3: 精準判定最終使用數值 ===
+      if rt_latest is not None and rt_prev is not None and rt_prev > 0:
+        latest = rt_latest
+        prev_close = rt_prev
+      elif not data.empty and len(data) >= 2:
         latest = float(data["Close"].iloc[-1])
         prev_close = float(data["Close"].iloc[-2])
-
-        change_val = latest - prev_close
-        change_pct = (change_val / prev_close) * 100
-        unit = "%" if symbol in ["^TNX", "^IRX"] else ""
-
-        fmt_val = (
-            f"{latest:.2f}{unit}"
-            if latest < 1000
-            else f"{latest:,.2f}{unit}".replace(".00", "")
-        )
-        macro_summary[name] = {
-            "val": fmt_val,
-            "change": f"{change_pct:+.2f}%",
-            "change_num": change_val,
-            "pct": change_pct,
-            "raw_close": latest,
-        }
+      elif not data.empty:
+        latest = float(data["Close"].iloc[-1])
+        prev_close = latest
       else:
         macro_summary[name] = {
             "val": "N/A",
@@ -1320,6 +1326,25 @@ def get_macro_11_indicators(target_date_str):
             "pct": 0,
             "raw_close": 0,
         }
+        continue
+
+      # === 步驟 4: 計算漲跌點數與百分比 ===
+      change_val = latest - prev_close
+      change_pct = (change_val / prev_close) * 100 if prev_close != 0 else 0.0
+      unit = "%" if symbol in ["^TNX", "^IRX"] else ""
+
+      fmt_val = (
+          f"{latest:.2f}{unit}"
+          if latest < 1000
+          else f"{latest:,.2f}{unit}".replace(".00", "")
+      )
+      macro_summary[name] = {
+          "val": fmt_val,
+          "change": f"{change_pct:+.2f}%",
+          "change_num": change_val,
+          "pct": change_pct,
+          "raw_close": latest,
+      }
     except Exception:
       macro_summary[name] = {
           "val": "N/A",
@@ -2918,7 +2943,7 @@ if btn_analyze_stock:
   if not raw_stock_input or str(raw_stock_input).strip() == "":
     st.warning("請先在左側欄位輸入台股代碼或股名！")
   else:
-      # 💡 強制清除股價與 KD 快取，確保右側報告抓到最新成交價
+    # 💡 強制清除股價與 KD 快取，確保右側報告抓到最新成交價
     get_realtime_tw_price_info.clear()
     calculate_kd.clear()
       
