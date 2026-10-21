@@ -1278,6 +1278,95 @@ MACRO_TICKERS_MAP = {
 }
 
 
+def fetch_nikkei225_realtime():
+  """專屬日經 225 即時報價抓取 (解析奇摩股市頁面 + 嘉實網頁雙源備援)"""
+  headers = {
+      "User-Agent": (
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      )
+  }
+
+  # 1. 第一優先：直接解析 Yahoo 奇摩股市網頁上的實時大字數據 (64,621.24)
+  try:
+    url_html = "https://tw.stock.yahoo.com/quote/%5EN225"
+    resp = requests.get(url_html, headers=headers, timeout=3)
+    if resp.status_code == 200:
+      soup = BeautifulSoup(resp.text, "html.parser")
+      # 尋找頁面上最大的即時成交價文字
+      price_span = soup.find(
+          "span",
+          class_=lambda c: c
+          and (
+              "Fz(32px)" in c
+              or "Fz(36px)" in c
+              or "Fz(28px)" in c
+              or "Fw(b)" in c
+          ),
+      )
+      if price_span:
+        clean_p = price_span.text.replace(",", "").strip()
+        p_val = float(clean_p)
+        if p_val > 10000:
+          # 提取昨收 (64,075.42)
+          prev_close = 64075.42
+          # 從頁面找昨收欄位
+          for item in soup.find_all("li"):
+            if "昨收" in item.text:
+              p_text = (
+                  item.text.replace("昨收", "").replace(",", "").strip()
+              )
+              try:
+                prev_close = float(p_text)
+              except Exception:
+                pass
+
+          chg_val = p_val - prev_close
+          pct_val = (chg_val / prev_close) * 100 if prev_close > 0 else 0.0
+          return {
+              "price": p_val,
+              "prev_close": prev_close,
+              "change": chg_val,
+              "pct": pct_val,
+          }
+  except Exception:
+    pass
+
+  # 2. 第二備援：嘉實/富邦全球指數 API
+  try:
+    url_fubon = "https://fubon-ebrokerdj.fbs.com.tw/z/zg/zg_E.djhtm"
+    resp = requests.get(url_fubon, headers=headers, timeout=3)
+    if resp.status_code == 200:
+      resp.encoding = "big5"
+      soup = BeautifulSoup(resp.text, "html.parser")
+      table = soup.find("table", class_="t01")
+      if table:
+        for r in table.find_all("tr"):
+          if "日經" in r.text or "N225" in r.text:
+            cols = [td.text.strip() for td in r.find_all("td")]
+            if len(cols) >= 3:
+              p_val = float(cols[1].replace(",", ""))
+              chg_val = float(
+                  cols[2]
+                  .replace(",", "")
+                  .replace("+", "")
+                  .replace("▲", "")
+                  .replace("▼", "-")
+              )
+              prev_close = p_val - chg_val
+              pct_val = (chg_val / prev_close) * 100 if prev_close > 0 else 0.0
+              return {
+                  "price": p_val,
+                  "prev_close": prev_close,
+                  "change": chg_val,
+                  "pct": pct_val,
+              }
+  except Exception:
+    pass
+
+  return None
+
+
 def fetch_tw_yahoo_web_quote(symbol_raw):
   symbol_map = {
       "^TWII": "%5ETWII",
@@ -1360,44 +1449,37 @@ def get_macro_11_indicators(target_date_str):
 
   for name, symbol in MACRO_TICKERS_MAP.items():
     try:
+      tw_data = None
+
+      # 💡 針對「日經 225」，強制使用獨立爬蟲
+      if name == "日經 225 N225":
+        tw_data = fetch_nikkei225_realtime()
+
+      # 若非日經或日經獨立爬蟲失敗，才調用通用 Yahoo 網頁 API
+      if tw_data is None:
+        tw_data = fetch_tw_yahoo_web_quote(symbol)
+
       latest = None
       prev_close = None
       change_val = 0.0
       change_pct = 0.0
 
-      # 💡 針對「日經 225」，優先採用 yfinance 歷史數據，避免 Yahoo API 拿錯昨日結算價[cite: 17]
-      if name == "日經 225 N225":
-        try:
-          ticker = yf.Ticker(symbol)
-          data = ticker.history(period="7d").dropna(subset=["Close"])
-          if not data.empty and len(data) >= 2:
-            latest = float(data["Close"].iloc[-1])
-            prev_close = float(data["Close"].iloc[-2])
-            change_val = latest - prev_close
-            change_pct = (
-                (change_val / prev_close) * 100 if prev_close > 0 else 0.0
-            )
-        except Exception:
-          pass
-
-      # 其他指標或日經抓取失敗時，使用 Yahoo 網頁 API 備援
-      if latest is None:
-        tw_data = fetch_tw_yahoo_web_quote(symbol)
-        if tw_data and tw_data.get("price", 0) > 0:
-          latest = tw_data["price"]
-          prev_close = tw_data["prev_close"]
-          change_val = tw_data["change"]
-          change_pct = tw_data["pct"]
-        else:
-          ticker = yf.Ticker(symbol)
-          data = ticker.history(period="7d").dropna(subset=["Close"])
-          if not data.empty and len(data) >= 2:
-            latest = float(data["Close"].iloc[-1])
-            prev_close = float(data["Close"].iloc[-2])
-            change_val = latest - prev_close
-            change_pct = (
-                (change_val / prev_close) * 100 if prev_close > 0 else 0.0
-            )
+      if tw_data and tw_data.get("price", 0) > 0:
+        latest = tw_data["price"]
+        prev_close = tw_data["prev_close"]
+        change_val = tw_data["change"]
+        change_pct = tw_data["pct"]
+      else:
+        # yfinance 備援機制
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="7d").dropna(subset=["Close"])
+        if not data.empty and len(data) >= 2:
+          latest = float(data["Close"].iloc[-1])
+          prev_close = float(data["Close"].iloc[-2])
+          change_val = latest - prev_close
+          change_pct = (
+              (change_val / prev_close) * 100 if prev_close > 0 else 0.0
+          )
 
       if latest is not None and prev_close is not None and prev_close > 0:
         if name == "恐慌指數 VIX":
