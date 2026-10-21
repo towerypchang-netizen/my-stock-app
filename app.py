@@ -1360,35 +1360,46 @@ def get_macro_11_indicators(target_date_str):
 
   for name, symbol in MACRO_TICKERS_MAP.items():
     try:
-      tw_data = fetch_tw_yahoo_web_quote(symbol)
-
       latest = None
       prev_close = None
       change_val = 0.0
       change_pct = 0.0
 
-      if tw_data and tw_data.get("price", 0) > 0:
-        latest = tw_data["price"]
-        prev_close = tw_data["prev_close"]
-        change_val = tw_data["change"]
-        change_pct = tw_data["pct"]
+      # 💡 針對「日經 225」，優先採用 yfinance 歷史數據，避免 Yahoo API 拿錯昨日結算價[cite: 17]
+      if name == "日經 225 N225":
+        try:
+          ticker = yf.Ticker(symbol)
+          data = ticker.history(period="7d").dropna(subset=["Close"])
+          if not data.empty and len(data) >= 2:
+            latest = float(data["Close"].iloc[-1])
+            prev_close = float(data["Close"].iloc[-2])
+            change_val = latest - prev_close
+            change_pct = (
+                (change_val / prev_close) * 100 if prev_close > 0 else 0.0
+            )
+        except Exception:
+          pass
 
-      # 💡 針對日經 225 等指數的備援與昨收防錯機制[cite: 15, 16]
-      if latest is None or (
-          prev_close and abs(latest - prev_close) < 1e-5 and name == "日經 225 N225"
-      ):
-        ticker = yf.Ticker(symbol)
-        data = ticker.history(period="7d").dropna(subset=["Close"])
-        if not data.empty and len(data) >= 2:
-          latest = float(data["Close"].iloc[-1])
-          prev_close = float(data["Close"].iloc[-2])
-          change_val = latest - prev_close
-          change_pct = (
-              (change_val / prev_close) * 100 if prev_close > 0 else 0.0
-          )
+      # 其他指標或日經抓取失敗時，使用 Yahoo 網頁 API 備援
+      if latest is None:
+        tw_data = fetch_tw_yahoo_web_quote(symbol)
+        if tw_data and tw_data.get("price", 0) > 0:
+          latest = tw_data["price"]
+          prev_close = tw_data["prev_close"]
+          change_val = tw_data["change"]
+          change_pct = tw_data["pct"]
+        else:
+          ticker = yf.Ticker(symbol)
+          data = ticker.history(period="7d").dropna(subset=["Close"])
+          if not data.empty and len(data) >= 2:
+            latest = float(data["Close"].iloc[-1])
+            prev_close = float(data["Close"].iloc[-2])
+            change_val = latest - prev_close
+            change_pct = (
+                (change_val / prev_close) * 100 if prev_close > 0 else 0.0
+            )
 
       if latest is not None and prev_close is not None and prev_close > 0:
-        # 💡 精準呈現 恐慌指數 VIX 為小數點後 4 位
         if name == "恐慌指數 VIX":
           fmt_val = f"{latest:.4f}"
         else:
