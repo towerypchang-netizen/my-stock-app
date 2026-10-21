@@ -1273,13 +1273,12 @@ def get_macro_11_indicators(target_date_str):
       ticker = yf.Ticker(symbol)
       data = ticker.history(period="10d").dropna(subset=["Close"])
 
-      # 特別校正：若台股/日經清晨抓取到未定案的當天空數據或昨收點，自動精準滑移至最新已收盤定案實價
+      # 特別校正：若台股/日經清晨抓到未開盤的空資料，只要 Volume <= 0 或開高低收均相等就自動剔除
       if symbol in ["^TWII", "^N225"] and not data.empty and len(data) >= 2:
-        # 若最新一筆的 High 與 Low 相等且 Volume 為 0（代表當天尚未開盤或無交易），則移除該筆無效點
-        if (
-          data["High"].iloc[-1] == data["Low"].iloc[-1]
-          and data["Volume"].iloc[-1] == 0
-        ):
+        last_vol = data["Volume"].iloc[-1]
+        is_zero_vol = pd.isna(last_vol) or last_vol <= 0
+        is_flat = data["High"].iloc[-1] == data["Low"].iloc[-1]
+        if is_zero_vol or is_flat:
           data = data.iloc[:-1]
 
       if (data.empty or len(data) < 2) and name == "美元指數 DXY":
