@@ -85,16 +85,19 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    [data-testid="stMetricValue"] { 
-        font-size: 1.1rem !important; 
-        white-space: nowrap !important;
+    div.block-container > div > div > div > div > div > div[data-testid="stMetricLabel"] p {
+        font-size: 1.05rem !important;
+        font-weight: 700 !important;
     }
-    [data-testid="stMetricLabel"] { 
-        font-size: 0.8rem !important; 
-        white-space: nowrap !important;
+
+    div.block-container > div > div > div > div > div > div[data-testid="stMetricValue"] > div {
+        font-size: 1.55rem !important;
+        font-weight: 800 !important;
     }
-    [data-testid="stMetricDelta"] {
-        font-size: 0.78rem !important;
+
+    div.block-container > div > div > div > div > div > div[data-testid="stMetricDelta"] {
+        font-size: 0.9rem !important;
+        font-weight: 600 !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
