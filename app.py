@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# 🎨 CSS 注入：頂端凍結置頂列、主卡片與下拉抽屜視覺優化
+# 🎨 CSS 注入：簡化、精準，絕不影響抽屜選單
 # ---------------------------------------------------------
 st.markdown(
     """
@@ -86,7 +86,7 @@ st.markdown(
     }
 
     /* ---------------------------------------------------------
-       🎯 專屬頂部黃框四大指標放大（完全隔離，不干擾抽屜其他任何元件）
+       🎯 頂部黃框 4 大指標獨立特化（完全隔絕抽屜內部）
        --------------------------------------------------------- */
     .top-macro-card [data-testid="stMetricLabel"] p,
     .top-macro-card [data-testid="stMetricLabel"] {
@@ -103,6 +103,26 @@ st.markdown(
     .top-macro-card [data-testid="stMetricDelta"] {
         font-size: 0.9rem !important;
         font-weight: 600 !important;
+    }
+
+    /* ---------------------------------------------------------
+       🛡️ 抽屜內部 Metric 強制還原小字體（確保不截斷 ...）
+       --------------------------------------------------------- */
+    [data-testid="stExpander"] [data-testid="stMetricLabel"] p,
+    [data-testid="stExpander"] [data-testid="stMetricLabel"] {
+        font-size: 0.78rem !important;
+        font-weight: 500 !important;
+    }
+
+    [data-testid="stExpander"] [data-testid="stMetricValue"] > div,
+    [data-testid="stExpander"] [data-testid="stMetricValue"] {
+        font-size: 1.0rem !important;
+        font-weight: 600 !important;
+    }
+
+    [data-testid="stExpander"] [data-testid="stMetricDelta"] {
+        font-size: 0.72rem !important;
+        font-weight: 500 !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
@@ -182,9 +202,6 @@ if "premarket_summary" not in st.session_state:
       "尚未進行盤前情報診斷，系統將採用標準 Top-Down 策略。"
   )
 
-# ------------------------------------------------------------------------------
-# 🏛️ 權威官方標準產業分類字典 (用於強制定錨)
-# ------------------------------------------------------------------------------
 OFFICIAL_STOCK_SECTOR_MAP = {
     "2330": "晶圓代工",
     "2303": "晶圓代工",
@@ -412,11 +429,10 @@ PEER_GROUPS = {
 
 
 # ==============================================================================
-# 📡 雙源台指期夜盤 (近月主力合約 ContractMonth 精準定錨與備援)
+# 📡 雙源台指期夜盤
 # ==============================================================================
 @st.cache_data(ttl=120)
 def get_night_futures_double_check():
-  """精準抓取「台指期近月主力合約 (TXF1)」夜盤即時報價，雙源對照與稽核機制"""
   taifex_data = None
   dj_data = None
 
@@ -427,7 +443,6 @@ def get_night_futures_double_check():
       )
   }
 
-  # 來源 A：期交所 TAIFEX OpenAPI
   try:
     url_taifex = "https://openapi.taifex.com.tw/v1/DailyMarketReportFut"
     resp = requests.get(url_taifex, headers=headers, timeout=4)
@@ -478,7 +493,6 @@ def get_night_futures_double_check():
   except Exception:
     pass
 
-  # 來源 B：富邦 / 嘉實 DJ 網頁報價
   try:
     url_fubon = "https://fubon-ebrokerdj.fbs.com.tw/z/zg/zg_F.djhtm"
     resp = requests.get(url_fubon, headers=headers, timeout=3)
@@ -746,7 +760,6 @@ def get_taiwan_now():
   return datetime.utcnow() + timedelta(hours=8)
 
 
-# 預設預測名單維持 5 筆
 if "daily_picks" not in st.session_state:
   st.session_state.daily_picks = pd.DataFrame(
       columns=[
@@ -907,7 +920,6 @@ def get_stock_news(stock_id):
 
 
 def get_hot_stocks_24h_news_pack():
-  """⚡ 擷取市場熱門核心焦點股 24H 最新即時新聞與訊息，用於選股過濾"""
   hot_candidates = [
       "2330",
       "2317",
@@ -1246,7 +1258,7 @@ def get_stock_revenue_data(stock_id):
 
 
 # ==============================================================================
-# 🌐 全球宏觀指標 (Yahoo 股市 tw.stock.yahoo.com 網頁 API 精準爬取 + 備援機制)
+# 🌐 全球宏觀指標 (Yahoo 股市網頁 API)
 # ==============================================================================
 MACRO_TICKERS_MAP = {
     "台股加權": "^TWII",
@@ -1267,7 +1279,6 @@ MACRO_TICKERS_MAP = {
 
 
 def fetch_tw_yahoo_web_quote(symbol_raw):
-  """直接對台灣 Yahoo 股市發起請求，拿取網頁畫面上的正則定案價/昨收價"""
   symbol_map = {
       "^TWII": "%5ETWII",
       "^N225": "%5EN225",
@@ -1371,7 +1382,7 @@ def get_macro_11_indicators(target_date_str):
           change_pct = (change_val / prev_close) * 100
 
       if latest is not None and prev_close is not None and prev_close > 0:
-        # 💡 單獨針對 恐慌指數 VIX 顯示小數點後 4 位
+        # 💡 精準呈現 恐慌指數 VIX 為小數點後 4 位 (如 16.7600)
         if name == "恐慌指數 VIX":
           fmt_val = f"{latest:.4f}"
         else:
@@ -1918,7 +1929,6 @@ def generate_daily_picks(
     if len(final_results) >= 5:
       break
 
-  # 第一階段備援名單，補齊至 5 檔
   fallback_candidates = [
       "1301",
       "1303",
@@ -1957,7 +1967,6 @@ def generate_daily_picks(
           "波段期間": "5-10天",
       })
 
-  # 第二階段保底機制，強制補齊至 5 檔
   while len(final_results) < 5:
     p_info = get_realtime_tw_price_info("1301")
     rp = p_info["real_price"] if p_info else 80.0
@@ -2430,11 +2439,11 @@ else:
   capital_placeholder = "例如: 100000 (總預算)"
 
 capital_input = st.sidebar.number_input(
-  capital_label,
-  min_value=0,
-  value=None,
-  placeholder=capital_placeholder,
-  step=100,
+    capital_label,
+    min_value=0,
+    value=None,
+    placeholder=capital_placeholder,
+    step=100,
 )
 price_or_capital = capital_input if capital_input is not None else 0
 
@@ -2450,7 +2459,7 @@ st.caption(
     "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance"
 )
 
-# 💡【頂部四大指標：使用獨立 top-macro-card class 包覆隔離】
+# 💡【黃框專屬隔離容器】
 st.markdown('<div class="top-macro-card">', unsafe_allow_html=True)
 card_cols = st.columns(4)
 
@@ -2489,9 +2498,9 @@ with card_cols[3]:
       delta=item_vix.get("change", "0.00%"),
       delta_color="inverse",
   )
-st.markdown("</div>", unsafe_allow_html=True)  # 閉合隔離區塊
+st.markdown("</div>", unsafe_allow_html=True)
 
-# 💡【下方抽屜區：放在 top-macro-card 外部，字體 100% 不受放大影響】
+# 💡【抽屜區域放置於專屬容器外】
 expander_cols = st.columns(4)
 
 with expander_cols[0]:
@@ -2594,7 +2603,6 @@ days_selected = st.slider("選擇圖表觀察天數 (天) :", 14, 90, 30, step=1
 
 st.markdown("**進階指標-折線圖-對比選擇 :**")
 
-# 最上列常用 4 個核心指標 (一排 4 欄)
 top_cols = st.columns(4)
 with top_cols[0]:
   show_taiex = st.checkbox("台股加權指數", value=True)
@@ -2605,7 +2613,6 @@ with top_cols[2]:
 with top_cols[3]:
   show_vix = st.checkbox("恐慌指數 VIX", value=True)
 
-# 抽屜式收納其他進階指標
 with st.expander("其他進階指標"):
   chk_cols = st.columns(3)
   with chk_cols[0]:
@@ -2987,6 +2994,8 @@ if btn_analyze_stock:
   if not raw_stock_input or str(raw_stock_input).strip() == "":
     st.warning("請先在左側欄位輸入台股代碼或股名！")
   else:
+    # 💡 強制點擊時重新抓取 VIX 與價格最新值
+    get_macro_11_indicators.clear()
     get_realtime_tw_price_info.clear()
     calculate_kd.clear()
 
@@ -3000,7 +3009,7 @@ if btn_analyze_stock:
       )
     else:
       sp_text = (
-          "🤖 AI 結合美股四大指數與情報檢析【實戰操盤買賣點/風報比試算】..."
+          "🤖 AI 結合美股四大指數與情報檢析【實戰操盤買賣點/风報比試算】..."
       )
 
     with st.spinner(sp_text):
