@@ -85,19 +85,34 @@ st.markdown(
         color: #52c41a !important;
     }
 
+    /* 1. 頂部四大指標放大 */
     div.block-container > div > div > div > div > div > div[data-testid="stMetricLabel"] p {
         font-size: 1.05rem !important;
         font-weight: 700 !important;
     }
-
     div.block-container > div > div > div > div > div > div[data-testid="stMetricValue"] > div {
         font-size: 1.55rem !important;
         font-weight: 800 !important;
     }
-
     div.block-container > div > div > div > div > div > div[data-testid="stMetricDelta"] {
         font-size: 0.9rem !important;
         font-weight: 600 !important;
+    }
+
+    /* 2. 強制還原抽屜內部字體大小，防止數字被截斷 (...) */
+    [data-testid="stExpander"] [data-testid="stMetricLabel"] p,
+    [data-testid="stExpander"] [data-testid="stMetricLabel"] {
+        font-size: 0.8rem !important;
+        font-weight: 500 !important;
+    }
+    [data-testid="stExpander"] [data-testid="stMetricValue"] > div,
+    [data-testid="stExpander"] [data-testid="stMetricValue"] {
+        font-size: 1.0rem !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stExpander"] [data-testid="stMetricDelta"] {
+        font-size: 0.75rem !important;
+        font-weight: 500 !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
