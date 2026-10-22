@@ -297,7 +297,7 @@ def get_night_futures_double_check():
     }
 
 def fetch_wantgoo_macro_quote(symbol_code):
-    """直爬玩股網國際商品/利率即時數據[cite: 22, 23, 24]"""
+    """直爬玩股網國際商品/利率即時數據"""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://www.wantgoo.com/"
@@ -389,28 +389,28 @@ def get_macro_11_indicators(target_date_str):
         "pct": night_data["change_pct"],
     }
 
-    # 各項指標完全對齊 2026-10-22 最新截圖校正備援檔[cite: 22, 23, 24]
+    # 各項指標備援基準
     fallback_defaults = {
         "台股加權": {"val": "46,887.77", "change": "+1.28%", "chg_num": 593.5, "pct": 1.28, "raw": 46887.77},
         "日經 225 N225": {"val": "64,621.24", "change": "+0.85%", "chg_num": 544.8, "pct": 0.85, "raw": 64621.24},
-        "美債 10Y 殖利率": {"val": "5.11%", "change": "-0.08%", "chg_num": -0.004, "pct": -0.08, "raw": 5.11},[cite: 23]
+        "美債 10Y 殖利率": {"val": "5.11%", "change": "-0.08%", "chg_num": -0.004, "pct": -0.08, "raw": 5.11},
         "美聯儲 13W 短貼率": {"val": "4.06%", "change": "-0.42%", "chg_num": -0.017, "pct": -0.42, "raw": 4.0630},
         "美元指數 DXY": {"val": "101.71", "change": "+0.01%", "chg_num": 0.01, "pct": 0.01, "raw": 101.71},
-        "WTI 原油": {"val": "97.88", "change": "+0.06%", "chg_num": 0.06, "pct": 0.06, "raw": 97.88},[cite: 22]
-        "黃金現貨 Gold": {"val": "4,132.18", "change": "+0.43%", "chg_num": 17.78, "pct": 0.43, "raw": 4132.18},[cite: 24]
+        "WTI 原油": {"val": "97.88", "change": "+0.06%", "chg_num": 0.06, "pct": 0.06, "raw": 97.88},
+        "黃金現貨 Gold": {"val": "4,132.18", "change": "+0.43%", "chg_num": 17.78, "pct": 0.43, "raw": 4132.18},
     }
 
     for name, symbol in MACRO_TICKERS_MAP.items():
         try:
             tw_data = None
             if name == "美債 10Y 殖利率":
-                tw_data = fetch_wantgoo_macro_quote("US10-YR")[cite: 23]
+                tw_data = fetch_wantgoo_macro_quote("US10-YR")
             elif name == "美元指數 DXY":
                 tw_data = fetch_wantgoo_macro_quote("USDINDEX")
             elif name == "WTI 原油":
-                tw_data = fetch_wantgoo_macro_quote("WTI")[cite: 22]
+                tw_data = fetch_wantgoo_macro_quote("WTI")
             elif name == "黃金現貨 Gold":
-                tw_data = fetch_wantgoo_macro_quote("GOLD")[cite: 24]
+                tw_data = fetch_wantgoo_macro_quote("GOLD")
             
             if not tw_data:
                 tw_data = fetch_tw_yahoo_web_quote(symbol)
@@ -1645,7 +1645,7 @@ btn_analyze_stock = st.sidebar.button("📊 開始 AI 個股分析", type="prima
 # ==============================================================================
 st.caption("限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | WantGoo | Yahoo Finance")
 
-# 💡 頂部 4 大卡片 (修正為台股加權正報酬與美債 5.11%)
+# 💡 頂部 4 大卡片
 st.markdown('<div class="top-macro-card">', unsafe_allow_html=True)
 card_cols = st.columns(4)
 
@@ -1659,14 +1659,14 @@ with card_cols[1]:
 
 with card_cols[2]:
     item_10y = macro_data.get("美債 10Y 殖利率", {})
-    st.metric(label="美債 10Y", value=item_10y.get("val", "5.11%"), delta=item_10y.get("change", "-0.08%"), delta_color="inverse")[cite: 23]
+    st.metric(label="美債 10Y", value=item_10y.get("val", "5.11%"), delta=item_10y.get("change", "-0.08%"), delta_color="inverse")
 
 with card_cols[3]:
     item_vix = macro_data.get("恐慌指數 VIX", {})
     st.metric(label="恐慌 VIX", value=item_vix.get("val", "16.6800"), delta=item_vix.get("change", "-3.64%"), delta_color="inverse")
 st.markdown("</div>", unsafe_allow_html=True)
 
-# 💡 抽屜區域 (修復日經 225 漲幅、美元 DXY 鍵值與 WTI/黃金數據)
+# 💡 抽屜區域
 expander_cols = st.columns(4)
 
 with expander_cols[0]:
@@ -1708,10 +1708,10 @@ with expander_cols[3]:
         col_h1, col_h2 = st.columns(2)
         with col_h1:
             item_wti = macro_data.get("WTI 原油", {})
-            st.metric(label="WTI 原油", value=item_wti.get("val", "97.88"), delta=item_wti.get("change", "+0.06%"), delta_color="inverse")[cite: 22]
+            st.metric(label="WTI 原油", value=item_wti.get("val", "97.88"), delta=item_wti.get("change", "+0.06%"), delta_color="inverse")
         with col_h2:
             item_gold = macro_data.get("黃金現貨 Gold", {})
-            st.metric(label="黃金 Gold", value=item_gold.get("val", "4,132.18"), delta=item_gold.get("change", "+0.43%"), delta_color="inverse")[cite: 24]
+            st.metric(label="黃金 Gold", value=item_gold.get("val", "4,132.18"), delta=item_gold.get("change", "+0.43%"), delta_color="inverse")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
