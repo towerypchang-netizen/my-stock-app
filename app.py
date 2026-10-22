@@ -420,7 +420,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 全球總經與資金流數據核心抓取模組 (穩健修復版)
+# 🌐 全球總經與資金流數據核心抓取模組 (高效率 Batch Fetching 盤中實時版)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -445,6 +445,22 @@ DEFAULT_MACRO_CACHE = {
     "美元指數 DXY": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
     "WTI 原油": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
     "黃金現貨 Gold": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+}
+
+MACRO_SYMBOL_MAP = {
+    "台股加權": ("^TWII", False, False),
+    "費城半導體 SOX": ("^SOX", False, False),
+    "美債 10Y 殖利率": ("^TNX", True, False),
+    "恐慌指數 VIX": ("^VIX", False, False),
+    "日經 225 N225": ("^N225", False, False),
+    "道瓊工業 DJI": ("^DJI", False, False),
+    "那斯達克 NASDAQ": ("^IXIC", False, False),
+    "標普 500 S&P500": ("^GSPC", False, False),
+    "羅素 2000 RUT": ("^RUT", False, False),
+    "美聯儲 13W 短貼率": ("^IRX", True, False),
+    "美元指數 DXY": ("DX-Y.NYB", False, False),
+    "WTI 原油": ("CL=F", False, False),
+    "黃金現貨 Gold": ("GC=F", False, False),
 }
 
 if "macro_cache" not in st.session_state:
@@ -512,156 +528,87 @@ def fetch_taifex_futures_night():
     return None
 
 
-def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
-    """優先順序 3：Yahoo 股市 API 直連端點"""
-    clean_symbol = symbol_encoded.replace("%5E", "^").replace("%26", "&").replace("%3D", "=")
-    ts = int(time.time() * 1000)
-    url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={clean_symbol}&_t={ts}"
+def fetch_yfinance_batch_realtime():
+    """單次 API 多標的批次抓取 (Batch Fetching) 兼具 1m 盤中即時性，防護 429 Error"""
+    symbols_list = [sym for sym, _, _ in MACRO_SYMBOL_MAP.values()]
+    symbols_str = " ".join(symbols_list)
+    results = {}
+
     try:
-        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
-        if resp.status_code == 200:
-            quote = resp.json().get("data", {}).get("quote", {})
-            price = quote.get("price") or quote.get("regularMarketPrice")
-            prev_close = quote.get("previousClose") or quote.get("regularMarketPreviousClose")
-            if price is not None and prev_close is not None and prev_close > 0:
-                p_val = float(price)
-                prev_val = float(prev_close)
-                chg_val = p_val - prev_val
-                pct_val = (chg_val / prev_val) * 100
+        # 下載最新 1 天 1 分鐘 K 線 (兼顧最新點位與 Rate Limit 控管)
+        df_batch = yf.download(
+            symbols_str,
+            period="1d",
+            interval="1m",
+            group_by="ticker",
+            progress=False,
+            threads=True,
+        )
 
-                if is_yield:
-                    fmt_val = f"{p_val:.2f}%"
-                    chg_str = f"{pct_val:+.2f}%"
-                elif is_points:
-                    fmt_val = f"{int(p_val):,}"
-                    chg_str = f"{chg_val:+.0f} 點"
-                elif "VIX" in clean_symbol:
-                    fmt_val = f"{p_val:.4f}"
-                    chg_str = f"{pct_val:+.2f}%"
-                else:
-                    fmt_val = f"{p_val:,.2f}".replace(".00", "")
-                    chg_str = f"{pct_val:+.2f}%"
+        for item_name, (sym, is_yield, is_points) in MACRO_SYMBOL_MAP.items():
+            try:
+                sub_df = df_batch[sym] if len(symbols_list) > 1 else df_batch
+                sub_close = sub_df["Close"].dropna()
+                if not sub_close.empty and len(sub_close) >= 1:
+                    p_val = float(sub_close.iloc[-1])
+                    # 取得當日開盤或前一日價格計算變動
+                    sub_open = sub_df["Open"].dropna()
+                    ref_val = float(sub_open.iloc[0]) if not sub_open.empty else p_val
+                    chg_val = p_val - ref_val
+                    pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
 
-                return {
-                    "val": fmt_val,
-                    "change": chg_str,
-                    "change_num": round(chg_val, 2),
-                    "pct": round(pct_val, 2),
-                    "raw_close": p_val
-                }
+                    if is_yield:
+                        fmt_val = f"{p_val:.2f}%"
+                        chg_str = f"{pct_val:+.2f}%"
+                    elif is_points:
+                        fmt_val = f"{int(p_val):,}"
+                        chg_str = f"{chg_val:+.0f} 點"
+                    elif sym in ["^VIX"]:
+                        fmt_val = f"{p_val:.4f}"
+                        chg_str = f"{pct_val:+.2f}%"
+                    else:
+                        fmt_val = f"{p_val:,.2f}".replace(".00", "")
+                        chg_str = f"{pct_val:+.2f}%"
+
+                    results[item_name] = {
+                        "val": fmt_val,
+                        "change": chg_str,
+                        "change_num": round(chg_val, 2),
+                        "pct": round(pct_val, 2),
+                        "raw_close": p_val
+                    }
+            except Exception:
+                continue
     except Exception:
         pass
-    return None
 
-
-def fetch_yfinance_fallback(symbol, is_yield=False, is_points=False):
-    """優先順序 4：yfinance history 穩健備援 (修復指數標的無法使用 fast_info 之 Bug)"""
-    try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period="7d").dropna(subset=["Close"])
-        if not df.empty and len(df) >= 2:
-            p_val = float(df["Close"].iloc[-1])
-            prev_val = float(df["Close"].iloc[-2])
-            chg_val = p_val - prev_val
-            pct_val = (chg_val / prev_val) * 100 if prev_val > 0 else 0.0
-
-            if is_yield:
-                fmt_val = f"{p_val:.2f}%"
-                chg_str = f"{pct_val:+.2f}%"
-            elif is_points:
-                fmt_val = f"{int(p_val):,}"
-                chg_str = f"{chg_val:+.0f} 點"
-            elif symbol in ["^VIX"]:
-                fmt_val = f"{p_val:.4f}"
-                chg_str = f"{pct_val:+.2f}%"
-            else:
-                fmt_val = f"{p_val:,.2f}".replace(".00", "")
-                chg_str = f"{pct_val:+.2f}%"
-
-            return {
-                "val": fmt_val,
-                "change": chg_str,
-                "change_num": round(chg_val, 2),
-                "pct": round(pct_val, 2),
-                "raw_close": p_val
-            }
-    except Exception:
-        pass
-    return None
-
-
-def get_macro_item_with_pipeline(name, twse_code=None, taifex_type=None, yahoo_symbol=None, is_yield=False, is_points=False):
-    """依據『1.證交所 MIS -> 2.期交所 API -> 3.Yahoo API -> 4.yfinance』順序自動備援擷取"""
-    if twse_code:
-        res = fetch_twse_mis_taiex()
-        if res:
-            return res
-
-    if taifex_type:
-        res = fetch_taifex_futures_night()
-        if res:
-            return res
-
-    if yahoo_symbol:
-        res = fetch_yahoo_api_quote(yahoo_symbol, is_yield=is_yield, is_points=is_points)
-        if res:
-            return res
-
-    if yahoo_symbol:
-        sym_clean = yahoo_symbol.replace("%5E", "^").replace("%26", "&").replace("%3D", "=")
-        res = fetch_yfinance_fallback(sym_clean, is_yield=is_yield, is_points=is_points)
-        if res:
-            return res
-
-    return st.session_state.macro_cache.get(name, DEFAULT_MACRO_CACHE.get(name))
+    return results
 
 
 def force_refresh_all_macro_data():
-    """全量對外直抓刷新 14 項指標"""
+    """全量對外直抓刷新 14 項指標 (整合高效率 Batching 與即時備援)"""
     st.cache_data.clear()
     new_cache = {}
 
-    # 1. 台股加權
-    new_cache["台股加權"] = get_macro_item_with_pipeline("台股加權", twse_code="tse_t00.tw", yahoo_symbol="%5ETWII")
+    # 1. 優先批次抓取美股與國際指數 (一次連線完畢)
+    batch_res = fetch_yfinance_batch_realtime()
+    for name, item_data in batch_res.items():
+        new_cache[name] = item_data
 
-    # 2. 台指期夜盤
-    new_cache["台指期夜盤"] = get_macro_item_with_pipeline("台指期夜盤", taifex_type="TX", yahoo_symbol="%5ETW%26", is_points=True)
+    # 2. 證交所加權指數獨家補強
+    taiex_res = fetch_twse_mis_taiex()
+    if taiex_res:
+        new_cache["台股加權"] = taiex_res
 
-    # 3. 日經 225 N225
-    new_cache["日經 225 N225"] = get_macro_item_with_pipeline("日經 225 N225", yahoo_symbol="%5EN225")
+    # 3. 期交所夜盤獨家補強
+    night_res = fetch_taifex_futures_night()
+    if night_res:
+        new_cache["台指期夜盤"] = night_res
 
-    # 4. 費城半導體 SOX
-    new_cache["費城半導體 SOX"] = get_macro_item_with_pipeline("費城半導體 SOX", yahoo_symbol="%5ESOX")
-
-    # 5. 美債 10Y 殖利率
-    new_cache["美債 10Y 殖利率"] = get_macro_item_with_pipeline("美債 10Y 殖利率", yahoo_symbol="%5ETNX", is_yield=True)
-
-    # 6. 恐慌指數 VIX
-    new_cache["恐慌指數 VIX"] = get_macro_item_with_pipeline("恐慌指數 VIX", yahoo_symbol="%5EVIX")
-
-    # 7. 道瓊工業 DJI
-    new_cache["道瓊工業 DJI"] = get_macro_item_with_pipeline("道瓊工業 DJI", yahoo_symbol="%5EDJI")
-
-    # 8. 那斯達克 NASDAQ
-    new_cache["那斯達克 NASDAQ"] = get_macro_item_with_pipeline("那斯達克 NASDAQ", yahoo_symbol="%5EIXIC")
-
-    # 9. 標普 500 S&P500
-    new_cache["標普 500 S&P500"] = get_macro_item_with_pipeline("標普 500 S&P500", yahoo_symbol="%5EGSPC")
-
-    # 10. 羅素 2000 RUT
-    new_cache["羅素 2000 RUT"] = get_macro_item_with_pipeline("羅素 2000 RUT", yahoo_symbol="%5ERUT")
-
-    # 11. 美聯儲 13W 短貼率
-    new_cache["美聯儲 13W 短貼率"] = get_macro_item_with_pipeline("美聯儲 13W 短貼率", yahoo_symbol="%5EIRX", is_yield=True)
-
-    # 12. 美元指數 DXY
-    new_cache["美元指數 DXY"] = get_macro_item_with_pipeline("美元指數 DXY", yahoo_symbol="DX-Y.NYB")
-
-    # 13. WTI 原油
-    new_cache["WTI 原油"] = get_macro_item_with_pipeline("WTI 原油", yahoo_symbol="CL%3DF")
-
-    # 14. 黃金現貨 Gold
-    new_cache["黃金現貨 Gold"] = get_macro_item_with_pipeline("黃金現貨 Gold", yahoo_symbol="GC%3DF")
+    # 4. 對於遺漏的項目帶入預設快取值
+    for k, v in DEFAULT_MACRO_CACHE.items():
+        if k not in new_cache:
+            new_cache[k] = st.session_state.macro_cache.get(k, v)
 
     st.session_state.macro_cache = new_cache
     return new_cache
@@ -1041,7 +988,7 @@ def get_peer_comparison(stock_id):
     return f"所屬同業族群：[{g_name}]\n" + "\n".join(records)
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=120)
 def get_realtime_tw_price_info(stock_id):
     clean_id = parse_stock_input(stock_id)
     if not clean_id:
@@ -1051,21 +998,17 @@ def get_realtime_tw_price_info(stock_id):
         try:
             ticker_symbol = clean_id + suffix
             ticker = yf.Ticker(ticker_symbol)
-            data = ticker.history(period="5d").dropna(subset=["Close"])
+            data = ticker.history(period="1d", interval="1m").dropna(subset=["Close"])
 
             if not data.empty and len(data) >= 1:
                 latest_close = round(float(data["Close"].iloc[-1]), 2)
                 if not math.isnan(latest_close) and latest_close > 0:
-                    prev_close = (
-                        round(float(data["Close"].iloc[-2]), 2)
-                        if len(data) >= 2
-                        else latest_close
-                    )
                     open_price = (
-                        round(float(data["Open"].iloc[-1]), 2)
+                        round(float(data["Open"].iloc[0]), 2)
                         if "Open" in data.columns
                         else latest_close
                     )
+                    prev_close = open_price
                     return {
                         "real_price": latest_close,
                         "prev_close": prev_close,
