@@ -420,7 +420,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 總經與即時數據核心抓取模組 (玩股網 WantGoo 全指標直連升級)
+# 🌐 總經與即時數據核心抓取模組 (全新日經 225 雙重精準抓取)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -467,11 +467,11 @@ DEFAULT_MACRO_CACHE = {
         "raw_close": 47482.0,
     },
     "日經 225 N225": {
-        "val": "63,265.68",
-        "change": "-2.10%",
-        "change_num": -1355.56,
-        "pct": -2.10,
-        "raw_close": 63265.68,
+        "val": "62,907.84",
+        "change": "-2.65%",
+        "change_num": -1713.40,
+        "pct": -2.65,
+        "raw_close": 62907.84,
     },
     "道瓊工業 DJI": {
         "val": "52,856.09",
@@ -590,8 +590,43 @@ def fetch_realtime_taiex_r7():
     return st.session_state.macro_cache.get("台股加權", DEFAULT_MACRO_CACHE["台股加權"])
 
 
+def fetch_nikkei225_realtime():
+    """日經 225 專用抓取 (第一優先：Yahoo 股市 API，第二備援：玩股網)"""
+    ts = int(time.time() * 1000)
+    
+    # 1. 第一優先：Yahoo 股市 API (%5EN225) 盤後收盤價即時精準同步
+    try:
+        url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol=%5EN225&_t={ts}"
+        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
+        if resp.status_code == 200:
+            quote = resp.json().get("data", {}).get("quote", {})
+            price = quote.get("price") or quote.get("regularMarketPrice")
+            prev_close = quote.get("previousClose") or quote.get("regularMarketPreviousClose")
+            if price is not None and prev_close is not None and prev_close > 0:
+                p_val = float(price)
+                prev_val = float(prev_close)
+                chg_val = p_val - prev_val
+                pct_val = (chg_val / prev_val) * 100
+                return {
+                    "val": f"{p_val:,.2f}",
+                    "change": f"{pct_val:+.2f}%",
+                    "change_num": round(chg_val, 2),
+                    "pct": round(pct_val, 2),
+                    "raw_close": p_val
+                }
+    except Exception:
+        pass
+
+    # 2. 第二備援：玩股網直爬
+    res = fetch_wantgoo_realtime_item("global/index/nky")
+    if res:
+        return res
+
+    return None
+
+
 def fetch_wantgoo_realtime_item(url_path, is_yield=False):
-    """直爬玩股網通用函式 (支援日經、美債、黃金、原油、美元指數)"""
+    """直爬玩股網通用函式 (支援美債、黃金、原油、美元指數)"""
     ts = int(time.time() * 1000)
     try:
         url = f"https://www.wantgoo.com/{url_path}?_t={ts}"
@@ -670,23 +705,23 @@ def force_refresh_all_macro_data():
     else:
         new_cache["台指期夜盤"] = st.session_state.macro_cache.get("台指期夜盤", DEFAULT_MACRO_CACHE["台指期夜盤"])
 
-    # 3. 日經 225 (玩股網直爬)
-    nikkei_res = fetch_wantgoo_realtime_item("global/index/nky")
+    # 3. 日經 225 (全新 Yahoo API 專屬直連，完美取得 14:45 正式收盤價)
+    nikkei_res = fetch_nikkei225_realtime()
     new_cache["日經 225 N225"] = nikkei_res if nikkei_res else st.session_state.macro_cache.get("日經 225 N225", DEFAULT_MACRO_CACHE["日經 225 N225"])
 
     # 4. 美債 10Y 殖利率 (玩股網直爬)
     us10y_res = fetch_wantgoo_realtime_item("global/index/us10-yr", is_yield=True)
     new_cache["美債 10Y 殖利率"] = us10y_res if us10y_res else st.session_state.macro_cache.get("美債 10Y 殖利率", DEFAULT_MACRO_CACHE["美債 10Y 殖利率"])
 
-    # 5. 美元指數 DXY (全面升級玩股網直爬)
+    # 5. 美元指數 DXY (玩股網直爬)
     dxy_res = fetch_wantgoo_realtime_item("global/index/dxy")
     new_cache["美元指數 DXY"] = dxy_res if dxy_res else st.session_state.macro_cache.get("美元指數 DXY", DEFAULT_MACRO_CACHE["美元指數 DXY"])
 
-    # 6. WTI 原油 (全面升級玩股網直爬)
+    # 6. WTI 原油 (玩股網直爬)
     oil_res = fetch_wantgoo_realtime_item("global/index/oil")
     new_cache["WTI 原油"] = oil_res if oil_res else st.session_state.macro_cache.get("WTI 原油", DEFAULT_MACRO_CACHE["WTI 原油"])
 
-    # 7. 黃金現貨 Gold (全面升級玩股網直爬)
+    # 7. 黃金現貨 Gold (玩股網直爬)
     gold_res = fetch_wantgoo_realtime_item("global/index/gold")
     new_cache["黃金現貨 Gold"] = gold_res if gold_res else st.session_state.macro_cache.get("黃金現貨 Gold", DEFAULT_MACRO_CACHE["黃金現貨 Gold"])
 
@@ -2449,8 +2484,8 @@ with expander_cols[0]:
             item_nikkei = macro_data.get("日經 225 N225", {})
             st.metric(
                 label="日經 225",
-                value=item_nikkei.get("val", "63,265.68"),
-                delta=item_nikkei.get("change", "-2.10%"),
+                value=item_nikkei.get("val", "62,907.84"),
+                delta=item_nikkei.get("change", "-2.65%"),
                 delta_color="inverse",
             )
 
