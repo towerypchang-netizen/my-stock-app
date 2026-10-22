@@ -420,7 +420,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 全球總經與資金流數據核心抓取模組 (高效率 Batch Fetching 盤中實時版)
+# 🌐 全球總經與資金流數據核心抓取模組 (精準對齊 Yahoo 奇摩網頁 API)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -447,58 +447,55 @@ DEFAULT_MACRO_CACHE = {
     "黃金現貨 Gold": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
 }
 
-MACRO_SYMBOL_MAP = {
-    "台股加權": ("^TWII", False, False),
-    "費城半導體 SOX": ("^SOX", False, False),
-    "美債 10Y 殖利率": ("^TNX", True, False),
-    "恐慌指數 VIX": ("^VIX", False, False),
-    "日經 225 N225": ("^N225", False, False),
-    "道瓊工業 DJI": ("^DJI", False, False),
-    "那斯達克 NASDAQ": ("^IXIC", False, False),
-    "標普 500 S&P500": ("^GSPC", False, False),
-    "羅素 2000 RUT": ("^RUT", False, False),
-    "美聯儲 13W 短貼率": ("^IRX", True, False),
-    "美元指數 DXY": ("DX-Y.NYB", False, False),
-    "WTI 原油": ("CL=F", False, False),
-    "黃金現貨 Gold": ("GC=F", False, False),
-}
-
 if "macro_cache" not in st.session_state:
     st.session_state.macro_cache = DEFAULT_MACRO_CACHE
 
 
-def fetch_twse_mis_taiex():
-    """優先順序 1：證交所 MIS 官方 API 抓取台股加權指數"""
+def fetch_yahoo_tw_stock_quote(symbol, is_yield=False, is_points=False):
+    """直接打 Yahoo 奇摩股市端點，與網頁畫面 100% 同步」"""
     ts = int(time.time() * 1000)
+    url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol}&_t={ts}"
     try:
-        twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
-        resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
+        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.0)
         if resp.status_code == 200:
-            msg_arr = resp.json().get("msgArray", [])
-            if msg_arr:
-                data = msg_arr[0]
-                p_str = data.get("z") if data.get("z") and data.get("z") != "-" else data.get("y")
-                y_str = data.get("y")
-                if p_str and y_str:
-                    p_val = float(p_str)
-                    y_val = float(y_str)
-                    chg_val = p_val - y_val
-                    pct_val = (chg_val / y_val) * 100 if y_val > 0 else 0.0
-                    if p_val > 10000:
-                        return {
-                            "val": f"{p_val:,.2f}",
-                            "change": f"{pct_val:+.2f}%",
-                            "change_num": round(chg_val, 2),
-                            "pct": round(pct_val, 2),
-                            "raw_close": p_val
-                        }
+            quote = resp.json().get("data", {}).get("quote", {})
+            p_val = quote.get("price") or quote.get("regularMarketPrice")
+            prev_val = quote.get("previousClose") or quote.get("regularMarketPreviousClose")
+            
+            if p_val is not None and prev_val is not None and prev_val > 0:
+                p_val = float(p_val)
+                prev_val = float(prev_val)
+                chg_val = p_val - prev_val
+                pct_val = (chg_val / prev_val) * 100
+
+                if is_yield:
+                    fmt_val = f"{p_val:.2f}%"
+                    chg_str = f"{pct_val:+.2f}%"
+                elif is_points:
+                    fmt_val = f"{int(p_val):,}"
+                    chg_str = f"{chg_val:+.0f} 點"
+                elif "VIX" in symbol:
+                    fmt_val = f"{p_val:.4f}"
+                    chg_str = f"{pct_val:+.2f}%"
+                else:
+                    fmt_val = f"{p_val:,.2f}".replace(".00", "")
+                    chg_str = f"{pct_val:+.2f}%"
+
+                return {
+                    "val": fmt_val,
+                    "change": chg_str,
+                    "change_num": round(chg_val, 2),
+                    "pct": round(pct_val, 2),
+                    "raw_close": p_val
+                }
     except Exception:
         pass
     return None
 
 
-def fetch_taifex_futures_night():
-    """優先順序 2：台灣期交所 (TAIFEX) MIS 抓取台指期夜盤行情"""
+def fetch_taifex_futures_night_bulletproof():
+    """多備援抓取台指期夜盤 (1. 期交所專用 API -> 2. Yahoo奇摩近月夜盤點位)"""
+    # 備援 A：期交所 MIS API
     ts = int(time.time() * 1000)
     try:
         url = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
@@ -525,93 +522,103 @@ def fetch_taifex_futures_night():
                         }
     except Exception:
         pass
+
+    # 備援 B：Yahoo 奇摩近月台指期夜盤端點
+    for sym in ["WTX%26", "WTX%", "%5ETW%26"]:
+        res = fetch_yahoo_tw_stock_quote(sym, is_points=True)
+        if res:
+            return res
+
     return None
 
 
-def fetch_yfinance_batch_realtime():
-    """單次 API 多標的批次抓取 (Batch Fetching) 兼具 1m 盤中即時性，防護 429 Error"""
-    symbols_list = [sym for sym, _, _ in MACRO_SYMBOL_MAP.values()]
-    symbols_str = " ".join(symbols_list)
-    results = {}
-
-    try:
-        # 下載最新 1 天 1 分鐘 K 線 (兼顧最新點位與 Rate Limit 控管)
-        df_batch = yf.download(
-            symbols_str,
-            period="1d",
-            interval="1m",
-            group_by="ticker",
-            progress=False,
-            threads=True,
-        )
-
-        for item_name, (sym, is_yield, is_points) in MACRO_SYMBOL_MAP.items():
-            try:
-                sub_df = df_batch[sym] if len(symbols_list) > 1 else df_batch
-                sub_close = sub_df["Close"].dropna()
-                if not sub_close.empty and len(sub_close) >= 1:
-                    p_val = float(sub_close.iloc[-1])
-                    # 取得當日開盤或前一日價格計算變動
-                    sub_open = sub_df["Open"].dropna()
-                    ref_val = float(sub_open.iloc[0]) if not sub_open.empty else p_val
-                    chg_val = p_val - ref_val
-                    pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
-
-                    if is_yield:
-                        fmt_val = f"{p_val:.2f}%"
-                        chg_str = f"{pct_val:+.2f}%"
-                    elif is_points:
-                        fmt_val = f"{int(p_val):,}"
-                        chg_str = f"{chg_val:+.0f} 點"
-                    elif sym in ["^VIX"]:
-                        fmt_val = f"{p_val:.4f}"
-                        chg_str = f"{pct_val:+.2f}%"
-                    else:
-                        fmt_val = f"{p_val:,.2f}".replace(".00", "")
-                        chg_str = f"{pct_val:+.2f}%"
-
-                    results[item_name] = {
-                        "val": fmt_val,
-                        "change": chg_str,
-                        "change_num": round(chg_val, 2),
-                        "pct": round(pct_val, 2),
-                        "raw_close": p_val
-                    }
-            except Exception:
-                continue
-    except Exception:
-        pass
-
-    return results
-
-
 def force_refresh_all_macro_data():
-    """全量對外直抓刷新 14 項指標 (整合高效率 Batching 與即時備援)"""
+    """全量對外直抓刷新 14 項指標 (百分之百對齊 Yahoo 奇摩股市畫面)"""
     st.cache_data.clear()
     new_cache = {}
 
-    # 1. 優先批次抓取美股與國際指數 (一次連線完畢)
-    batch_res = fetch_yfinance_batch_realtime()
-    for name, item_data in batch_res.items():
-        new_cache[name] = item_data
+    # 1. 台股加權
+    new_cache["台股加權"] = fetch_yahoo_tw_stock_quote("%5ETWII") or fetch_twse_mis_taiex()
 
-    # 2. 證交所加權指數獨家補強
-    taiex_res = fetch_twse_mis_taiex()
-    if taiex_res:
-        new_cache["台股加權"] = taiex_res
-
-    # 3. 期交所夜盤獨家補強
-    night_res = fetch_taifex_futures_night()
+    # 2. 台指期夜盤 (對齊期交所與奇摩夜盤)
+    night_res = fetch_taifex_futures_night_bulletproof()
     if night_res:
         new_cache["台指期夜盤"] = night_res
 
-    # 4. 對於遺漏的項目帶入預設快取值
+    # 3. 日經 225 N225 (精準對齊 Yahoo 奇摩 62,907.84 畫面點位)
+    nikkei_res = fetch_yahoo_tw_stock_quote("%5EN225") or fetch_yahoo_tw_stock_quote("N225")
+    if nikkei_res:
+        new_cache["日經 225 N225"] = nikkei_res
+
+    # 4. 費城半導體 SOX
+    new_cache["費城半導體 SOX"] = fetch_yahoo_tw_stock_quote("%5ESOX")
+
+    # 5. 美債 10Y 殖利率
+    new_cache["美債 10Y 殖利率"] = fetch_yahoo_tw_stock_quote("%5ETNX", is_yield=True)
+
+    # 6. 恐慌指數 VIX
+    new_cache["恐慌指數 VIX"] = fetch_yahoo_tw_stock_quote("%5EVIX")
+
+    # 7. 道瓊工業 DJI
+    new_cache["道瓊工業 DJI"] = fetch_yahoo_tw_stock_quote("%5EDJI")
+
+    # 8. 那斯達克 NASDAQ
+    new_cache["那斯達克 NASDAQ"] = fetch_yahoo_tw_stock_quote("%5EIXIC")
+
+    # 9. 標普 500 S&P500
+    new_cache["標普 500 S&P500"] = fetch_yahoo_tw_stock_quote("%5EGSPC")
+
+    # 10. 羅素 2000 RUT
+    new_cache["羅素 2000 RUT"] = fetch_yahoo_tw_stock_quote("%5ERUT")
+
+    # 11. 美聯儲 13W 短貼率
+    new_cache["美聯儲 13W 短貼率"] = fetch_yahoo_tw_stock_quote("%5EIRX", is_yield=True)
+
+    # 12. 美元指數 DXY
+    new_cache["美元指數 DXY"] = fetch_yahoo_tw_stock_quote("DX-Y.NYB")
+
+    # 13. WTI 原油
+    new_cache["WTI 原油"] = fetch_yahoo_tw_stock_quote("CL%3DF")
+
+    # 14. 黃金現貨 Gold
+    new_cache["黃金現貨 Gold"] = fetch_yahoo_tw_stock_quote("GC%3DF")
+
+    # 填補遺漏
     for k, v in DEFAULT_MACRO_CACHE.items():
-        if k not in new_cache:
+        if k not in new_cache or not new_cache[k]:
             new_cache[k] = st.session_state.macro_cache.get(k, v)
 
     st.session_state.macro_cache = new_cache
     return new_cache
+
+
+def fetch_twse_mis_taiex():
+    """證交所 MIS 備援"""
+    ts = int(time.time() * 1000)
+    try:
+        twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
+        resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
+        if resp.status_code == 200:
+            msg_arr = resp.json().get("msgArray", [])
+            if msg_arr:
+                data = msg_arr[0]
+                p_str = data.get("z") if data.get("z") and data.get("z") != "-" else data.get("y")
+                y_str = data.get("y")
+                if p_str and y_str:
+                    p_val = float(p_str)
+                    y_val = float(y_str)
+                    chg_val = p_val - y_val
+                    pct_val = (chg_val / y_val) * 100 if y_val > 0 else 0.0
+                    return {
+                        "val": f"{p_val:,.2f}",
+                        "change": f"{pct_val:+.2f}%",
+                        "change_num": round(chg_val, 2),
+                        "pct": round(pct_val, 2),
+                        "raw_close": p_val
+                    }
+    except Exception:
+        pass
+    return None
 
 
 @st.cache_data(ttl=86400)
