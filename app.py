@@ -420,7 +420,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 全球總經與資金流數據核心抓取模組 (四級備援：證交所/期交所/Yahoo API/yfinance)
+# 🌐 全球總經與資金流數據核心抓取模組 (穩健修復版)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -431,104 +431,20 @@ HTTP_HEADERS = {
 }
 
 DEFAULT_MACRO_CACHE = {
-    "台股加權": {
-        "val": "46,041.43",
-        "change": "-1.81%",
-        "change_num": -846.34,
-        "pct": -1.81,
-        "raw_close": 46041.43,
-    },
-    "費城半導體 SOX": {
-        "val": "11,505.56",
-        "change": "+1.97%",
-        "change_num": 222.10,
-        "pct": 1.97,
-        "raw_close": 11505.56,
-    },
-    "美債 10Y 殖利率": {
-        "val": "5.09%",
-        "change": "-1.17%",
-        "change_num": -0.06,
-        "pct": -1.17,
-        "raw_close": 5.09,
-    },
-    "恐慌指數 VIX": {
-        "val": "16.6800",
-        "change": "-3.64%",
-        "change_num": -0.63,
-        "pct": -3.64,
-        "raw_close": 16.68,
-    },
-    "台指期夜盤": {
-        "val": "47,482",
-        "change": "+469 點",
-        "change_num": 469.0,
-        "pct": 1.0,
-        "raw_close": 47482.0,
-    },
-    "日經 225 N225": {
-        "val": "62,907.84",
-        "change": "-2.65%",
-        "change_num": -1713.40,
-        "pct": -2.65,
-        "raw_close": 62907.84,
-    },
-    "道瓊工業 DJI": {
-        "val": "52,856.09",
-        "change": "+0.69%",
-        "change_num": 362.10,
-        "pct": 0.69,
-        "raw_close": 52856.09,
-    },
-    "那斯達克 NASDAQ": {
-        "val": "26,702.86",
-        "change": "+1.05%",
-        "change_num": 277.30,
-        "pct": 1.05,
-        "raw_close": 26702.86,
-    },
-    "標普 500 S&P500": {
-        "val": "7,757.17",
-        "change": "+0.58%",
-        "change_num": 44.70,
-        "pct": 0.58,
-        "raw_close": 7757.17,
-    },
-    "羅素 2000 RUT": {
-        "val": "2,781.02",
-        "change": "+0.27%",
-        "change_num": 7.50,
-        "pct": 0.27,
-        "raw_close": 2781.02,
-    },
-    "美聯儲 13W 短貼率": {
-        "val": "4.06%",
-        "change": "-0.42%",
-        "change_num": -0.017,
-        "pct": -0.42,
-        "raw_close": 4.06,
-    },
-    "美元指數 DXY": {
-        "val": "101.64",
-        "change": "-0.14%",
-        "change_num": -0.14,
-        "pct": -0.14,
-        "raw_close": 101.64,
-    },
-    "WTI 原油": {
-        "val": "98.44",
-        "change": "+0.45%",
-        "change_num": 0.44,
-        "pct": 0.45,
-        "raw_close": 98.44,
-    },
-    "黃金現貨 Gold": {
-        "val": "4,070.02",
-        "change": "-1.34%",
-        "change_num": -55.48,
-        "pct": -1.34,
-        "raw_close": 4070.02,
-    },
+    "台股加權": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "費城半導體 SOX": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "美債 10Y 殖利率": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "恐慌指數 VIX": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "台指期夜盤": {"val": "更新中", "change": "0 點", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "日經 225 N225": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "道瓊工業 DJI": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "那斯達克 NASDAQ": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "標普 500 S&P500": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "羅素 2000 RUT": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "美聯儲 13W 短貼率": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "美元指數 DXY": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "WTI 原油": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
+    "黃金現貨 Gold": {"val": "更新中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0},
 }
 
 if "macro_cache" not in st.session_state:
@@ -540,7 +456,7 @@ def fetch_twse_mis_taiex():
     ts = int(time.time() * 1000)
     try:
         twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
-        resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=2.5)
+        resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
         if resp.status_code == 200:
             msg_arr = resp.json().get("msgArray", [])
             if msg_arr:
@@ -566,12 +482,12 @@ def fetch_twse_mis_taiex():
 
 
 def fetch_taifex_futures_night():
-    """優先順序 2：台灣期交所 (TAIFEX) MIS 抓取台指期夜盤/盤後即時行情"""
+    """優先順序 2：台灣期交所 (TAIFEX) MIS 抓取台指期夜盤行情"""
     ts = int(time.time() * 1000)
     try:
         url = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
         payload = {"MarketType": "1", "SymbolType": "F"}
-        resp = requests.post(url, json=payload, headers=HTTP_HEADERS, timeout=2.5)
+        resp = requests.post(url, json=payload, headers=HTTP_HEADERS, timeout=3.0)
         if resp.status_code == 200:
             quotes = resp.json().get("rtData", {}).get("QuoteList", [])
             for q in quotes:
@@ -598,10 +514,11 @@ def fetch_taifex_futures_night():
 
 def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
     """優先順序 3：Yahoo 股市 API 直連端點"""
+    clean_symbol = symbol_encoded.replace("%5E", "^").replace("%26", "&").replace("%3D", "=")
     ts = int(time.time() * 1000)
-    url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
+    url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={clean_symbol}&_t={ts}"
     try:
-        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.0)
+        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
         if resp.status_code == 200:
             quote = resp.json().get("data", {}).get("quote", {})
             price = quote.get("price") or quote.get("regularMarketPrice")
@@ -618,7 +535,7 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
                 elif is_points:
                     fmt_val = f"{int(p_val):,}"
                     chg_str = f"{chg_val:+.0f} 點"
-                elif symbol_encoded in ["%5EVIX"]:
+                elif "VIX" in clean_symbol:
                     fmt_val = f"{p_val:.4f}"
                     chg_str = f"{pct_val:+.2f}%"
                 else:
@@ -637,27 +554,33 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
     return None
 
 
-def fetch_yfinance_fallback(symbol, is_yield=False):
-    """優先順序 4：yfinance Python 官方套件備援"""
+def fetch_yfinance_fallback(symbol, is_yield=False, is_points=False):
+    """優先順序 4：yfinance history 穩健備援 (修復指數標的無法使用 fast_info 之 Bug)"""
     try:
         ticker = yf.Ticker(symbol)
-        df = ticker.history(period="5d").dropna(subset=["Close"])
-        if not df.empty and len(df) >= 1:
+        df = ticker.history(period="7d").dropna(subset=["Close"])
+        if not df.empty and len(df) >= 2:
             p_val = float(df["Close"].iloc[-1])
-            prev_val = float(df["Close"].iloc[-2]) if len(df) >= 2 else p_val
+            prev_val = float(df["Close"].iloc[-2])
             chg_val = p_val - prev_val
             pct_val = (chg_val / prev_val) * 100 if prev_val > 0 else 0.0
 
             if is_yield:
                 fmt_val = f"{p_val:.2f}%"
+                chg_str = f"{pct_val:+.2f}%"
+            elif is_points:
+                fmt_val = f"{int(p_val):,}"
+                chg_str = f"{chg_val:+.0f} 點"
             elif symbol in ["^VIX"]:
                 fmt_val = f"{p_val:.4f}"
+                chg_str = f"{pct_val:+.2f}%"
             else:
                 fmt_val = f"{p_val:,.2f}".replace(".00", "")
+                chg_str = f"{pct_val:+.2f}%"
 
             return {
                 "val": fmt_val,
-                "change": f"{pct_val:+.2f}%",
+                "change": chg_str,
                 "change_num": round(chg_val, 2),
                 "pct": round(pct_val, 2),
                 "raw_close": p_val
@@ -669,28 +592,24 @@ def fetch_yfinance_fallback(symbol, is_yield=False):
 
 def get_macro_item_with_pipeline(name, twse_code=None, taifex_type=None, yahoo_symbol=None, is_yield=False, is_points=False):
     """依據『1.證交所 MIS -> 2.期交所 API -> 3.Yahoo API -> 4.yfinance』順序自動備援擷取"""
-    # 1. 證交所 MIS
     if twse_code:
         res = fetch_twse_mis_taiex()
         if res:
             return res
 
-    # 2. 期交所 API
     if taifex_type:
         res = fetch_taifex_futures_night()
         if res:
             return res
 
-    # 3. Yahoo API
     if yahoo_symbol:
         res = fetch_yahoo_api_quote(yahoo_symbol, is_yield=is_yield, is_points=is_points)
         if res:
             return res
 
-    # 4. yfinance 備援
     if yahoo_symbol:
-        sym_clean = yahoo_symbol.replace("%5E", "^").replace("%26", "&")
-        res = fetch_yfinance_fallback(sym_clean, is_yield=is_yield)
+        sym_clean = yahoo_symbol.replace("%5E", "^").replace("%26", "&").replace("%3D", "=")
+        res = fetch_yfinance_fallback(sym_clean, is_yield=is_yield, is_points=is_points)
         if res:
             return res
 
@@ -702,10 +621,10 @@ def force_refresh_all_macro_data():
     st.cache_data.clear()
     new_cache = {}
 
-    # 1. 台股加權 (證交所 MIS -> Yahoo API)
+    # 1. 台股加權
     new_cache["台股加權"] = get_macro_item_with_pipeline("台股加權", twse_code="tse_t00.tw", yahoo_symbol="%5ETWII")
 
-    # 2. 台指期夜盤 (期交所 API -> Yahoo API)
+    # 2. 台指期夜盤
     new_cache["台指期夜盤"] = get_macro_item_with_pipeline("台指期夜盤", taifex_type="TX", yahoo_symbol="%5ETW%26", is_points=True)
 
     # 3. 日經 225 N225
@@ -2417,8 +2336,8 @@ with card_cols[0]:
     item_taiex = macro_data.get("台股加權", {})
     st.metric(
         label="台股加權",
-        value=item_taiex.get("val", "46,041.43"),
-        delta=item_taiex.get("change", "-1.81%"),
+        value=item_taiex.get("val", "更新中"),
+        delta=item_taiex.get("change", "0.00%"),
         delta_color="inverse",
     )
 
@@ -2426,7 +2345,7 @@ with card_cols[1]:
     item_sox = macro_data.get("費城半導體 SOX", {})
     st.metric(
         label="費城半導體",
-        value=item_sox.get("val", "N/A"),
+        value=item_sox.get("val", "更新中"),
         delta=item_sox.get("change", "0.00%"),
         delta_color="inverse",
     )
@@ -2435,7 +2354,7 @@ with card_cols[2]:
     item_10y = macro_data.get("美債 10Y 殖利率", {})
     st.metric(
         label="美債 10Y",
-        value=item_10y.get("val", "N/A"),
+        value=item_10y.get("val", "更新中"),
         delta=item_10y.get("change", "0.00%"),
         delta_color="inverse",
     )
@@ -2444,7 +2363,7 @@ with card_cols[3]:
     item_vix = macro_data.get("恐慌指數 VIX", {})
     st.metric(
         label="恐慌 VIX",
-        value=item_vix.get("val", "N/A"),
+        value=item_vix.get("val", "更新中"),
         delta=item_vix.get("change", "0.00%"),
         delta_color="inverse",
     )
@@ -2460,16 +2379,16 @@ with expander_cols[0]:
             item_night = macro_data.get("台指期夜盤", {})
             st.metric(
                 label="台指期夜盤",
-                value=item_night.get("val", "47,482"),
-                delta=item_night.get("change", "+469 點"),
+                value=item_night.get("val", "更新中"),
+                delta=item_night.get("change", "0 點"),
                 delta_color="inverse",
             )
         with col_a2:
             item_nikkei = macro_data.get("日經 225 N225", {})
             st.metric(
                 label="日經 225",
-                value=item_nikkei.get("val", "62,907.84"),
-                delta=item_nikkei.get("change", "-2.65%"),
+                value=item_nikkei.get("val", "更新中"),
+                delta=item_nikkei.get("change", "0.00%"),
                 delta_color="inverse",
             )
 
@@ -2480,14 +2399,14 @@ with expander_cols[1]:
             item_dji = macro_data.get("道瓊工業 DJI", {})
             st.metric(
                 label="道瓊 DJI",
-                value=item_dji.get("val", "N/A"),
+                value=item_dji.get("val", "更新中"),
                 delta=item_dji.get("change", "0.00%"),
                 delta_color="inverse",
             )
             item_sp = macro_data.get("標普 500 S&P500", {})
             st.metric(
                 label="標普 500",
-                value=item_sp.get("val", "N/A"),
+                value=item_sp.get("val", "更新中"),
                 delta=item_sp.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2495,14 +2414,14 @@ with expander_cols[1]:
             item_nas = macro_data.get("那斯達克 NASDAQ", {})
             st.metric(
                 label="那斯達克",
-                value=item_nas.get("val", "N/A"),
+                value=item_nas.get("val", "更新中"),
                 delta=item_nas.get("change", "0.00%"),
                 delta_color="inverse",
             )
             item_rut = macro_data.get("羅素 2000 RUT", {})
             st.metric(
                 label="羅素 2000",
-                value=item_rut.get("val", "N/A"),
+                value=item_rut.get("val", "更新中"),
                 delta=item_rut.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2514,7 +2433,7 @@ with expander_cols[2]:
             item_irx = macro_data.get("美聯儲 13W 短貼率", {})
             st.metric(
                 label="美聯儲 13W",
-                value=item_irx.get("val", "N/A"),
+                value=item_irx.get("val", "更新中"),
                 delta=item_irx.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2522,7 +2441,7 @@ with expander_cols[2]:
             item_dxy = macro_data.get("美元指數 DXY", {})
             st.metric(
                 label="美元 DXY",
-                value=item_dxy.get("val", "N/A"),
+                value=item_dxy.get("val", "更新中"),
                 delta=item_dxy.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2534,7 +2453,7 @@ with expander_cols[3]:
             item_wti = macro_data.get("WTI 原油", {})
             st.metric(
                 label="WTI 原油",
-                value=item_wti.get("val", "N/A"),
+                value=item_wti.get("val", "更新中"),
                 delta=item_wti.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2542,7 +2461,7 @@ with expander_cols[3]:
             item_gold = macro_data.get("黃金現貨 Gold", {})
             st.metric(
                 label="黃金 Gold",
-                value=item_gold.get("val", "N/A"),
+                value=item_gold.get("val", "更新中"),
                 delta=item_gold.get("change", "0.00%"),
                 delta_color="inverse",
             )
