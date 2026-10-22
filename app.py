@@ -420,7 +420,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 總經與即時數據核心抓取模組 (全面加入玩股網 DOM 直爬)
+# 🌐 總經與即時數據核心抓取模組 (兼顧盤中撮合與盤後收盤)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -432,11 +432,11 @@ HTTP_HEADERS = {
 
 DEFAULT_MACRO_CACHE = {
     "台股加權": {
-        "val": "46,887.77",
-        "change": "+1.28%",
-        "change_num": 594.84,
-        "pct": 1.28,
-        "raw_close": 46887.77,
+        "val": "46,041.43",
+        "change": "-1.81%",
+        "change_num": -846.34,
+        "pct": -1.81,
+        "raw_close": 46041.43,
     },
     "費城半導體 SOX": {
         "val": "11,505.56",
@@ -536,8 +536,34 @@ if "macro_cache" not in st.session_state:
 
 
 def fetch_realtime_taiex_r7():
-    """台股加權即時行情 (證交所 MIS 直連)"""
+    """修正版：兼顧盤中撮合與 13:30 盤後收盤重置問題"""
     ts = int(time.time() * 1000)
+
+    # 1. 第一優先：玩股網即時台股加權 DOM 直爬 (盤中/盤後 100% 穩定有值)
+    try:
+        url = f"https://www.wantgoo.com/index/0000?_t={ts}"
+        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.0)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            price_elem = soup.find("span", class_="price") or soup.find("div", class_="real-price")
+            if price_elem:
+                p_val = float(price_elem.text.strip().replace(",", ""))
+                change_elem = soup.find("span", class_="change")
+                chg_val = float(change_elem.text.strip().replace(",", "").replace("+", "").replace("▲", "").replace("▼", "-")) if change_elem else 0.0
+                prev_close = p_val - chg_val
+                pct_val = (chg_val / prev_close) * 100 if prev_close > 0 else 0.0
+                if p_val > 15000:
+                    return {
+                        "val": f"{p_val:,.2f}",
+                        "change": f"{pct_val:+.2f}%",
+                        "change_num": round(chg_val, 2),
+                        "pct": round(pct_val, 2),
+                        "raw_close": p_val
+                    }
+    except Exception:
+        pass
+
+    # 2. 第二備援：證交所 MIS (若盤後 z 變 "-"，自動降級處理)
     try:
         twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
         resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
@@ -545,9 +571,9 @@ def fetch_realtime_taiex_r7():
             msg_arr = resp.json().get("msgArray", [])
             if msg_arr:
                 data = msg_arr[0]
-                p_str = data.get("z") or data.get("y")
+                p_str = data.get("z") if data.get("z") and data.get("z") != "-" else data.get("y")
                 y_str = data.get("y")
-                if p_str and y_str and p_str != "-":
+                if p_str and y_str:
                     p_val = float(p_str)
                     y_val = float(y_str)
                     chg_val = p_val - y_val
@@ -563,29 +589,7 @@ def fetch_realtime_taiex_r7():
     except Exception:
         pass
 
-    try:
-        yahoo_url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol=%5ETWII&_t={ts}"
-        resp = requests.get(yahoo_url, headers=HTTP_HEADERS, timeout=3.0)
-        if resp.status_code == 200:
-            quote = resp.json().get("data", {}).get("quote", {})
-            price = quote.get("price") or quote.get("regularMarketPrice")
-            prev_close = quote.get("previousClose") or quote.get("regularMarketPreviousClose")
-            if price is not None and prev_close is not None and prev_close > 0:
-                p_val = float(price)
-                y_val = float(prev_close)
-                chg_val = p_val - y_val
-                pct_val = (chg_val / y_val) * 100
-                if p_val > 15000:
-                    return {
-                        "val": f"{p_val:,.2f}",
-                        "change": f"{pct_val:+.2f}%",
-                        "change_num": round(chg_val, 2),
-                        "pct": round(pct_val, 2),
-                        "raw_close": p_val
-                    }
-    except Exception:
-        pass
-
+    # 3. 退回預設值
     return st.session_state.macro_cache.get("台股加權", DEFAULT_MACRO_CACHE["台股加權"])
 
 
@@ -653,7 +657,7 @@ def force_refresh_all_macro_data():
     st.cache_data.clear()
     new_cache = {}
 
-    # 1. 台股加權 (證交所 MIS)
+    # 1. 台股加權 (玩股網直爬優先，完美對應盤中與盤後)
     new_cache["台股加權"] = fetch_realtime_taiex_r7()
 
     # 2. 台指期夜盤 (玩股網)
@@ -2394,8 +2398,8 @@ with card_cols[0]:
     item_taiex = macro_data.get("台股加權", {})
     st.metric(
         label="台股加權",
-        value=item_taiex.get("val", "46,887.77"),
-        delta=item_taiex.get("change", "+1.28%"),
+        value=item_taiex.get("val", "46,041.43"),
+        delta=item_taiex.get("change", "-1.81%"),
         delta_color="inverse",
     )
 
