@@ -525,37 +525,41 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """台指期夜盤強健抓取 (期交所 MIS API -> 備援 Yahoo 近月合約)"""
+    """台指期夜盤強健抓取 (自動相容 日盤/夜盤 頻道與 Yahoo 端點)"""
     ts = int(time.time() * 1000)
-    try:
-        url = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
-        payload = {"MarketType": "1", "SymbolType": "F"}
-        resp = requests.post(url, json=payload, headers=HTTP_HEADERS, timeout=3.0)
-        if resp.status_code == 200:
-            quotes = resp.json().get("rtData", {}).get("QuoteList", [])
-            for q in quotes:
-                symbol = q.get("SymbolID", "")
-                if symbol.startswith("TX") and not symbol.startswith("TXO"):
-                    p_str = q.get("CLastPrice") or q.get("CLastP")
-                    ref_str = q.get("CRefPrice")
-                    if p_str and ref_str and p_str != "-":
-                        p_val = float(p_str)
-                        ref_val = float(ref_str)
-                        chg_val = p_val - ref_val
-                        pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
-                        return {
-                            "val": f"{int(p_val):,}",
-                            "change": f"{chg_val:+.0f} 點",
-                            "change_num": round(chg_val, 1),
-                            "pct": round(pct_val, 2),
-                            "raw_close": p_val
-                        }
-    except Exception:
-        pass
+    url = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
+    
+    # 依次嘗試 MarketType: "1" (夜盤) 與 MarketType: "0" (日盤/結算盤)
+    for m_type in ["1", "0"]:
+        try:
+            payload = {"MarketType": m_type, "SymbolType": "F"}
+            resp = requests.post(url, json=payload, headers=HTTP_HEADERS, timeout=3.0)
+            if resp.status_code == 200:
+                quotes = resp.json().get("rtData", {}).get("QuoteList", [])
+                for q in quotes:
+                    symbol = q.get("SymbolID", "")
+                    # 匹配台指期近月合約 (如 TX10)
+                    if symbol.startswith("TX") and not symbol.startswith("TXO"):
+                        p_str = q.get("CLastPrice") or q.get("CLastP") or q.get("CRefPrice")
+                        ref_str = q.get("CRefPrice")
+                        if p_str and ref_str and p_str != "-":
+                            p_val = float(p_str)
+                            ref_val = float(ref_str)
+                            chg_val = p_val - ref_val
+                            pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
+                            return {
+                                "val": f"{int(p_val):,}",
+                                "change": f"{chg_val:+.0f} 點",
+                                "change_num": round(chg_val, 1),
+                                "pct": round(pct_val, 2),
+                                "raw_close": p_val
+                            }
+        except Exception:
+            pass
 
-    # 備援 B：近月夜盤代碼
-    for sym in ["WTX&", "WTX", "^TW&"]:
-        res = fetch_symbol_bulletproof(sym, is_points=True)
+    # 第三層備援：透過 Yahoo 股市直連 API 端點 (包含近月期貨%5ETW%26)
+    for sym in ["%5ETW%26", "WTX%26"]:
+        res = fetch_yahoo_api_quote(sym, is_points=True) if "fetch_yahoo_api_quote" in globals() else None
         if res:
             return res
 
