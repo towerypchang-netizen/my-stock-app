@@ -104,14 +104,14 @@ st.markdown(
 
     [data-testid="stExpander"] [data-testid="stMetricLabel"] p,
     [data-testid="stExpander"] [data-testid="stMetricLabel"] {
-        font-size: 0.78rem !important;
-        font-weight: 500 !important;
+        font-size: 0.75rem !important;
+        font-weight: 600 !important;
     }
 
     [data-testid="stExpander"] [data-testid="stMetricValue"] > div,
     [data-testid="stExpander"] [data-testid="stMetricValue"] {
-        font-size: 1.0m !important;
-        font-weight: 600 !important;
+        font-size: 0.92rem !important;
+        font-weight: 700 !important;
     }
 
     [data-testid="stExpander"] [data-testid="stMetricDelta"] {
