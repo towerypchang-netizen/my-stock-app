@@ -420,7 +420,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 總經與即時數據核心抓取模組 (全新日經 225 雙重精準抓取)
+# 🌐 全球總經與資金流數據核心抓取模組 (四級備援：證交所/期交所/Yahoo API/yfinance)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -535,36 +535,12 @@ if "macro_cache" not in st.session_state:
     st.session_state.macro_cache = DEFAULT_MACRO_CACHE
 
 
-def fetch_realtime_taiex_r7():
-    """台股加權即時行情 (玩股網 + 證交所 MIS 雙重備援)"""
+def fetch_twse_mis_taiex():
+    """優先順序 1：證交所 MIS 官方 API 抓取台股加權指數"""
     ts = int(time.time() * 1000)
-
-    try:
-        url = f"https://www.wantgoo.com/index/0000?_t={ts}"
-        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.0)
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            price_elem = soup.find("span", class_="price") or soup.find("div", class_="real-price")
-            if price_elem:
-                p_val = float(price_elem.text.strip().replace(",", ""))
-                change_elem = soup.find("span", class_="change")
-                chg_val = float(change_elem.text.strip().replace(",", "").replace("+", "").replace("▲", "").replace("▼", "-")) if change_elem else 0.0
-                prev_close = p_val - chg_val
-                pct_val = (chg_val / prev_close) * 100 if prev_close > 0 else 0.0
-                if p_val > 15000:
-                    return {
-                        "val": f"{p_val:,.2f}",
-                        "change": f"{pct_val:+.2f}%",
-                        "change_num": round(chg_val, 2),
-                        "pct": round(pct_val, 2),
-                        "raw_close": p_val
-                    }
-    except Exception:
-        pass
-
     try:
         twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
-        resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
+        resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=2.5)
         if resp.status_code == 200:
             msg_arr = resp.json().get("msgArray", [])
             if msg_arr:
@@ -576,7 +552,7 @@ def fetch_realtime_taiex_r7():
                     y_val = float(y_str)
                     chg_val = p_val - y_val
                     pct_val = (chg_val / y_val) * 100 if y_val > 0 else 0.0
-                    if p_val > 15000:
+                    if p_val > 10000:
                         return {
                             "val": f"{p_val:,.2f}",
                             "change": f"{pct_val:+.2f}%",
@@ -586,18 +562,46 @@ def fetch_realtime_taiex_r7():
                         }
     except Exception:
         pass
+    return None
 
-    return st.session_state.macro_cache.get("台股加權", DEFAULT_MACRO_CACHE["台股加權"])
 
-
-def fetch_nikkei225_realtime():
-    """日經 225 專用抓取 (第一優先：Yahoo 股市 API，第二備援：玩股網)"""
+def fetch_taifex_futures_night():
+    """優先順序 2：台灣期交所 (TAIFEX) MIS 抓取台指期夜盤/盤後即時行情"""
     ts = int(time.time() * 1000)
-    
-    # 1. 第一優先：Yahoo 股市 API (%5EN225) 盤後收盤價即時精準同步
     try:
-        url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol=%5EN225&_t={ts}"
-        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
+        url = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
+        payload = {"MarketType": "1", "SymbolType": "F"}
+        resp = requests.post(url, json=payload, headers=HTTP_HEADERS, timeout=2.5)
+        if resp.status_code == 200:
+            quotes = resp.json().get("rtData", {}).get("QuoteList", [])
+            for q in quotes:
+                symbol = q.get("SymbolID", "")
+                if symbol.startswith("TX") and not symbol.startswith("TXO"):
+                    p_str = q.get("CLastPrice") or q.get("CLastP") or q.get("CRefPrice")
+                    ref_str = q.get("CRefPrice")
+                    if p_str and ref_str and p_str != "-":
+                        p_val = float(p_str)
+                        ref_val = float(ref_str)
+                        chg_val = p_val - ref_val
+                        pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
+                        return {
+                            "val": f"{int(p_val):,}",
+                            "change": f"{chg_val:+.0f} 點",
+                            "change_num": round(chg_val, 1),
+                            "pct": round(pct_val, 2),
+                            "raw_close": p_val
+                        }
+    except Exception:
+        pass
+    return None
+
+
+def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
+    """優先順序 3：Yahoo 股市 API 直連端點"""
+    ts = int(time.time() * 1000)
+    url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
+    try:
+        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.0)
         if resp.status_code == 200:
             quote = resp.json().get("data", {}).get("quote", {})
             price = quote.get("price") or quote.get("regularMarketPrice")
@@ -607,158 +611,138 @@ def fetch_nikkei225_realtime():
                 prev_val = float(prev_close)
                 chg_val = p_val - prev_val
                 pct_val = (chg_val / prev_val) * 100
+
+                if is_yield:
+                    fmt_val = f"{p_val:.2f}%"
+                    chg_str = f"{pct_val:+.2f}%"
+                elif is_points:
+                    fmt_val = f"{int(p_val):,}"
+                    chg_str = f"{chg_val:+.0f} 點"
+                elif symbol_encoded in ["%5EVIX"]:
+                    fmt_val = f"{p_val:.4f}"
+                    chg_str = f"{pct_val:+.2f}%"
+                else:
+                    fmt_val = f"{p_val:,.2f}".replace(".00", "")
+                    chg_str = f"{pct_val:+.2f}%"
+
                 return {
-                    "val": f"{p_val:,.2f}",
-                    "change": f"{pct_val:+.2f}%",
+                    "val": fmt_val,
+                    "change": chg_str,
                     "change_num": round(chg_val, 2),
                     "pct": round(pct_val, 2),
                     "raw_close": p_val
                 }
     except Exception:
         pass
-
-    # 2. 第二備援：玩股網直爬
-    res = fetch_wantgoo_realtime_item("global/index/nky")
-    if res:
-        return res
-
     return None
 
 
-def fetch_wantgoo_realtime_item(url_path, is_yield=False):
-    """直爬玩股網通用函式 (支援美債、黃金、原油、美元指數)"""
-    ts = int(time.time() * 1000)
+def fetch_yfinance_fallback(symbol, is_yield=False):
+    """優先順序 4：yfinance Python 官方套件備援"""
     try:
-        url = f"https://www.wantgoo.com/{url_path}?_t={ts}"
-        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            price_elem = soup.find("span", class_="price") or soup.find("div", class_="real-price")
-            if price_elem:
-                p_val = float(price_elem.text.strip().replace(",", ""))
-                change_elem = soup.find("span", class_="change")
-                chg_val = float(change_elem.text.strip().replace(",", "").replace("+", "").replace("▲", "").replace("▼", "-")) if change_elem else 0.0
-                prev_close = p_val - chg_val
-                pct_val = (chg_val / prev_close) * 100 if prev_close > 0 else 0.0
-                
-                if is_yield:
-                    return {
-                        "val": f"{p_val:.2f}%",
-                        "change": f"{pct_val:+.2f}%",
-                        "change_num": round(chg_val, 2),
-                        "pct": round(pct_val, 2),
-                        "raw_close": p_val
-                    }
-                else:
-                    fmt_val = f"{p_val:,.2f}".replace(".00", "")
-                    return {
-                        "val": fmt_val,
-                        "change": f"{pct_val:+.2f}%",
-                        "change_num": round(chg_val, 2),
-                        "pct": round(pct_val, 2),
-                        "raw_close": p_val
-                    }
-    except Exception:
-        pass
-    return None
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period="5d").dropna(subset=["Close"])
+        if not df.empty and len(df) >= 1:
+            p_val = float(df["Close"].iloc[-1])
+            prev_val = float(df["Close"].iloc[-2]) if len(df) >= 2 else p_val
+            chg_val = p_val - prev_val
+            pct_val = (chg_val / prev_val) * 100 if prev_val > 0 else 0.0
 
-
-def fetch_tw_yahoo_web_quote_r7(symbol_encoded):
-    """一般 Yahoo 行情抓取 (美股四大指數)"""
-    ts = int(time.time() * 1000)
-    url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
-    try:
-        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
-        if resp.status_code == 200:
-            quote = resp.json().get("data", {}).get("quote", {})
-            price = quote.get("price") or quote.get("regularMarketPrice")
-            prev_close = quote.get("previousClose") or quote.get("regularMarketPreviousClose")
-            if price is not None and prev_close is not None and prev_close > 0:
-                p_val = float(price)
-                prev_val = float(prev_close)
-                chg_val = p_val - prev_val
-                pct_val = (chg_val / prev_val) * 100
-                return {"price": p_val, "prev_close": prev_val, "change": chg_val, "pct": pct_val}
-    except Exception:
-        pass
-    return None
-
-
-def force_refresh_all_macro_data():
-    """按下『AI 執行最新情報分析』時觸發，全量對外直抓刷新"""
-    st.cache_data.clear()
-    new_cache = {}
-
-    # 1. 台股加權 (玩股網直爬優先)
-    new_cache["台股加權"] = fetch_realtime_taiex_r7()
-
-    # 2. 台指期夜盤 (玩股網直爬)
-    night_res = fetch_wantgoo_realtime_item("investor/futures/wtxp%26")
-    if night_res:
-        new_cache["台指期夜盤"] = {
-            "val": night_res["val"].split(".")[0],
-            "change": f"{night_res['change_num']:+.0f} 點",
-            "change_num": night_res["change_num"],
-            "pct": night_res["pct"],
-            "raw_close": night_res["raw_close"]
-        }
-    else:
-        new_cache["台指期夜盤"] = st.session_state.macro_cache.get("台指期夜盤", DEFAULT_MACRO_CACHE["台指期夜盤"])
-
-    # 3. 日經 225 (全新 Yahoo API 專屬直連，完美取得 14:45 正式收盤價)
-    nikkei_res = fetch_nikkei225_realtime()
-    new_cache["日經 225 N225"] = nikkei_res if nikkei_res else st.session_state.macro_cache.get("日經 225 N225", DEFAULT_MACRO_CACHE["日經 225 N225"])
-
-    # 4. 美債 10Y 殖利率 (玩股網直爬)
-    us10y_res = fetch_wantgoo_realtime_item("global/index/us10-yr", is_yield=True)
-    new_cache["美債 10Y 殖利率"] = us10y_res if us10y_res else st.session_state.macro_cache.get("美債 10Y 殖利率", DEFAULT_MACRO_CACHE["美債 10Y 殖利率"])
-
-    # 5. 美元指數 DXY (玩股網直爬)
-    dxy_res = fetch_wantgoo_realtime_item("global/index/dxy")
-    new_cache["美元指數 DXY"] = dxy_res if dxy_res else st.session_state.macro_cache.get("美元指數 DXY", DEFAULT_MACRO_CACHE["美元指數 DXY"])
-
-    # 6. WTI 原油 (玩股網直爬)
-    oil_res = fetch_wantgoo_realtime_item("global/index/oil")
-    new_cache["WTI 原油"] = oil_res if oil_res else st.session_state.macro_cache.get("WTI 原油", DEFAULT_MACRO_CACHE["WTI 原油"])
-
-    # 7. 黃金現貨 Gold (玩股網直爬)
-    gold_res = fetch_wantgoo_realtime_item("global/index/gold")
-    new_cache["黃金現貨 Gold"] = gold_res if gold_res else st.session_state.macro_cache.get("黃金現貨 Gold", DEFAULT_MACRO_CACHE["黃金現貨 Gold"])
-
-    # 8. 其餘美股與恐慌指數 (Yahoo 端點)
-    symbol_map = {
-        "費城半導體 SOX": "%5ESOX",
-        "道瓊工業 DJI": "%5EDJI",
-        "標普 500 S&P500": "%5EGSPC",
-        "那斯達克 NASDAQ": "%5EIXIC",
-        "羅素 2000 RUT": "%5ERUT",
-        "美聯儲 13W 短貼率": "%5EIRX",
-        "恐慌指數 VIX": "%5EVIX"
-    }
-
-    for name, sym_encoded in symbol_map.items():
-        data = fetch_tw_yahoo_web_quote_r7(sym_encoded)
-
-        if data:
-            p_val = data["price"]
-            pct_val = data["pct"]
-            chg_val = data["change"]
-
-            unit = "%" if sym_encoded in ["%5EIRX"] else ""
-            if name == "恐慌指數 VIX":
+            if is_yield:
+                fmt_val = f"{p_val:.2f}%"
+            elif symbol in ["^VIX"]:
                 fmt_val = f"{p_val:.4f}"
             else:
-                fmt_val = f"{p_val:.2f}{unit}" if p_val < 1000 else f"{p_val:,.2f}{unit}".replace(".00", "")
+                fmt_val = f"{p_val:,.2f}".replace(".00", "")
 
-            new_cache[name] = {
+            return {
                 "val": fmt_val,
                 "change": f"{pct_val:+.2f}%",
                 "change_num": round(chg_val, 2),
                 "pct": round(pct_val, 2),
                 "raw_close": p_val
             }
-        else:
-            new_cache[name] = st.session_state.macro_cache.get(name, DEFAULT_MACRO_CACHE.get(name))
+    except Exception:
+        pass
+    return None
+
+
+def get_macro_item_with_pipeline(name, twse_code=None, taifex_type=None, yahoo_symbol=None, is_yield=False, is_points=False):
+    """依據『1.證交所 MIS -> 2.期交所 API -> 3.Yahoo API -> 4.yfinance』順序自動備援擷取"""
+    # 1. 證交所 MIS
+    if twse_code:
+        res = fetch_twse_mis_taiex()
+        if res:
+            return res
+
+    # 2. 期交所 API
+    if taifex_type:
+        res = fetch_taifex_futures_night()
+        if res:
+            return res
+
+    # 3. Yahoo API
+    if yahoo_symbol:
+        res = fetch_yahoo_api_quote(yahoo_symbol, is_yield=is_yield, is_points=is_points)
+        if res:
+            return res
+
+    # 4. yfinance 備援
+    if yahoo_symbol:
+        sym_clean = yahoo_symbol.replace("%5E", "^").replace("%26", "&")
+        res = fetch_yfinance_fallback(sym_clean, is_yield=is_yield)
+        if res:
+            return res
+
+    return st.session_state.macro_cache.get(name, DEFAULT_MACRO_CACHE.get(name))
+
+
+def force_refresh_all_macro_data():
+    """全量對外直抓刷新 14 項指標"""
+    st.cache_data.clear()
+    new_cache = {}
+
+    # 1. 台股加權 (證交所 MIS -> Yahoo API)
+    new_cache["台股加權"] = get_macro_item_with_pipeline("台股加權", twse_code="tse_t00.tw", yahoo_symbol="%5ETWII")
+
+    # 2. 台指期夜盤 (期交所 API -> Yahoo API)
+    new_cache["台指期夜盤"] = get_macro_item_with_pipeline("台指期夜盤", taifex_type="TX", yahoo_symbol="%5ETW%26", is_points=True)
+
+    # 3. 日經 225 N225
+    new_cache["日經 225 N225"] = get_macro_item_with_pipeline("日經 225 N225", yahoo_symbol="%5EN225")
+
+    # 4. 費城半導體 SOX
+    new_cache["費城半導體 SOX"] = get_macro_item_with_pipeline("費城半導體 SOX", yahoo_symbol="%5ESOX")
+
+    # 5. 美債 10Y 殖利率
+    new_cache["美債 10Y 殖利率"] = get_macro_item_with_pipeline("美債 10Y 殖利率", yahoo_symbol="%5ETNX", is_yield=True)
+
+    # 6. 恐慌指數 VIX
+    new_cache["恐慌指數 VIX"] = get_macro_item_with_pipeline("恐慌指數 VIX", yahoo_symbol="%5EVIX")
+
+    # 7. 道瓊工業 DJI
+    new_cache["道瓊工業 DJI"] = get_macro_item_with_pipeline("道瓊工業 DJI", yahoo_symbol="%5EDJI")
+
+    # 8. 那斯達克 NASDAQ
+    new_cache["那斯達克 NASDAQ"] = get_macro_item_with_pipeline("那斯達克 NASDAQ", yahoo_symbol="%5EIXIC")
+
+    # 9. 標普 500 S&P500
+    new_cache["標普 500 S&P500"] = get_macro_item_with_pipeline("標普 500 S&P500", yahoo_symbol="%5EGSPC")
+
+    # 10. 羅素 2000 RUT
+    new_cache["羅素 2000 RUT"] = get_macro_item_with_pipeline("羅素 2000 RUT", yahoo_symbol="%5ERUT")
+
+    # 11. 美聯儲 13W 短貼率
+    new_cache["美聯儲 13W 短貼率"] = get_macro_item_with_pipeline("美聯儲 13W 短貼率", yahoo_symbol="%5EIRX", is_yield=True)
+
+    # 12. 美元指數 DXY
+    new_cache["美元指數 DXY"] = get_macro_item_with_pipeline("美元指數 DXY", yahoo_symbol="DX-Y.NYB")
+
+    # 13. WTI 原油
+    new_cache["WTI 原油"] = get_macro_item_with_pipeline("WTI 原油", yahoo_symbol="CL%3DF")
+
+    # 14. 黃金現貨 Gold
+    new_cache["黃金現貨 Gold"] = get_macro_item_with_pipeline("黃金現貨 Gold", yahoo_symbol="GC%3DF")
 
     st.session_state.macro_cache = new_cache
     return new_cache
@@ -2248,7 +2232,7 @@ st.sidebar.markdown(
     f"""
     <div style="font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; line-height: 1.8;">
         市場看板基準日期
-        <span style="font-size: 0.75rem; color: #a0a0a0; font-weight: normal; margin-left: 4px;">(資料來源: Yahoo Finance / WantGoo)</span>
+        <span style="font-size: 0.75rem; color: #a0a0a0; font-weight: normal; margin-left: 4px;">(資料來源: 證交所 / 期交所 / Yahoo)</span>
         <span style="background-color: #262730; border: 1px solid #464b5d; border-radius: 4px; padding: 2px 8px; color: #ff4d4f; font-weight: bold; margin-left: 8px;">{display_date_str}</span>
     </div>
     """,
@@ -2422,7 +2406,7 @@ btn_analyze_stock = st.sidebar.button(
 # 📈 全球總經資金流指標看板 (頂部黃框 + 抽屜區域)
 # ==============================================================================
 st.caption(
-    "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | 玩股網 (WantGoo)"
+    "限定資料來源: 台灣證券交易所 (TWSE) | 台灣期貨交易所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance"
 )
 
 # 頂部 4 大卡片
