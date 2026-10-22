@@ -420,7 +420,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 總經與即時數據核心抓取模組 (兼顧盤中撮合與盤後收盤)
+# 🌐 總經與即時數據核心抓取模組 (玩股網 WantGoo 全指標直連升級)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -523,11 +523,11 @@ DEFAULT_MACRO_CACHE = {
         "raw_close": 98.44,
     },
     "黃金現貨 Gold": {
-        "val": "4,134.00",
-        "change": "-0.21%",
-        "change_num": -8.70,
-        "pct": -0.21,
-        "raw_close": 4134.00,
+        "val": "4,070.02",
+        "change": "-1.34%",
+        "change_num": -55.48,
+        "pct": -1.34,
+        "raw_close": 4070.02,
     },
 }
 
@@ -536,10 +536,9 @@ if "macro_cache" not in st.session_state:
 
 
 def fetch_realtime_taiex_r7():
-    """修正版：兼顧盤中撮合與 13:30 盤後收盤重置問題"""
+    """台股加權即時行情 (玩股網 + 證交所 MIS 雙重備援)"""
     ts = int(time.time() * 1000)
 
-    # 1. 第一優先：玩股網即時台股加權 DOM 直爬 (盤中/盤後 100% 穩定有值)
     try:
         url = f"https://www.wantgoo.com/index/0000?_t={ts}"
         resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.0)
@@ -563,7 +562,6 @@ def fetch_realtime_taiex_r7():
     except Exception:
         pass
 
-    # 2. 第二備援：證交所 MIS (若盤後 z 變 "-"，自動降級處理)
     try:
         twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
         resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
@@ -589,12 +587,11 @@ def fetch_realtime_taiex_r7():
     except Exception:
         pass
 
-    # 3. 退回預設值
     return st.session_state.macro_cache.get("台股加權", DEFAULT_MACRO_CACHE["台股加權"])
 
 
 def fetch_wantgoo_realtime_item(url_path, is_yield=False):
-    """直爬玩股網解決日經與美債 10Y 靜態快照問題"""
+    """直爬玩股網通用函式 (支援日經、美債、黃金、原油、美元指數)"""
     ts = int(time.time() * 1000)
     try:
         url = f"https://www.wantgoo.com/{url_path}?_t={ts}"
@@ -632,7 +629,7 @@ def fetch_wantgoo_realtime_item(url_path, is_yield=False):
 
 
 def fetch_tw_yahoo_web_quote_r7(symbol_encoded):
-    """一般 Yahoo 行情抓取"""
+    """一般 Yahoo 行情抓取 (美股四大指數)"""
     ts = int(time.time() * 1000)
     url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
     try:
@@ -653,14 +650,14 @@ def fetch_tw_yahoo_web_quote_r7(symbol_encoded):
 
 
 def force_refresh_all_macro_data():
-    """按下『AI 執行最新情報分析』時觸發，全量對外直抓"""
+    """按下『AI 執行最新情報分析』時觸發，全量對外直抓刷新"""
     st.cache_data.clear()
     new_cache = {}
 
-    # 1. 台股加權 (玩股網直爬優先，完美對應盤中與盤後)
+    # 1. 台股加權 (玩股網直爬優先)
     new_cache["台股加權"] = fetch_realtime_taiex_r7()
 
-    # 2. 台指期夜盤 (玩股網)
+    # 2. 台指期夜盤 (玩股網直爬)
     night_res = fetch_wantgoo_realtime_item("investor/futures/wtxp%26")
     if night_res:
         new_cache["台指期夜盤"] = {
@@ -673,21 +670,27 @@ def force_refresh_all_macro_data():
     else:
         new_cache["台指期夜盤"] = st.session_state.macro_cache.get("台指期夜盤", DEFAULT_MACRO_CACHE["台指期夜盤"])
 
-    # 3. 日經 225 (直爬玩股網)
+    # 3. 日經 225 (玩股網直爬)
     nikkei_res = fetch_wantgoo_realtime_item("global/index/nky")
-    if nikkei_res:
-        new_cache["日經 225 N225"] = nikkei_res
-    else:
-        new_cache["日經 225 N225"] = st.session_state.macro_cache.get("日經 225 N225", DEFAULT_MACRO_CACHE["日經 225 N225"])
+    new_cache["日經 225 N225"] = nikkei_res if nikkei_res else st.session_state.macro_cache.get("日經 225 N225", DEFAULT_MACRO_CACHE["日經 225 N225"])
 
-    # 4. 美債 10Y 殖利率 (直爬玩股網)
+    # 4. 美債 10Y 殖利率 (玩股網直爬)
     us10y_res = fetch_wantgoo_realtime_item("global/index/us10-yr", is_yield=True)
-    if us10y_res:
-        new_cache["美債 10Y 殖利率"] = us10y_res
-    else:
-        new_cache["美債 10Y 殖利率"] = st.session_state.macro_cache.get("美債 10Y 殖利率", DEFAULT_MACRO_CACHE["美債 10Y 殖利率"])
+    new_cache["美債 10Y 殖利率"] = us10y_res if us10y_res else st.session_state.macro_cache.get("美債 10Y 殖利率", DEFAULT_MACRO_CACHE["美債 10Y 殖利率"])
 
-    # 5. 其餘美股與國際指標 (Yahoo 端點)
+    # 5. 美元指數 DXY (全面升級玩股網直爬)
+    dxy_res = fetch_wantgoo_realtime_item("global/index/dxy")
+    new_cache["美元指數 DXY"] = dxy_res if dxy_res else st.session_state.macro_cache.get("美元指數 DXY", DEFAULT_MACRO_CACHE["美元指數 DXY"])
+
+    # 6. WTI 原油 (全面升級玩股網直爬)
+    oil_res = fetch_wantgoo_realtime_item("global/index/oil")
+    new_cache["WTI 原油"] = oil_res if oil_res else st.session_state.macro_cache.get("WTI 原油", DEFAULT_MACRO_CACHE["WTI 原油"])
+
+    # 7. 黃金現貨 Gold (全面升級玩股網直爬)
+    gold_res = fetch_wantgoo_realtime_item("global/index/gold")
+    new_cache["黃金現貨 Gold"] = gold_res if gold_res else st.session_state.macro_cache.get("黃金現貨 Gold", DEFAULT_MACRO_CACHE["黃金現貨 Gold"])
+
+    # 8. 其餘美股與恐慌指數 (Yahoo 端點)
     symbol_map = {
         "費城半導體 SOX": "%5ESOX",
         "道瓊工業 DJI": "%5EDJI",
@@ -695,10 +698,7 @@ def force_refresh_all_macro_data():
         "那斯達克 NASDAQ": "%5EIXIC",
         "羅素 2000 RUT": "%5ERUT",
         "美聯儲 13W 短貼率": "%5EIRX",
-        "美元指數 DXY": "DX-Y.NYB",
-        "恐慌指數 VIX": "%5EVIX",
-        "WTI 原油": "CL%3DF",
-        "黃金現貨 Gold": "GC%3DF"
+        "恐慌指數 VIX": "%5EVIX"
     }
 
     for name, sym_encoded in symbol_map.items():
@@ -2213,7 +2213,7 @@ st.sidebar.markdown(
     f"""
     <div style="font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; line-height: 1.8;">
         市場看板基準日期
-        <span style="font-size: 0.75rem; color: #a0a0a0; font-weight: normal; margin-left: 4px;">(資料來源: Yahoo Finance)</span>
+        <span style="font-size: 0.75rem; color: #a0a0a0; font-weight: normal; margin-left: 4px;">(資料來源: Yahoo Finance / WantGoo)</span>
         <span style="background-color: #262730; border: 1px solid #464b5d; border-radius: 4px; padding: 2px 8px; color: #ff4d4f; font-weight: bold; margin-left: 8px;">{display_date_str}</span>
     </div>
     """,
@@ -2387,7 +2387,7 @@ btn_analyze_stock = st.sidebar.button(
 # 📈 全球總經資金流指標看板 (頂部黃框 + 抽屜區域)
 # ==============================================================================
 st.caption(
-    "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance"
+    "限定資料來源: 期交所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance | 玩股網 (WantGoo)"
 )
 
 # 頂部 4 大卡片
