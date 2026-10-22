@@ -422,7 +422,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 總經與即時數據核心抓取模組 (完全還原 R7.base 並針對夜盤修正)
+# 🌐 總經與即時數據核心抓取模組 (全面升級台股盤中即時 API)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -539,40 +539,68 @@ if "macro_cache" not in st.session_state:
 
 
 def fetch_realtime_taiex_r7():
-    """100% 還原 R7.base 原版嘉實/富邦直爬，台股精準對齊"""
+    """修正版：三層備援 (證交所 MIS 官方 API -> Yahoo 即時 API -> 舊備援)"""
+    ts = int(time.time() * 1000)
+
+    # 1. 優先方案：證交所官方 MIS 盤中毫秒級即時 API
     try:
-        url = "https://fubon-ebrokerdj.fbs.com.tw/z/zg/zg_E.djhtm"
-        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
+        twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
+        resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
         if resp.status_code == 200:
-            resp.encoding = "big5"
-            soup = BeautifulSoup(resp.text, "html.parser")
-            for r in soup.find_all("tr"):
-                if "加權" in r.text or "台股" in r.text:
-                    cols = [td.text.strip() for td in r.find_all("td")]
-                    if len(cols) >= 3:
-                        p_val = float(cols[1].replace(",", ""))
-                        chg_raw = cols[2].replace(",", "").replace("+", "").replace("▲", "").replace("▼", "-")
-                        chg_val = float(chg_raw)
-                        prev_close = p_val - chg_val
-                        pct_val = (chg_val / prev_close) * 100 if prev_close > 0 else 0.0
-                        if p_val > 15000:
-                            return {
-                                "val": f"{p_val:,.2f}",
-                                "change": f"{pct_val:+.2f}%",
-                                "change_num": round(chg_val, 2),
-                                "pct": round(pct_val, 2),
-                                "raw_close": p_val
-                            }
+            msg_arr = resp.json().get("msgArray", [])
+            if msg_arr:
+                data = msg_arr[0]
+                p_str = data.get("z") or data.get("y")  # z: 當前撮合價, y: 昨收價
+                y_str = data.get("y")                   # 昨收價
+                if p_str and y_str and p_str != "-":
+                    p_val = float(p_str)
+                    y_val = float(y_str)
+                    chg_val = p_val - y_val
+                    pct_val = (chg_val / y_val) * 100 if y_val > 0 else 0.0
+                    if p_val > 15000:
+                        return {
+                            "val": f"{p_val:,.2f}",
+                            "change": f"{pct_val:+.2f}%",
+                            "change_num": round(chg_val, 2),
+                            "pct": round(pct_val, 2),
+                            "raw_close": p_val
+                        }
     except Exception:
         pass
 
+    # 2. 第二備援：Yahoo 股市內部即時 API (破除快取)
+    try:
+        yahoo_url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol=%5ETWII&_t={ts}"
+        resp = requests.get(yahoo_url, headers=HTTP_HEADERS, timeout=3.0)
+        if resp.status_code == 200:
+            quote = resp.json().get("data", {}).get("quote", {})
+            price = quote.get("price") or quote.get("regularMarketPrice")
+            prev_close = quote.get("previousClose") or quote.get("regularMarketPreviousClose")
+            if price is not None and prev_close is not None and prev_close > 0:
+                p_val = float(price)
+                y_val = float(prev_close)
+                chg_val = p_val - y_val
+                pct_val = (chg_val / y_val) * 100
+                if p_val > 15000:
+                    return {
+                        "val": f"{p_val:,.2f}",
+                        "change": f"{pct_val:+.2f}%",
+                        "change_num": round(chg_val, 2),
+                        "pct": round(pct_val, 2),
+                        "raw_close": p_val
+                    }
+    except Exception:
+        pass
+
+    # 3. 退回快取
     return st.session_state.macro_cache.get("台股加權", DEFAULT_MACRO_CACHE["台股加權"])
 
 
 def fetch_realtime_night_futures_exact():
-    """修正夜盤專用：直爬玩股網對齊夜盤價格 (47,482)"""
+    """修正夜盤專用：直爬玩股網對齊夜盤價格"""
+    ts = int(time.time() * 1000)
     try:
-        url = "https://www.wantgoo.com/investor/futures/wtxp%26"
+        url = f"https://www.wantgoo.com/investor/futures/wtxp%26?_t={ts}"
         resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, "html.parser")
@@ -598,8 +626,9 @@ def fetch_realtime_night_futures_exact():
 
 
 def fetch_tw_yahoo_web_quote_r7(symbol_encoded):
-    """100% 還原 R7.base 原版抓取日經/美股/國際指標"""
-    url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}"
+    """100% 還原 R7.base 原版抓取日經/美股/國際指標 (加上破除 CDN 緩存的時間戳記)"""
+    ts = int(time.time() * 1000)
+    url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
     try:
         resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
         if resp.status_code == 200:
@@ -618,16 +647,17 @@ def fetch_tw_yahoo_web_quote_r7(symbol_encoded):
 
 
 def force_refresh_all_macro_data():
-    """只有在按下『AI 執行最新情報分析』按鈕時才會被觸發"""
+    """按下『AI 執行最新情報分析』按鈕時觸發：強制清快取並全量重新對外抓取」"""
+    st.cache_data.clear()  # 強制清空 Streamlit 快取，確保全新抓取
     new_cache = {}
 
-    # 1. 台股加權 (採用 R7.base 正確嘉實/富邦直爬)
+    # 1. 台股加權 (採用證交所 MIS 直連)
     new_cache["台股加權"] = fetch_realtime_taiex_r7()
 
     # 2. 台指期夜盤 (採用對齊玩股網)
     new_cache["台指期夜盤"] = fetch_realtime_night_futures_exact()
 
-    # 3. 日經、美股四大指數與國際指標 (採用 R7.base 原版 Yahoo 端點)
+    # 3. 日經、美股四大指數與國際指標 (採用帶有 Cache-Busting 的 Yahoo 端點)
     symbol_map = {
         "日經 225 N225": "%5EN225",
         "費城半導體 SOX": "%5ESOX",
@@ -927,11 +957,11 @@ def diagnose_premarket_intelligence(
 ):
     prompt_premarket = f"""
     請作為華爾街資深盤前情報官與台股策略總監，基準日期：{target_date_str}。
-    當前全球宏觀指標 (含美股四大指數、美聯儲13W短貼率、費半與羅素2000)：{macro_data}。
+    當前全球宏觀指標 (含台股加權、美股四大指數、美聯儲13W短貼率、費半與羅素2000)：{macro_data}。
     【台指期夜盤最即時數據】：收盤價 {night_fut_data['val']}，變動：{night_fut_data['change']}。
 
-    請針對昨夜美股四大指數（道瓊、標普500、那斯達克、羅素2000）、費半、台指期夜盤、日經225、美聯儲利率趨勢、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
-    若宏觀或台指期夜盤呈現顯著避險（如夜盤重挫、費半重挫或VIX暴漲），請於摘要中明確警示「高風險不宜盲目開倉」。
+    請針對當前台股加權、昨夜美股四大指數、費半、台指期夜盤、日經225、美聯儲利率趨勢、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
+    若台股大盤或台指期夜盤呈現顯著避險（如重挫、費半重挫或VIX暴漲），請於摘要中明確警示「高風險不宜盲目開倉」。
     請回傳 JSON 格式：
     {{
       "summary": "簡短 100 字盤前重點摘要...",
@@ -1536,7 +1566,7 @@ def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str):
 
 
 # ==============================================================================
-# 🚨 市場風控熔斷檢測機制 (結合台指期夜盤)
+# 🚨 市場風控熔斷檢測機制 (結合台股加權當前指數與台指期夜盤)
 # ==============================================================================
 def check_market_risk_regime(macro_data, night_fut_data):
     risk_score = 0
@@ -1548,11 +1578,20 @@ def check_market_risk_regime(macro_data, night_fut_data):
         except Exception:
             return 0.0
 
+    # 1. 台股加權大盤重挫檢測
+    taiex_data = macro_data.get("台股加權", {})
+    taiex_pct = taiex_data.get("pct", 0.0)
+    if taiex_pct < -1.0:
+        risk_score += 2
+        risk_reasons.append(f"台股大盤盤中急跌 ({taiex_data.get('change', '0%')})")
+
+    # 2. 台指期夜盤重挫檢測
     night_chg = night_fut_data.get("change_num", 0.0)
     if night_chg < -300:
         risk_score += 2
         risk_reasons.append(f"台指期夜盤重挫 ({night_fut_data['change']})")
 
+    # 3. 費半重挫檢測
     sox_chg = parse_change(
         macro_data.get("費城半導體 SOX", {}).get("change", "0")
     )
@@ -1560,15 +1599,11 @@ def check_market_risk_regime(macro_data, night_fut_data):
         risk_score += 1
         risk_reasons.append(f"費城半導體重挫 ({sox_chg:+.2f}%)")
 
+    # 4. VIX 暴漲檢測
     vix_chg = parse_change(macro_data.get("恐慌指數 VIX", {}).get("change", "0"))
     if vix_chg > 3.0:
         risk_score += 1
         risk_reasons.append(f"VIX 恐慌指數暴漲 ({vix_chg:+.2f}%)")
-
-    oil_chg = parse_change(macro_data.get("WTI 原油", {}).get("change", "0"))
-    if oil_chg > 2.0:
-        risk_score += 1
-        risk_reasons.append(f"WTI 原油急漲 ({oil_chg:+.2f}%)")
 
     if risk_score >= 2:
         return True, risk_reasons
@@ -1607,14 +1642,14 @@ def generate_daily_picks(
             "建議進場": "建議保持現金/觀望",
             "波段停利/防護提示": (
                 f"警示原因：{reason_str}。"
-                " 全球及台指夜盤 Risk-Off 避險情緒高漲，系統已自動啟動風控保護！"
+                " 全球及台股 Risk-Off 避險情緒高漲，系統已自動啟動風控保護！"
             ),
             "波段期間": "觀望",
         }]
 
     status_container.write(
-        "🟢 **[第一階段]** 宏觀與台指夜盤連動分析完成：夜盤收"
-        f" {night_fut_data['val']} ({night_fut_data['change']})，風控通過。"
+        "🟢 **[第一階段]** 宏觀與台股盤中/夜盤連動分析完成：台股"
+        f" {macro_data.get('台股加權', {}).get('val')} ({macro_data.get('台股加權', {}).get('change')})，風控通過。"
     )
 
     status_container.write(
@@ -1689,7 +1724,7 @@ def generate_daily_picks(
     價格條件：{price_limit_str}。
     族群條件：{sector_limit_str}。
     {master_prompt_str}
-    大盤環境 (含美股四大指數與總經)：{macro_data}
+    大盤環境 (含台股加權當前點位、美股四大指數與總經)：{macro_data}
     台指期夜盤狀況: {night_fut_data['val']} ({night_fut_data['change']})
     {premarket_focus_str}
     {premarket_avoid_str}
@@ -1699,7 +1734,7 @@ def generate_daily_picks(
 
     🧠【思維鏈 (Chain-of-Thought, CoT) 4 步驟強制推理】：
     請在輸出最終選股名單前，務必於大腦中嚴格執行以下 4 步推理步驟：
-    1. 【美股與夜盤對齊推理】：分析昨夜美股（費半/那指/羅素2000）與台指期夜盤對台股開盤的資金衝擊與多空傾向上向。
+    1. 【美股與台股大盤對齊推理】：分析當前台股加權、美股（費半/那指/羅素2000）與台指期夜盤對市場資金的衝擊與多空傾向上向。
     2. 【攻防產業輪動推理】：比對目前市場領漲與避險族群，確立今日最適合資金流入的強勢主流產業。
     3. 【個股籌碼與新聞背離診斷】：檢視候選股籌碼（三大法人/投信）是否鎖碼，並嚴格比對上述 24H 新聞包，凡有『降評/法說會變法會/經營權爭議/減資疑慮』者一律排除！
     4. 【勝率與風報比定錨】：綜合技術面（位在 5MA/20MA 上方）與大師條件，精準給予 68%-88% 上漲勝率評分。
@@ -2659,7 +2694,7 @@ is_danger, danger_reasons = check_market_risk_regime(
 )
 if is_danger:
     st.error(
-        "🚨 **【AI 市場風控熔斷機制啟動】全球市場與台指夜盤 Risk-Off"
+        "🚨 **【AI 市場風控熔斷機制啟動】全球市場與台股 Risk-Off"
         " 避險情緒高漲，今日不宜進行任何多頭買進操作！**\n\n"
         f"**觸發原因**：{' | '.join(danger_reasons)}\n\n"
         "**操盤紀律建議**：大盤系統性風險偏高，強行選股勝率極低！建議保持 100%"
