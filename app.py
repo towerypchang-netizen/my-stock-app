@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# 🎨 CSS 注入：簡化、精準，絕不影響抽屜選單
+# 🎨 CSS 注入
 # ---------------------------------------------------------
 st.markdown(
     """
@@ -85,7 +85,6 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    /* 頂部 4 大指標獨立特化 */
     .top-macro-card [data-testid="stMetricLabel"] p,
     .top-macro-card [data-testid="stMetricLabel"] {
         font-size: 1.05rem !important;
@@ -103,7 +102,6 @@ st.markdown(
         font-weight: 600 !important;
     }
 
-    /* 抽屜內部 Metric 強制還原小字體 */
     [data-testid="stExpander"] [data-testid="stMetricLabel"] p,
     [data-testid="stExpander"] [data-testid="stMetricLabel"] {
         font-size: 0.78rem !important;
@@ -422,7 +420,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 總經與即時數據核心抓取模組 (全面升級台股盤中即時 API)
+# 🌐 總經與即時數據核心抓取模組 (全面加入玩股網 DOM 直爬)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -432,7 +430,6 @@ HTTP_HEADERS = {
     )
 }
 
-# 進入系統預設數據 (進入 APP 時直接讀取此快取，完全不上網請求)
 DEFAULT_MACRO_CACHE = {
     "台股加權": {
         "val": "46,887.77",
@@ -449,11 +446,11 @@ DEFAULT_MACRO_CACHE = {
         "raw_close": 11505.56,
     },
     "美債 10Y 殖利率": {
-        "val": "5.15%",
-        "change": "+0.57%",
-        "change_num": 0.03,
-        "pct": 0.57,
-        "raw_close": 5.15,
+        "val": "5.09%",
+        "change": "-1.17%",
+        "change_num": -0.06,
+        "pct": -1.17,
+        "raw_close": 5.09,
     },
     "恐慌指數 VIX": {
         "val": "16.6800",
@@ -470,11 +467,11 @@ DEFAULT_MACRO_CACHE = {
         "raw_close": 47482.0,
     },
     "日經 225 N225": {
-        "val": "64,621.24",
-        "change": "+0.85%",
-        "change_num": 545.82,
-        "pct": 0.85,
-        "raw_close": 64621.24,
+        "val": "63,265.68",
+        "change": "-2.10%",
+        "change_num": -1355.56,
+        "pct": -2.10,
+        "raw_close": 63265.68,
     },
     "道瓊工業 DJI": {
         "val": "52,856.09",
@@ -539,10 +536,8 @@ if "macro_cache" not in st.session_state:
 
 
 def fetch_realtime_taiex_r7():
-    """修正版：三層備援 (證交所 MIS 官方 API -> Yahoo 即時 API -> 舊備援)"""
+    """台股加權即時行情 (證交所 MIS 直連)"""
     ts = int(time.time() * 1000)
-
-    # 1. 優先方案：證交所官方 MIS 盤中毫秒級即時 API
     try:
         twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
         resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
@@ -550,8 +545,8 @@ def fetch_realtime_taiex_r7():
             msg_arr = resp.json().get("msgArray", [])
             if msg_arr:
                 data = msg_arr[0]
-                p_str = data.get("z") or data.get("y")  # z: 當前撮合價, y: 昨收價
-                y_str = data.get("y")                   # 昨收價
+                p_str = data.get("z") or data.get("y")
+                y_str = data.get("y")
                 if p_str and y_str and p_str != "-":
                     p_val = float(p_str)
                     y_val = float(y_str)
@@ -568,7 +563,6 @@ def fetch_realtime_taiex_r7():
     except Exception:
         pass
 
-    # 2. 第二備援：Yahoo 股市內部即時 API (破除快取)
     try:
         yahoo_url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol=%5ETWII&_t={ts}"
         resp = requests.get(yahoo_url, headers=HTTP_HEADERS, timeout=3.0)
@@ -592,41 +586,49 @@ def fetch_realtime_taiex_r7():
     except Exception:
         pass
 
-    # 3. 退回快取
     return st.session_state.macro_cache.get("台股加權", DEFAULT_MACRO_CACHE["台股加權"])
 
 
-def fetch_realtime_night_futures_exact():
-    """修正夜盤專用：直爬玩股網對齊夜盤價格"""
+def fetch_wantgoo_realtime_item(url_path, is_yield=False):
+    """直爬玩股網解決日經與美債 10Y 靜態快照問題"""
     ts = int(time.time() * 1000)
     try:
-        url = f"https://www.wantgoo.com/investor/futures/wtxp%26?_t={ts}"
+        url = f"https://www.wantgoo.com/{url_path}?_t={ts}"
         resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.5)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, "html.parser")
             price_elem = soup.find("span", class_="price") or soup.find("div", class_="real-price")
             if price_elem:
-                price_val = float(price_elem.text.strip().replace(",", ""))
+                p_val = float(price_elem.text.strip().replace(",", ""))
                 change_elem = soup.find("span", class_="change")
                 chg_val = float(change_elem.text.strip().replace(",", "").replace("+", "").replace("▲", "").replace("▼", "-")) if change_elem else 0.0
-                prev_close = price_val - chg_val
+                prev_close = p_val - chg_val
                 pct_val = (chg_val / prev_close) * 100 if prev_close > 0 else 0.0
-                if price_val > 15000:
+                
+                if is_yield:
                     return {
-                        "val": f"{price_val:,.0f}",
-                        "change": f"{chg_val:+.0f} 點",
-                        "change_num": chg_val,
+                        "val": f"{p_val:.2f}%",
+                        "change": f"{pct_val:+.2f}%",
+                        "change_num": round(chg_val, 2),
                         "pct": round(pct_val, 2),
-                        "raw_close": price_val
+                        "raw_close": p_val
+                    }
+                else:
+                    fmt_val = f"{p_val:,.2f}".replace(".00", "")
+                    return {
+                        "val": fmt_val,
+                        "change": f"{pct_val:+.2f}%",
+                        "change_num": round(chg_val, 2),
+                        "pct": round(pct_val, 2),
+                        "raw_close": p_val
                     }
     except Exception:
         pass
-
-    return st.session_state.macro_cache.get("台指期夜盤", DEFAULT_MACRO_CACHE["台指期夜盤"])
+    return None
 
 
 def fetch_tw_yahoo_web_quote_r7(symbol_encoded):
-    """100% 還原 R7.base 原版抓取日經/美股/國際指標 (加上破除 CDN 緩存的時間戳記)"""
+    """一般 Yahoo 行情抓取"""
     ts = int(time.time() * 1000)
     url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
     try:
@@ -647,26 +649,48 @@ def fetch_tw_yahoo_web_quote_r7(symbol_encoded):
 
 
 def force_refresh_all_macro_data():
-    """按下『AI 執行最新情報分析』按鈕時觸發：強制清快取並全量重新對外抓取」"""
-    st.cache_data.clear()  # 強制清空 Streamlit 快取，確保全新抓取
+    """按下『AI 執行最新情報分析』時觸發，全量對外直抓"""
+    st.cache_data.clear()
     new_cache = {}
 
-    # 1. 台股加權 (採用證交所 MIS 直連)
+    # 1. 台股加權 (證交所 MIS)
     new_cache["台股加權"] = fetch_realtime_taiex_r7()
 
-    # 2. 台指期夜盤 (採用對齊玩股網)
-    new_cache["台指期夜盤"] = fetch_realtime_night_futures_exact()
+    # 2. 台指期夜盤 (玩股網)
+    night_res = fetch_wantgoo_realtime_item("investor/futures/wtxp%26")
+    if night_res:
+        new_cache["台指期夜盤"] = {
+            "val": night_res["val"].split(".")[0],
+            "change": f"{night_res['change_num']:+.0f} 點",
+            "change_num": night_res["change_num"],
+            "pct": night_res["pct"],
+            "raw_close": night_res["raw_close"]
+        }
+    else:
+        new_cache["台指期夜盤"] = st.session_state.macro_cache.get("台指期夜盤", DEFAULT_MACRO_CACHE["台指期夜盤"])
 
-    # 3. 日經、美股四大指數與國際指標 (採用帶有 Cache-Busting 的 Yahoo 端點)
+    # 3. 日經 225 (直爬玩股網)
+    nikkei_res = fetch_wantgoo_realtime_item("global/index/nky")
+    if nikkei_res:
+        new_cache["日經 225 N225"] = nikkei_res
+    else:
+        new_cache["日經 225 N225"] = st.session_state.macro_cache.get("日經 225 N225", DEFAULT_MACRO_CACHE["日經 225 N225"])
+
+    # 4. 美債 10Y 殖利率 (直爬玩股網)
+    us10y_res = fetch_wantgoo_realtime_item("global/index/us10-yr", is_yield=True)
+    if us10y_res:
+        new_cache["美債 10Y 殖利率"] = us10y_res
+    else:
+        new_cache["美債 10Y 殖利率"] = st.session_state.macro_cache.get("美債 10Y 殖利率", DEFAULT_MACRO_CACHE["美債 10Y 殖利率"])
+
+    # 5. 其餘美股與國際指標 (Yahoo 端點)
     symbol_map = {
-        "日經 225 N225": "%5EN225",
         "費城半導體 SOX": "%5ESOX",
         "道瓊工業 DJI": "%5EDJI",
         "標普 500 S&P500": "%5EGSPC",
         "那斯達克 NASDAQ": "%5EIXIC",
         "羅素 2000 RUT": "%5ERUT",
         "美聯儲 13W 短貼率": "%5EIRX",
-        "美債 10Y 殖利率": "%5ETNX",
         "美元指數 DXY": "DX-Y.NYB",
         "恐慌指數 VIX": "%5EVIX",
         "WTI 原油": "CL%3DF",
@@ -681,7 +705,7 @@ def force_refresh_all_macro_data():
             pct_val = data["pct"]
             chg_val = data["change"]
 
-            unit = "%" if sym_encoded in ["%5ETNX", "%5EIRX"] else ""
+            unit = "%" if sym_encoded in ["%5EIRX"] else ""
             if name == "恐慌指數 VIX":
                 fmt_val = f"{p_val:.4f}"
             else:
@@ -1566,7 +1590,7 @@ def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str):
 
 
 # ==============================================================================
-# 🚨 市場風控熔斷檢測機制 (結合台股加權當前指數與台指期夜盤)
+# 🚨 市場風控熔斷檢測機制
 # ==============================================================================
 def check_market_risk_regime(macro_data, night_fut_data):
     risk_score = 0
@@ -1578,20 +1602,17 @@ def check_market_risk_regime(macro_data, night_fut_data):
         except Exception:
             return 0.0
 
-    # 1. 台股加權大盤重挫檢測
     taiex_data = macro_data.get("台股加權", {})
     taiex_pct = taiex_data.get("pct", 0.0)
     if taiex_pct < -1.0:
         risk_score += 2
         risk_reasons.append(f"台股大盤盤中急跌 ({taiex_data.get('change', '0%')})")
 
-    # 2. 台指期夜盤重挫檢測
     night_chg = night_fut_data.get("change_num", 0.0)
     if night_chg < -300:
         risk_score += 2
         risk_reasons.append(f"台指期夜盤重挫 ({night_fut_data['change']})")
 
-    # 3. 費半重挫檢測
     sox_chg = parse_change(
         macro_data.get("費城半導體 SOX", {}).get("change", "0")
     )
@@ -1599,7 +1620,6 @@ def check_market_risk_regime(macro_data, night_fut_data):
         risk_score += 1
         risk_reasons.append(f"費城半導體重挫 ({sox_chg:+.2f}%)")
 
-    # 4. VIX 暴漲檢測
     vix_chg = parse_change(macro_data.get("恐慌指數 VIX", {}).get("change", "0"))
     if vix_chg > 3.0:
         risk_score += 1
@@ -2196,7 +2216,6 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 
-# 直接讀取快取 (開啟 APP 時零發送 Request，瞬間渲染)
 macro_data = st.session_state.macro_cache
 night_fut_data = st.session_state.macro_cache.get(
     "台指期夜盤", DEFAULT_MACRO_CACHE["台指期夜盤"]
@@ -2272,7 +2291,6 @@ if st.sidebar.button(
 
     with status_cot:
         try:
-            # 點擊按鈕時觸發全量連線刷新
             macro_data = force_refresh_all_macro_data()
             night_fut_data = macro_data.get("台指期夜盤")
 
@@ -2427,8 +2445,8 @@ with expander_cols[0]:
             item_nikkei = macro_data.get("日經 225 N225", {})
             st.metric(
                 label="日經 225",
-                value=item_nikkei.get("val", "64,621.24"),
-                delta=item_nikkei.get("change", "+0.85%"),
+                value=item_nikkei.get("val", "63,265.68"),
+                delta=item_nikkei.get("change", "-2.10%"),
                 delta_color="inverse",
             )
 
