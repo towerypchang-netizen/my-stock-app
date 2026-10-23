@@ -420,7 +420,7 @@ PEER_GROUPS = {
 }
 
 # ==============================================================================
-# 🌐 全球總經與資金流數據核心抓取模組 (三重備援，100% 告別更新中)
+# 🌐 全球總經與資金流數據核心抓取模組 (純真實數據直連，絕無虛假預設值)
 # ==============================================================================
 
 HTTP_HEADERS = {
@@ -430,30 +430,60 @@ HTTP_HEADERS = {
     )
 }
 
-DEFAULT_MACRO_CACHE = {
-    "台股加權": {"val": "46,041.43", "change": "-1.81%", "change_num": -846.0, "pct": -1.81, "raw_close": 46041.43},
-    "費城半導體 SOX": {"val": "10,818.55", "change": "-2.06%", "change_num": -227.0, "pct": -2.06, "raw_close": 10818.55},
-    "美債 10Y 殖利率": {"val": "5.01%", "change": "-0.58%", "change_num": -0.03, "pct": -0.58, "raw_close": 5.01},
-    "恐慌指數 VIX": {"val": "19.2300", "change": "+5.14%", "change_num": 0.94, "pct": 5.14, "raw_close": 19.23},
-    "台指期夜盤": {"val": "45,950", "change": "-91 點", "change_num": -91.0, "pct": -0.20, "raw_close": 45950.0},
-    "日經 225 N225": {"val": "62,907.84", "change": "-2.65%", "change_num": -1713.4, "pct": -2.65, "raw_close": 62907.84},
-    "道瓊工業 DJI": {"val": "52,650.85", "change": "-0.26%", "change_num": -137.0, "pct": -0.26, "raw_close": 52650.85},
-    "那斯達克 NASDAQ": {"val": "26,090.74", "change": "-0.78%", "change_num": -204.0, "pct": -0.78, "raw_close": 26090.74},
-    "標普 500 S&P500": {"val": "7,654.14", "change": "-0.53%", "change_num": -40.8, "pct": -0.53, "raw_close": 7654.14},
-    "羅素 2000 RUT": {"val": "2,767.20", "change": "-0.14%", "change_num": -3.88, "pct": -0.14, "raw_close": 2767.20},
-    "美聯儲 13W 短貼率": {"val": "4.03%", "change": "-0.27%", "change_num": -0.01, "pct": -0.27, "raw_close": 4.03},
-    "美元指數 DXY": {"val": "101.84", "change": "+0.24%", "change_num": 0.24, "pct": 0.24, "raw_close": 101.84},
-    "WTI 原油": {"val": "98.58", "change": "+0.03%", "change_num": 0.03, "pct": 0.03, "raw_close": 98.58},
-    "黃金現貨 Gold": {"val": "4,074.60", "change": "-0.81%", "change_num": -33.3, "pct": -0.81, "raw_close": 4074.60},
-}
-
 if "macro_cache" not in st.session_state:
-    st.session_state.macro_cache = DEFAULT_MACRO_CACHE
+    st.session_state.macro_cache = {}
+
+
+def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
+    """優先管道 1：Yahoo 股市內部 API 直連端點"""
+    ts = int(time.time() * 1000)
+    url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
+    try:
+        resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.0)
+        if resp.status_code == 200:
+            quote = resp.json().get("data", {}).get("quote", {})
+            price = quote.get("price") or quote.get("regularMarketPrice")
+            prev_close = quote.get("previousClose") or quote.get("regularMarketPreviousClose")
+            if price is not None and prev_close is not None and prev_close > 0:
+                p_val = float(price)
+                prev_val = float(prev_close)
+                chg_val = p_val - prev_val
+                pct_val = (chg_val / prev_val) * 100
+
+                if is_yield:
+                    fmt_val = f"{p_val:.2f}%"
+                    chg_str = f"{pct_val:+.2f}%"
+                elif is_points:
+                    fmt_val = f"{int(p_val):,}"
+                    chg_str = f"{chg_val:+.0f} 點"
+                elif "%5EVIX" in symbol_encoded or "VIX" in symbol_encoded:
+                    fmt_val = f"{p_val:.4f}"
+                    chg_str = f"{pct_val:+.2f}%"
+                else:
+                    fmt_val = f"{p_val:,.2f}".replace(".00", "")
+                    chg_str = f"{pct_val:+.2f}%"
+
+                return {
+                    "val": fmt_val,
+                    "change": chg_str,
+                    "change_num": round(chg_val, 2),
+                    "pct": round(pct_val, 2),
+                    "raw_close": p_val
+                }
+    except Exception:
+        pass
+    return None
 
 
 def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
-    """強健多重備援抓取：1. yfinance fast_info -> 2. Yahoo Chart API」"""
-    # 備援 A: yfinance 輕量 fast_info
+    """強健多重備援抓取：Yahoo API ➔ yfinance fast_info ➔ Yahoo Chart API"""
+    # 管道 1: Yahoo 股市 API
+    encoded_sym = symbol.replace("^", "%5E").replace("&", "%26").replace("=", "%3D")
+    res = fetch_yahoo_api_quote(encoded_sym, is_yield=is_yield, is_points=is_points)
+    if res:
+        return res
+
+    # 管道 2: yfinance 輕量 fast_info
     try:
         t = yf.Ticker(symbol)
         info = t.fast_info
@@ -469,7 +499,7 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
             elif is_points:
                 fmt_val = f"{int(p_val):,}"
                 chg_str = f"{chg_val:+.0f} 點"
-            elif "^VIX" in symbol or "VIX" in symbol:
+            elif "^VIX" in symbol:
                 fmt_val = f"{p_val:.4f}"
                 chg_str = f"{pct_val:+.2f}%"
             else:
@@ -486,7 +516,7 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
     except Exception:
         pass
 
-    # 備援 B: Yahoo Chart API 直連
+    # 管道 3: Yahoo Chart v8 API 直連
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=5d"
         resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.0)
@@ -521,24 +551,28 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
     except Exception:
         pass
 
-    return None
+    return {"val": "連線失敗", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0}
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """台指期夜盤強健抓取 (自動相容 日盤/夜盤 頻道與 Yahoo 端點)"""
+    """台指期夜盤多重管道實時抓取 (Yahoo 即時 API ➔ 期交所 MIS 夜/日盤)"""
     ts = int(time.time() * 1000)
-    url = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
-    
-    # 依次嘗試 MarketType: "1" (夜盤) 與 MarketType: "0" (日盤/結算盤)
+
+    # 管道 A：優先嘗試 Yahoo 股市台指期夜盤實時端點 (%5ETW%26)
+    res_y = fetch_yahoo_api_quote("%5ETW%26", is_points=True)
+    if res_y and res_y["val"] != "連線失敗":
+        return res_y
+
+    # 管道 B：連線台灣期交所 (TAIFEX) 官方 MIS 端點 (日盤 MarketType:0 / 夜盤 MarketType:1)
     for m_type in ["1", "0"]:
         try:
+            url_taifex = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
             payload = {"MarketType": m_type, "SymbolType": "F"}
-            resp = requests.post(url, json=payload, headers=HTTP_HEADERS, timeout=3.0)
+            resp = requests.post(url_taifex, json=payload, headers=HTTP_HEADERS, timeout=3.0)
             if resp.status_code == 200:
                 quotes = resp.json().get("rtData", {}).get("QuoteList", [])
                 for q in quotes:
                     symbol = q.get("SymbolID", "")
-                    # 匹配台指期近月合約 (如 TX10)
                     if symbol.startswith("TX") and not symbol.startswith("TXO"):
                         p_str = q.get("CLastPrice") or q.get("CLastP") or q.get("CRefPrice")
                         ref_str = q.get("CRefPrice")
@@ -557,22 +591,45 @@ def fetch_taifex_futures_night_bulletproof():
         except Exception:
             pass
 
-    # 第三層備援：透過 Yahoo 股市直連 API 端點 (包含近月期貨%5ETW%26)
-    for sym in ["%5ETW%26", "WTX%26"]:
-        res = fetch_yahoo_api_quote(sym, is_points=True) if "fetch_yahoo_api_quote" in globals() else None
-        if res:
-            return res
+    return {"val": "連線失敗", "change": "0 點", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0}
 
+
+def fetch_twse_mis_taiex():
+    """證交所 MIS 官方 API 抓取台股加權指數"""
+    ts = int(time.time() * 1000)
+    try:
+        twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
+        resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
+        if resp.status_code == 200:
+            msg_arr = resp.json().get("msgArray", [])
+            if msg_arr:
+                data = msg_arr[0]
+                p_str = data.get("z") if data.get("z") and data.get("z") != "-" else data.get("y")
+                y_str = data.get("y")
+                if p_str and y_str:
+                    p_val = float(p_str)
+                    y_val = float(y_str)
+                    chg_val = p_val - y_val
+                    pct_val = (chg_val / y_val) * 100 if y_val > 0 else 0.0
+                    return {
+                        "val": f"{p_val:,.2f}",
+                        "change": f"{pct_val:+.2f}%",
+                        "change_num": round(chg_val, 2),
+                        "pct": round(pct_val, 2),
+                        "raw_close": p_val
+                    }
+    except Exception:
+        pass
     return None
 
 
 def force_refresh_all_macro_data():
-    """刷新全市場 14 項指標 (百分之百保障顯示，絕無更新中)"""
+    """刷新全市場 14 項指標 (100% 直抓真實數據，連線失敗即顯示連線失敗)"""
     st.cache_data.clear()
     new_cache = {}
 
     # 1. 台股加權
-    new_cache["台股加權"] = fetch_symbol_bulletproof("^TWII") or fetch_twse_mis_taiex()
+    new_cache["台股加權"] = fetch_twse_mis_taiex() or fetch_symbol_bulletproof("^TWII")
 
     # 2. 台指期夜盤
     new_cache["台指期夜盤"] = fetch_taifex_futures_night_bulletproof()
@@ -613,42 +670,8 @@ def force_refresh_all_macro_data():
     # 14. 黃金現貨 Gold
     new_cache["黃金現貨 Gold"] = fetch_symbol_bulletproof("GC=F")
 
-    # 徹底填補備援，確保萬無一失
-    for k, v in DEFAULT_MACRO_CACHE.items():
-        if k not in new_cache or not new_cache[k] or new_cache[k].get("val") == "更新中":
-            new_cache[k] = st.session_state.macro_cache.get(k, v)
-
     st.session_state.macro_cache = new_cache
     return new_cache
-
-
-def fetch_twse_mis_taiex():
-    """證交所 MIS 備援"""
-    ts = int(time.time() * 1000)
-    try:
-        twse_url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&_={ts}"
-        resp = requests.get(twse_url, headers=HTTP_HEADERS, timeout=3.0)
-        if resp.status_code == 200:
-            msg_arr = resp.json().get("msgArray", [])
-            if msg_arr:
-                data = msg_arr[0]
-                p_str = data.get("z") if data.get("z") and data.get("z") != "-" else data.get("y")
-                y_str = data.get("y")
-                if p_str and y_str:
-                    p_val = float(p_str)
-                    y_val = float(y_str)
-                    chg_val = p_val - y_val
-                    pct_val = (chg_val / y_val) * 100 if y_val > 0 else 0.0
-                    return {
-                        "val": f"{p_val:,.2f}",
-                        "change": f"{pct_val:+.2f}%",
-                        "change_num": round(chg_val, 2),
-                        "pct": round(pct_val, 2),
-                        "raw_close": p_val
-                    }
-    except Exception:
-        pass
-    return None
 
 
 @st.cache_data(ttl=86400)
@@ -908,7 +931,7 @@ def diagnose_premarket_intelligence(
     prompt_premarket = f"""
     請作為華爾街資深盤前情報官與台股策略總監，基準日期：{target_date_str}。
     當前全球宏觀指標 (含台股加權、美股四大指數、美聯儲13W短貼率、費半與羅素2000)：{macro_data}。
-    【台指期夜盤最即時數據】：收盤價 {night_fut_data['val']}，變動：{night_fut_data['change']}。
+    【台指期夜盤最即時數據】：收盤價 {night_fut_data.get('val', '數據連線失敗')}，變動：{night_fut_data.get('change', '0點')}。
 
     請針對當前台股加權、昨夜美股四大指數、費半、台指期夜盤、日經225、美聯儲利率趨勢、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
     若台股大盤或台指期夜盤呈現顯著避險（如重挫、費半重挫或VIX暴漲），請於摘要中明確警示「高風險不宜盲目開倉」。
@@ -1525,24 +1548,26 @@ def check_market_risk_regime(macro_data, night_fut_data):
             return 0.0
 
     taiex_data = macro_data.get("台股加權", {})
-    taiex_pct = taiex_data.get("pct", 0.0)
+    taiex_pct = taiex_data.get("pct", 0.0) if taiex_data else 0.0
     if taiex_pct < -1.0:
         risk_score += 2
         risk_reasons.append(f"台股大盤盤中急跌 ({taiex_data.get('change', '0%')})")
 
-    night_chg = night_fut_data.get("change_num", 0.0)
+    night_chg = night_fut_data.get("change_num", 0.0) if night_fut_data else 0.0
     if night_chg < -300:
         risk_score += 2
-        risk_reasons.append(f"台指期夜盤重挫 ({night_fut_data['change']})")
+        risk_reasons.append(f"台指期夜盤重挫 ({night_fut_data.get('change', '0點')})")
 
     sox_chg = parse_change(
-        macro_data.get("費城半導體 SOX", {}).get("change", "0")
+        macro_data.get("費城半導體 SOX", {}).get("change", "0") if macro_data.get("費城半導體 SOX") else "0"
     )
     if sox_chg < -1.2:
         risk_score += 1
         risk_reasons.append(f"費城半導體重挫 ({sox_chg:+.2f}%)")
 
-    vix_chg = parse_change(macro_data.get("恐慌指數 VIX", {}).get("change", "0"))
+    vix_chg = parse_change(
+        macro_data.get("恐慌指數 VIX", {}).get("change", "0") if macro_data.get("恐慌指數 VIX") else "0"
+    )
     if vix_chg > 3.0:
         risk_score += 1
         risk_reasons.append(f"VIX 恐慌指數暴漲 ({vix_chg:+.2f}%)")
@@ -1565,6 +1590,24 @@ def generate_daily_picks(
     status_container,
     enable_risk_cb=True,
 ):
+    # 風控第一關：檢驗數據完整性（嚴禁數據異常時推演）
+    if not macro_data or not night_fut_data or night_fut_data.get("val") == "連線失敗":
+        status_container.update(
+            label="🚨 總經或台指期夜盤數據連線失敗，啟動風控保護，暫停選股！",
+            state="error",
+            expanded=True,
+        )
+        return [{
+            "上漲率": "0%",
+            "族群": "連線保護",
+            "股名": "🚨 數據連線異常",
+            "股號": "NONE",
+            "當前實價": "---",
+            "建議進場": "暫停開倉",
+            "波段停利/防護提示": "警告：實時夜盤或總經數據未能成功連線，為防止假數據誤導AI，已自動停用推薦！",
+            "波段期間": "觀望",
+        }]
+
     is_danger, danger_reasons = check_market_risk_regime(
         macro_data, night_fut_data
     )
@@ -1591,7 +1634,7 @@ def generate_daily_picks(
 
     status_container.write(
         "🟢 **[第一階段]** 宏觀與台股盤中/夜盤連動分析完成：台股"
-        f" {macro_data.get('台股加權', {}).get('val')} ({macro_data.get('台股加權', {}).get('change')})，風控通過。"
+        f" {macro_data.get('台股加權', {}).get('val', '---')} ({macro_data.get('台股加權', {}).get('change', '---')})，風控通過。"
     )
 
     status_container.write(
@@ -1667,7 +1710,7 @@ def generate_daily_picks(
     族群條件：{sector_limit_str}。
     {master_prompt_str}
     大盤環境 (含台股加權當前點位、美股四大指數與總經)：{macro_data}
-    台指期夜盤狀況: {night_fut_data['val']} ({night_fut_data['change']})
+    台指期夜盤狀況: {night_fut_data.get('val', '---')} ({night_fut_data.get('change', '---')})
     {premarket_focus_str}
     {premarket_avoid_str}
 
@@ -2139,9 +2182,7 @@ st.sidebar.markdown(
 )
 
 macro_data = st.session_state.macro_cache
-night_fut_data = st.session_state.macro_cache.get(
-    "台指期夜盤", DEFAULT_MACRO_CACHE["台指期夜盤"]
-)
+night_fut_data = st.session_state.macro_cache.get("台指期夜盤", {})
 sector_data = get_taiwan_sector_performance(target_date_str)
 
 st.sidebar.markdown(
@@ -2214,7 +2255,7 @@ if st.sidebar.button(
     with status_cot:
         try:
             macro_data = force_refresh_all_macro_data()
-            night_fut_data = macro_data.get("台指期夜盤")
+            night_fut_data = macro_data.get("台指期夜盤", {})
 
             p_data = diagnose_premarket_intelligence(
                 macro_data, night_fut_data, target_date_str
@@ -2316,7 +2357,7 @@ with card_cols[0]:
     item_taiex = macro_data.get("台股加權", {})
     st.metric(
         label="台股加權",
-        value=item_taiex.get("val", "更新中"),
+        value=item_taiex.get("val", "點擊按鈕刷新"),
         delta=item_taiex.get("change", "0.00%"),
         delta_color="inverse",
     )
@@ -2325,7 +2366,7 @@ with card_cols[1]:
     item_sox = macro_data.get("費城半導體 SOX", {})
     st.metric(
         label="費城半導體",
-        value=item_sox.get("val", "更新中"),
+        value=item_sox.get("val", "點擊按鈕刷新"),
         delta=item_sox.get("change", "0.00%"),
         delta_color="inverse",
     )
@@ -2334,7 +2375,7 @@ with card_cols[2]:
     item_10y = macro_data.get("美債 10Y 殖利率", {})
     st.metric(
         label="美債 10Y",
-        value=item_10y.get("val", "更新中"),
+        value=item_10y.get("val", "點擊按鈕刷新"),
         delta=item_10y.get("change", "0.00%"),
         delta_color="inverse",
     )
@@ -2343,7 +2384,7 @@ with card_cols[3]:
     item_vix = macro_data.get("恐慌指數 VIX", {})
     st.metric(
         label="恐慌 VIX",
-        value=item_vix.get("val", "更新中"),
+        value=item_vix.get("val", "點擊按鈕刷新"),
         delta=item_vix.get("change", "0.00%"),
         delta_color="inverse",
     )
@@ -2359,7 +2400,7 @@ with expander_cols[0]:
             item_night = macro_data.get("台指期夜盤", {})
             st.metric(
                 label="台指期夜盤",
-                value=item_night.get("val", "更新中"),
+                value=item_night.get("val", "點擊按鈕刷新"),
                 delta=item_night.get("change", "0 點"),
                 delta_color="inverse",
             )
@@ -2367,7 +2408,7 @@ with expander_cols[0]:
             item_nikkei = macro_data.get("日經 225 N225", {})
             st.metric(
                 label="日經 225",
-                value=item_nikkei.get("val", "更新中"),
+                value=item_nikkei.get("val", "點擊按鈕刷新"),
                 delta=item_nikkei.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2379,14 +2420,14 @@ with expander_cols[1]:
             item_dji = macro_data.get("道瓊工業 DJI", {})
             st.metric(
                 label="道瓊 DJI",
-                value=item_dji.get("val", "更新中"),
+                value=item_dji.get("val", "點擊按鈕刷新"),
                 delta=item_dji.get("change", "0.00%"),
                 delta_color="inverse",
             )
             item_sp = macro_data.get("標普 500 S&P500", {})
             st.metric(
                 label="標普 500",
-                value=item_sp.get("val", "更新中"),
+                value=item_sp.get("val", "點擊按鈕刷新"),
                 delta=item_sp.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2394,14 +2435,14 @@ with expander_cols[1]:
             item_nas = macro_data.get("那斯達克 NASDAQ", {})
             st.metric(
                 label="那斯達克",
-                value=item_nas.get("val", "更新中"),
+                value=item_nas.get("val", "點擊按鈕刷新"),
                 delta=item_nas.get("change", "0.00%"),
                 delta_color="inverse",
             )
             item_rut = macro_data.get("羅素 2000 RUT", {})
             st.metric(
                 label="羅素 2000",
-                value=item_rut.get("val", "更新中"),
+                value=item_rut.get("val", "點擊按鈕刷新"),
                 delta=item_rut.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2413,7 +2454,7 @@ with expander_cols[2]:
             item_irx = macro_data.get("美聯儲 13W 短貼率", {})
             st.metric(
                 label="美聯儲 13W",
-                value=item_irx.get("val", "更新中"),
+                value=item_irx.get("val", "點擊按鈕刷新"),
                 delta=item_irx.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2421,7 +2462,7 @@ with expander_cols[2]:
             item_dxy = macro_data.get("美元指數 DXY", {})
             st.metric(
                 label="美元 DXY",
-                value=item_dxy.get("val", "更新中"),
+                value=item_dxy.get("val", "點擊按鈕刷新"),
                 delta=item_dxy.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2433,7 +2474,7 @@ with expander_cols[3]:
             item_wti = macro_data.get("WTI 原油", {})
             st.metric(
                 label="WTI 原油",
-                value=item_wti.get("val", "更新中"),
+                value=item_wti.get("val", "點擊按鈕刷新"),
                 delta=item_wti.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2441,7 +2482,7 @@ with expander_cols[3]:
             item_gold = macro_data.get("黃金現貨 Gold", {})
             st.metric(
                 label="黃金 Gold",
-                value=item_gold.get("val", "更新中"),
+                value=item_gold.get("val", "點擊按鈕刷新"),
                 delta=item_gold.get("change", "0.00%"),
                 delta_color="inverse",
             )
@@ -2629,17 +2670,18 @@ st.plotly_chart(fig_trends, use_container_width=True)
 
 st.divider()
 
-is_danger, danger_reasons = check_market_risk_regime(
-    macro_data, night_fut_data
-)
-if is_danger:
-    st.error(
-        "🚨 **【AI 市場風控熔斷機制啟動】全球市場與台股 Risk-Off"
-        " 避險情緒高漲，今日不宜進行任何多頭買進操作！**\n\n"
-        f"**觸發原因**：{' | '.join(danger_reasons)}\n\n"
-        "**操盤紀律建議**：大盤系統性風險偏高，強行選股勝率極低！建議保持 100%"
-        " 現金，或對既有持股執行反彈減碼保護。"
+if macro_data:
+    is_danger, danger_reasons = check_market_risk_regime(
+        macro_data, night_fut_data
     )
+    if is_danger:
+        st.error(
+            "🚨 **【AI 市場風控熔斷機制啟動】全球市場與台股 Risk-Off"
+            " 避險情緒高漲，今日不宜進行任何多頭買進操作！**\n\n"
+            f"**觸發原因**：{' | '.join(danger_reasons)}\n\n"
+            "**操盤紀律建議**：大盤系統性風險偏高，強行選股勝率極低！建議保持 100%"
+            " 現金，或對既有持股執行反彈減碼保護。"
+        )
 
 if stock_id and str(stock_id).strip() != "":
     warn_check = check_stock_warning_status(stock_id)
