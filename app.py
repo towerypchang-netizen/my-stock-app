@@ -552,11 +552,40 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """全球通用夜盤強健抓取：Yahoo 國際版 API ➔ 台灣 Yahoo 端點 ➔ 期交所 OpenAPI"""
+    """全球通用夜盤強健抓取：期交所 MIS 即時 API ➔ 台灣/國際 API ➔ 微台指備援"""
     ts = int(time.time() * 1000)
 
-    # 管道 1：Yahoo Finance 國際全域 API (全球伺服器皆可直連，絕不擋 IP)
-    for sym in ["WTX%26", "%5ETW%26", "TX%3DF"]:
+    # 管道 1：期交所 MIS 官方即時 Quote API (最精準)
+    for m_type in ["1", "0"]:
+        try:
+            url_mis = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
+            payload = {"MarketType": m_type, "SymbolType": "F"}
+            resp = requests.post(url_mis, json=payload, headers=HTTP_HEADERS, timeout=3.5)
+            if resp.status_code == 200:
+                quotes = resp.json().get("rtData", {}).get("QuoteList", [])
+                for q in quotes:
+                    symbol = q.get("SymbolID", "")
+                    # 搜尋台指期或小台指/微台指
+                    if symbol.startswith("TX") and not symbol.startswith("TXO"):
+                        p_str = q.get("CLastPrice") or q.get("CRefPrice")
+                        ref_str = q.get("CRefPrice")
+                        if p_str and ref_str and str(p_str).strip() != "-":
+                            p_val = float(p_str)
+                            ref_val = float(ref_str)
+                            chg_val = p_val - ref_val
+                            pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
+                            return {
+                                "val": f"{int(p_val):,}",
+                                "change": f"{chg_val:+.0f} 點",
+                                "change_num": round(chg_val, 1),
+                                "pct": round(pct_val, 2),
+                                "raw_close": p_val
+                            }
+        except Exception:
+            pass
+
+    # 管道 2：Yahoo 全域端點多代碼嘗試 (WTX& / WTX-N / %5ETW&)
+    for sym in ["WTX%26", "WTX-N%26", "%5ETW%26"]:
         try:
             url_global = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=5d"
             resp = requests.get(url_global, headers=HTTP_HEADERS, timeout=3.5)
@@ -579,30 +608,7 @@ def fetch_taifex_futures_night_bulletproof():
         except Exception:
             pass
 
-    # 管道 2：Yahoo 股市網頁原生 JSON Regex 解析
-    try:
-        url_web = "https://tw.stock.yahoo.com/future/WTX&"
-        resp = requests.get(url_web, headers=HTTP_HEADERS, timeout=3.5)
-        if resp.status_code == 200:
-            html = resp.text
-            p_match = re.search(r'"regularMarketPrice":\{"raw":([\d.]+)', html) or re.search(r'"price":\{"raw":([\d.]+)', html)
-            c_match = re.search(r'"regularMarketChange":\{"raw":([-\d.]+)', html) or re.search(r'"change":\{"raw":([-\d.]+)', html)
-            if p_match:
-                p_val = float(p_match.group(1))
-                chg_val = float(c_match.group(1)) if c_match else 0.0
-                ref_val = p_val - chg_val if (p_val - chg_val) > 0 else p_val
-                pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
-                return {
-                    "val": f"{int(p_val):,}",
-                    "change": f"{chg_val:+.0f} 點",
-                    "change_num": round(chg_val, 1),
-                    "pct": round(pct_val, 2),
-                    "raw_close": p_val
-                }
-    except Exception:
-        pass
-
-    # 管道 3：期交所 OpenAPI
+    # 管道 3：期交所 OpenAPI 備援
     try:
         url_openapi = "https://openapi.taifex.com.tw/v1/DailyFuturesQuotes"
         resp = requests.get(url_openapi, headers=HTTP_HEADERS, timeout=3.5)
