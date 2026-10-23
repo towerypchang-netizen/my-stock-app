@@ -546,7 +546,7 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """台指期夜盤強健抓取：期交所 OpenData 檔直連 ➔ 期交所 MIS API ➔ Yahoo 全域 API (WTX=F) 備援"""
+    """台指期夜盤強健抓取：期交所 OpenData ➔ 期交所 MIS API ➔ Yahoo 奇摩網頁 Scraping ➔ Yahoo Chart API"""
     ts = int(time.time() * 1000)
 
     # 管道 1：期交所 OpenData 官方每日行情檔直連
@@ -605,9 +605,41 @@ def fetch_taifex_futures_night_bulletproof():
         except Exception:
             pass
 
-    # 管道 3：Yahoo 全域台指期專屬近月期貨 API (修正無效轉義符號 %26，採用標準代碼)
-    for sym in ["WTX=F", "WTX-N.TW", "WTX.TW"]:
-        encoded_sym = sym.replace("=", "%3D")
+    # 管道 3：Yahoo 股市 HTML 網頁直連抓取 (WTX=F)
+    try:
+        url_html = "https://tw.stock.yahoo.com/quote/WTX%3DF"
+        resp = requests.get(url_html, headers=HTTP_HEADERS, timeout=3.5)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            # 尋找包含成交價與漲跌的元素
+            price_span = soup.find("span", class_=re.compile(r"Fz\(32px\)|Fz\(36px\)|Fz\(28px\)"))
+            if price_span:
+                p_text = price_span.text.replace(",", "").strip()
+                if p_text.replace(".", "").isdigit() and float(p_text) > 0:
+                    p_val = float(p_text)
+                    # 尋找漲跌點數
+                    change_span = soup.find("span", class_=re.compile(r"Fz\(16px\).*Fw\(b\)"))
+                    chg_val = 0.0
+                    if change_span:
+                        c_text = change_span.text.replace(",", "").replace("▲", "+").replace("▼", "-").strip()
+                        try:
+                            chg_val = float(c_text)
+                        except Exception:
+                            pass
+                    pct_val = (chg_val / (p_val - chg_val)) * 100 if (p_val - chg_val) > 0 else 0.0
+                    return {
+                        "val": f"{int(p_val):,}",
+                        "change": f"{chg_val:+.0f} 點",
+                        "change_num": round(chg_val, 1),
+                        "pct": round(pct_val, 2),
+                        "raw_close": p_val
+                    }
+    except Exception:
+        pass
+
+    # 管道 4：Yahoo 全域 API 嘗試 (WTX=F, ^TWII, WTX-N.TW)
+    for sym in ["WTX=F", "WTX-N.TW", "^TWII"]:
+        encoded_sym = sym.replace("^", "%5E").replace("=", "%3D")
         res_quote = fetch_yahoo_api_quote(encoded_sym, is_points=True)
         if res_quote and res_quote.get("raw_close", 0) > 0:
             return res_quote
@@ -635,6 +667,7 @@ def fetch_taifex_futures_night_bulletproof():
             pass
 
     return {"val": "等待中", "change": "0 點", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0}
+
 
 
 def fetch_twse_mis_taiex():
@@ -687,9 +720,29 @@ def force_refresh_all_macro_data():
     st.session_state.macro_cache = new_cache
     return new_cache
 
-# 自動啟動全量載入
+def get_default_waiting_macro_cache():
+    default_item = {"val": "等待中", "change": "0.00%", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0}
+    default_points_item = {"val": "等待中", "change": "0 點", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0}
+    return {
+        "台股加權": default_item,
+        "台指期夜盤": default_points_item,
+        "日經 225 N225": default_item,
+        "費城半導體 SOX": default_item,
+        "美債 10Y 殖利率": default_item,
+        "恐慌指數 VIX": default_item,
+        "道瓊工業 DJI": default_item,
+        "那斯達克 NASDAQ": default_item,
+        "標普 500 S&P500": default_item,
+        "羅素 2000 RUT": default_item,
+        "美聯儲 13W 短貼率": default_item,
+        "美元指數 DXY": default_item,
+        "WTI 原油": default_item,
+        "黃金現貨 Gold": default_item,
+    }
+
+# 啟動時預設載入「等待中」數據（避免初次開啟時卡頓刷新）
 if "macro_cache" not in st.session_state or not st.session_state.macro_cache:
-    st.session_state.macro_cache = force_refresh_all_macro_data()
+    st.session_state.macro_cache = get_default_waiting_macro_cache()
 
 @st.cache_data(ttl=86400)
 def get_all_taiwan_stocks_dict():
