@@ -1010,8 +1010,7 @@ def get_stock_news(stock_id):
                     for item in news_list[:5]
                     if item.get("title")
                 ]
-                return "
-".join(titles)
+                return "\n".join(titles)
         except Exception:
             continue
     return "無重大新聞"
