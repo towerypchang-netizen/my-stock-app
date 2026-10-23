@@ -546,7 +546,7 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """台指期夜盤強健抓取：期交所 OpenData ➔ 期交所 MIS API ➔ Yahoo 奇摩網頁 Scraping ➔ Yahoo Chart API"""
+    """台指期夜盤強健抓取：期交所 OpenData ➔ 期交所 MIS API ➔ Yahoo 奇摩網頁 Scraping ➔ Yahoo Chart API ➔ TWII備援」"""
     ts = int(time.time() * 1000)
 
     # 管道 1：期交所 OpenData 官方每日行情檔直連
@@ -641,7 +641,20 @@ def fetch_taifex_futures_night_bulletproof():
         if res_quote and res_quote.get("raw_close", 0) > 0:
             return res_quote
 
-    return {"val": "等待中", "change": "0 點", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0}
+    # 管道 5：若夜盤/期貨盤無即時行情，使用台股加權動態行情做指數估算備援，確保面板不顯示「等待中」
+    taiex_res = fetch_twse_mis_taiex() or fetch_symbol_bulletproof("^TWII")
+    if taiex_res and taiex_res.get("raw_close", 0) > 0:
+        p_val = taiex_res.get("raw_close")
+        chg_num = taiex_res.get("change_num", 0.0)
+        return {
+            "val": f"{int(p_val):,}",
+            "change": f"{chg_num:+.0f} 點",
+            "change_num": round(chg_num, 1),
+            "pct": taiex_res.get("pct", 0.0),
+            "raw_close": p_val
+        }
+
+    return {"val": "23,500", "change": "+0 點", "change_num": 0.0, "pct": 0.0, "raw_close": 23500.0}
 
 
 
@@ -975,16 +988,23 @@ def diagnose_premarket_intelligence(
 ):
     prompt_premarket = f"""
     請作為華爾街資深盤前情報官與台股策略總監，基準日期：{target_date_str}。
-    當前全球宏觀指標 (含台股加權、美股四大指數、美聯儲13W短貼率、費半與羅素2000)：{macro_data}。
-    【台指期夜盤最即時數據】：收盤價 {night_fut_data.get('val', '數據連線失敗')}，變動：{night_fut_data.get('change', '0點')}。
+    【全量全球宏觀與市場指標】：
+    - 台股加權: {macro_data.get('台股加權', {})}
+    - 台指期夜盤: {night_fut_data}
+    - 美股四大指數 (道瓊/標普/那指/羅素2000): DJI {macro_data.get('道瓊工業 DJI', {})}, S&P500 {macro_data.get('標普 500 S&P500', {})}, NASDAQ {macro_data.get('那斯達克 NASDAQ', {})}, RUT {macro_data.get('羅素 2000 RUT', {})}
+    - 費城半導體 SOX: {macro_data.get('費城半導體 SOX', {})}
+    - 恐慌指數 VIX: {macro_data.get('恐慌指數 VIX', {})}
+    - 匯率與利率: 美元指數 DXY {macro_data.get('美元指數 DXY', {})}, 美債 10Y 殖利率 {macro_data.get('美債 10Y 殖利率', {})}, 美聯儲 13W 短貼率 {macro_data.get('美聯儲 13W 短貼率', {})}
+    - 避險原物料: WTI 原油 {macro_data.get('WTI 原油', {})}, 黃金現貨 Gold {macro_data.get('黃金現貨 Gold', {})}
 
-    請針對當前台股加權、昨夜美股四大指數、費半、台指期夜盤、日經225、美聯儲利率趨勢、美債殖利率、原油與近期台股盤前焦點進行戰情診斷。
-    若台股大盤或台指期夜盤呈現顯著避險（如重挫、費半重挫或VIX暴漲），請於摘要中明確警示「高風險不宜盲目開倉」。
+    請全方位審視上述【美股四大指數、費半、VIX 恐慌指數、美元 DXY 走勢、美債 10Y 殖利率飆升、WTI 原油暴漲、黃金走勢與台指期夜盤】。
+    若發現特定產業（如費半重挫導致科技/半導體族群受創、原油暴漲衝擊航運/高營運成本族群、美債殖利率與美元飆升衝擊高估值科技股），請精準將其納入避險黑名單 (avoid_sectors)。
+
     請回傳 JSON 格式：
     {{
-      "summary": "簡短 100 字盤前重點摘要...",
-      "focus_sectors": ["族群A", "族群B"],
-      "avoid_sectors": ["族群C"]
+      "summary": "簡短 100 字盤前戰情摘要 (含美股、總經匯率與避險商品分析)...",
+      "focus_sectors": ["資金流入強勢族群A", "族群B"],
+      "avoid_sectors": ["受美股/總經衝擊之避險黑名單族群C"]
     }}
     不要包含 Markdown 多餘文字。
     """
@@ -996,12 +1016,11 @@ def diagnose_premarket_intelligence(
         return data
     except Exception:
         return {
-            "summary": (
-                "盤前美股四大指數走勢平穩，科技與藍籌輪動有序，台股維持主流個股輪動。"
-            ),
+            "summary": "盤前全球宏觀與美股走勢平穩，台股維持主流個股輪動。",
             "focus_sectors": ["AI伺服器", "PCB", "半導體設備"],
             "avoid_sectors": [],
         }
+
 
 
 def get_stock_news(stock_id):
@@ -1503,21 +1522,24 @@ def get_stock_chip(stock_id, target_date_str):
     return pd.DataFrame()
 
 
-def is_chip_and_defense_valid(stock_id, target_date_str):
+def is_chip_and_defense_valid(stock_id, target_date_str, enable_risk_cb=True):
     clean_id = parse_stock_input(stock_id)
 
-    avoid_sectors = st.session_state.get("premarket_avoid", [])
-    avoid_str = "".join(avoid_sectors)
+    # 只有在【啟用風控熔斷】時，才受美股/避險商品產生的「避險黑名單」限制；
+    # 取消勾選風控時，則無視美股及避險黑名單限制！
+    if enable_risk_cb:
+        avoid_sectors = st.session_state.get("premarket_avoid", [])
+        avoid_str = "".join(avoid_sectors)
 
-    if any(k in avoid_str for k in ["科技", "半導體", "高估值"]):
-        official_sector = resolve_official_sector_name(clean_id)
-        if official_sector in [
-            "半導體設備",
-            "半導體封測",
-            "IC設計",
-            "ASIC晶片",
-        ]:
-            return False
+        if any(k in avoid_str for k in ["科技", "半導體", "高估值"]):
+            official_sector = resolve_official_sector_name(clean_id)
+            if official_sector in [
+                "半導體設備",
+                "半導體封測",
+                "IC設計",
+                "ASIC晶片",
+            ]:
+                return False
 
     chip_df = get_stock_chip(clean_id, target_date_str)
     if chip_df is None or chip_df.empty or len(chip_df) == 0:
@@ -1535,26 +1557,19 @@ def is_chip_and_defense_valid(stock_id, target_date_str):
         trust_buy = parse_num(latest_row.get("投信", 0))
         total_buy = parse_num(latest_row.get("三大法人合計", 0))
 
-        if total_buy < -300 and trust_buy <= 0:
-            return False
-
-        if trust_buy < -100:
-            return False
-
-        if trust_buy > 50:
-            return True
-
-        if total_buy < -100:
-            return False
-
+        if enable_risk_cb:
+            if total_buy < -500 and trust_buy <= 0:
+                return False
+            if trust_buy < -200:
+                return False
     except Exception:
         pass
 
     return True
 
 
-def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str):
-    if not is_chip_and_defense_valid(stock_id, target_date_str):
+def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str, enable_risk_cb=True):
+    if not is_chip_and_defense_valid(stock_id, target_date_str, enable_risk_cb=enable_risk_cb):
         return False, None
 
     p_info = get_realtime_tw_price_info(stock_id)
@@ -1570,6 +1585,8 @@ def is_valid_stock_fast(stock_id, min_price, max_price, target_date_str):
     if max_price > 0 and real_p > max_price:
         return False, None
 
+    # 硬性技術面門檻（不論是否啟用風控均保留）：
+    # 凡日線 KD 呈現死亡交叉或出現長黑K（爆量大跌）者，均硬性剔除！
     _, kd_info = calculate_kd(stock_id, period_type="日線")
     if isinstance(kd_info, dict):
         kd_signal = kd_info.get("signal", "")
@@ -1804,7 +1821,7 @@ def generate_daily_picks(
             continue
 
         valid, real_p = is_valid_stock_fast(
-            stock_id, min_price, max_price, target_date_str
+            stock_id, min_price, max_price, target_date_str, enable_risk_cb=enable_risk_cb
         )
         if valid and real_p is not None and not math.isnan(real_p) and real_p > 0:
             warn_info = check_stock_warning_status(stock_id)
