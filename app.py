@@ -546,7 +546,7 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """台指期夜盤強健抓取：期交所 OpenData ➔ 期交所 MIS API ➔ Yahoo 奇摩網頁 Scraping ➔ Yahoo Chart API (嚴禁混入台股大盤^TWII)"""
+    """台指期夜盤強健抓取：期交所 OpenData ➔ 期交所 MIS API ➔ Yahoo 奇摩網頁 Scraping ➔ Yahoo Chart API"""
     ts = int(time.time() * 1000)
 
     # 管道 1：期交所 OpenData 官方每日行情檔直連
@@ -556,9 +556,9 @@ def fetch_taifex_futures_night_bulletproof():
         if resp.status_code == 200:
             items = resp.json()
             for item in items:
-                contract = str(item.get("Contract", "") or item.get("Symbol", "") or item.get("TradingSession", ""))
-                code = str(item.get("SecurityCode", "") or item.get("ContractType", ""))
-                if "TX" in contract or "TX" in code or contract.startswith("TX"):
+                contract = str(item.get("Contract", "") or item.get("Symbol", "") or item.get("TradingSession", "") or item.get("ContractType", ""))
+                code = str(item.get("SecurityCode", "") or "")
+                if any(k in contract or k in code for k in ["TX", "MTX", "TMF", "台指"]):
                     p_close = item.get("Close") or item.get("SettlementPrice") or item.get("LastPrice")
                     p_ref = item.get("ReferencePrice") or item.get("OpeningPrice") or item.get("PriorClose")
                     if p_close and str(p_close).strip() not in ["-", ""] and float(p_close) > 0:
@@ -586,7 +586,7 @@ def fetch_taifex_futures_night_bulletproof():
                 quotes = resp.json().get("rtData", {}).get("QuoteList", [])
                 for q in quotes:
                     symbol = q.get("SymbolID", "")
-                    if ("TX" in symbol or symbol.startswith("TX")) and not symbol.startswith("TXO"):
+                    if ("TX" in symbol or "MTX" in symbol) and not symbol.startswith("TXO"):
                         p_str = q.get("CLastPrice") or q.get("CRefPrice")
                         ref_str = q.get("CRefPrice")
                         if p_str and ref_str and str(p_str).strip() not in ["-", ""]:
@@ -635,34 +635,11 @@ def fetch_taifex_futures_night_bulletproof():
     except Exception:
         pass
 
-    # 管道 4：僅針對純期貨商品代碼 (WTX=F, WTX-N.TW, TX-F.TW) 備援，嚴禁混入 ^TWII 大盤
-    for sym in ["WTX%3DF", "WTX-N.TW", "TX-F.TW"]:
+    # 管道 4：多重期貨 API 備援 (WTX=F, ^TXI, TX-F.TW, WTX-N.TW)
+    for sym in ["WTX%3DF", "%5ETXI", "WTX-N.TW", "TX-F.TW"]:
         res_quote = fetch_yahoo_api_quote(sym, is_points=True)
         if res_quote and res_quote.get("raw_close", 0) > 0:
             return res_quote
-
-        clean_sym = sym.replace("%3D", "=")
-        try:
-            url_global = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_sym}?interval=1d&range=5d"
-            resp = requests.get(url_global, headers=HTTP_HEADERS, timeout=3.5)
-            if resp.status_code == 200:
-                meta = resp.json().get("chart", {}).get("result", [])[0].get("meta", {})
-                p_val = meta.get("regularMarketPrice")
-                prev_val = meta.get("chartPreviousClose") or meta.get("previousClose")
-                if p_val and prev_val and float(p_val) > 0 and float(prev_val) > 0:
-                    p_val = float(p_val)
-                    prev_val = float(prev_val)
-                    chg_val = p_val - prev_val
-                    pct_val = (chg_val / prev_val) * 100
-                    return {
-                        "val": f"{int(p_val):,}",
-                        "change": f"{chg_val:+.0f} 點",
-                        "change_num": round(chg_val, 1),
-                        "pct": round(pct_val, 2),
-                        "raw_close": p_val
-                    }
-        except Exception:
-            pass
 
     return {"val": "等待中", "change": "0 點", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0}
 
@@ -1658,9 +1635,10 @@ def generate_daily_picks(
     status_container,
     enable_risk_cb=True,
 ):
-    if not macro_data or not night_fut_data or night_fut_data.get("val") in ["連線失敗", "等待中"]:
+    # 僅當總經數據整體無法載入時攔截，不再因為單一指標顯示「等待中」而強制阻斷
+    if not macro_data:
         status_container.update(
-            label="🚨 總經或台指期夜盤數據連線失敗，啟動風控保護，暫停選股！",
+            label="🚨 全球總經數據連線異常，啟動保護，暫停選股！",
             state="error",
             expanded=True,
         )
@@ -1671,37 +1649,43 @@ def generate_daily_picks(
             "股號": "NONE",
             "當前實價": "---",
             "建議進場": "暫停開倉",
-            "波段停利/防護提示": "警告：實時夜盤或總經數據未能成功連線，為防止假數據誤導AI，已自動停用推薦！",
+            "波段停利/防護提示": "警告：總經數據未能成功連線，為防止假數據誤導 AI，已自動停用推薦！",
             "波段期間": "觀望",
         }]
 
-    is_danger, danger_reasons = check_market_risk_regime(
-        macro_data, night_fut_data
-    )
-    if is_danger and enable_risk_cb:
-        reason_str = " | ".join(danger_reasons)
-        status_container.update(
-            label="🚨 市場啟動風控熔斷，避險空倉！",
-            state="error",
-            expanded=True,
+    # 風控熔斷機制：只有在使用者【勾選】啟用風險控管時才執行熔斷攔截！
+    # 如果使用者【取消勾選】，即便大盤或夜盤重挫，也絕不攔截，繼續進行 AI 強勢選股！
+    if enable_risk_cb:
+        is_danger, danger_reasons = check_market_risk_regime(
+            macro_data, night_fut_data
         )
-        return [{
-            "上漲率": "0%",
-            "族群": "避險空倉",
-            "股名": "🚨 今日不宜操作",
-            "股號": "NONE",
-            "當前實價": "---",
-            "建議進場": "建議保持現金/觀望",
-            "波段停利/防護提示": (
-                f"警示原因：{reason_str}。"
-                " 全球及台股 Risk-Off 避險情緒高漲，系統已自動啟動風控保護！"
-            ),
-            "波段期間": "觀望",
-        }]
+        if is_danger:
+            reason_str = " | ".join(danger_reasons)
+            status_container.update(
+                label="🚨 市場啟動風控熔斷，避險空倉！",
+                state="error",
+                expanded=True,
+            )
+            return [{
+                "上漲率": "0%",
+                "族群": "避險空倉",
+                "股名": "🚨 今日不宜操作",
+                "股號": "NONE",
+                "當前實價": "---",
+                "建議進場": "建議保持現金/觀望",
+                "波段停利/防護提示": (
+                    f"警示原因：{reason_str}。"
+                    " 全球及台股 Risk-Off 避險情緒高漲，系統已自動啟動風控保護！(若欲強制選股請取消勾選左側『啟用大盤風險控管熔斷機制』)"
+                ),
+                "波段期間": "觀望",
+            }]
+
+    night_val_str = night_fut_data.get("val", "開盤前/收盤中") if night_fut_data else "開盤前/收盤中"
+    night_chg_str = night_fut_data.get("change", "0點") if night_fut_data else "0點"
 
     status_container.write(
-        "🟢 **[第一階段]** 宏觀與台股盤中/夜盤連動分析完成：台股"
-        f" {macro_data.get('台股加權', {}).get('val', '---')} ({macro_data.get('台股加權', {}).get('change', '---')})，風控通過。"
+        "🟢 **[第一階段]** 宏觀與台股盤中/夜盤連動分析完成：台股加權"
+        f" {macro_data.get('台股加權', {}).get('val', '---')} ({macro_data.get('台股加權', {}).get('change', '---')})，台指期夜盤：{night_val_str} ({night_chg_str})。"
     )
 
     status_container.write(
