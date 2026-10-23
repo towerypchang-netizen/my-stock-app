@@ -845,10 +845,8 @@ def clean_key(raw):
     return (
         k.replace('"', "")
         .replace("'", "")
-        .replace("
-", "")
-        .replace("
-", "")
+        .replace("\n", "")
+        .replace("\r", "")
     )
 
 
