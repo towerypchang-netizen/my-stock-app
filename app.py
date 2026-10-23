@@ -435,7 +435,7 @@ if "macro_cache" not in st.session_state:
 
 
 def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
-    """優先管道 1：Yahoo 股市內部 API 直連端點"""
+    """優先管道 1：Yahoo 股市內部 API 直連端點 (依據 previousClose 計算正確漲跌%與點數)"""
     ts = int(time.time() * 1000)
     url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
     try:
@@ -477,13 +477,11 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
 
 def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
     """強健多重備援抓取：Yahoo API ➔ yfinance fast_info ➔ Yahoo Chart API"""
-    # 管道 1: Yahoo 股市 API
     encoded_sym = symbol.replace("^", "%5E").replace("&", "%26").replace("=", "%3D")
     res = fetch_yahoo_api_quote(encoded_sym, is_yield=is_yield, is_points=is_points)
     if res:
         return res
 
-    # 管道 2: yfinance 輕量 fast_info
     try:
         t = yf.Ticker(symbol)
         info = t.fast_info
@@ -516,7 +514,6 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
     except Exception:
         pass
 
-    # 管道 3: Yahoo Chart v8 API 直連
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=5d"
         resp = requests.get(url, headers=HTTP_HEADERS, timeout=3.0)
@@ -555,15 +552,71 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """台指期夜盤多重管道實時抓取 (Yahoo 即時 API ➔ 期交所 MIS 夜/日盤)"""
+    """台指期夜盤強健抓取：HTML 網頁爬蟲 ➔ API 備援 ➔ TAIFEX 官方開放資料"""
     ts = int(time.time() * 1000)
 
-    # 管道 A：優先嘗試 Yahoo 股市台指期夜盤實時端點 (%5ETW%26)
-    res_y = fetch_yahoo_api_quote("%5ETW%26", is_points=True)
-    if res_y and res_y["val"] != "連線失敗":
-        return res_y
+    # 管道 1：直接抓取網頁 https://tw.stock.yahoo.com/future/WTX& (解析 HTML)
+    try:
+        url_web = "https://tw.stock.yahoo.com/future/WTX&"
+        resp = requests.get(url_web, headers=HTTP_HEADERS, timeout=3.0)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            price_elem = soup.find("span", class_=re.compile("Fz\(32px\)|Fz\(36px\)|Fz\(24px\)"))
+            if price_elem:
+                clean_p = re.sub(r"[^\d.]", "", price_elem.text)
+                if clean_p:
+                    p_val = float(clean_p)
+                    chg_elem = soup.find("span", class_=re.compile("Fz\(20px\)|Fz\(16px\)|Fz\(18px\)"))
+                    chg_val = 0.0
+                    if chg_elem:
+                        clean_c = re.sub(r"[^\d.-]", "", chg_elem.text)
+                        if clean_c:
+                            chg_val = float(clean_c)
+                    ref_val = p_val - chg_val if (p_val - chg_val) > 0 else p_val
+                    pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
+                    return {
+                        "val": f"{int(p_val):,}",
+                        "change": f"{chg_val:+.0f} 點",
+                        "change_num": round(chg_val, 1),
+                        "pct": round(pct_val, 2),
+                        "raw_close": p_val
+                    }
+    except Exception:
+        pass
 
-    # 管道 B：連線台灣期交所 (TAIFEX) 官方 MIS 端點 (日盤 MarketType:0 / 夜盤 MarketType:1)
+    # 管道 2：Yahoo 內部 API 端點嘗試
+    for sym_code in ["WTX%26", "%5ETW%26", "WTX-N%26"]:
+        res_y = fetch_yahoo_api_quote(sym_code, is_points=True)
+        if res_y and res_y["val"] != "連線失敗":
+            return res_y
+
+    # 管道 3：TAIFEX 官方 OpenAPI 端點
+    try:
+        url_openapi = "https://openapi.taifex.com.tw/v1/DailyFuturesQuotes"
+        resp = requests.get(url_openapi, headers=HTTP_HEADERS, timeout=3.0)
+        if resp.status_code == 200:
+            items = resp.json()
+            for item in items:
+                contract = str(item.get("Contract", "") or item.get("Symbol", ""))
+                if contract.startswith("TX") and not contract.startswith("TXO"):
+                    p_close = item.get("Close") or item.get("SettlementPrice") or item.get("LastPrice")
+                    p_ref = item.get("ReferencePrice") or item.get("OpeningPrice")
+                    if p_close and p_close != "-" and float(p_close) > 0:
+                        p_val = float(p_close)
+                        ref_val = float(p_ref) if p_ref and p_ref != "-" else p_val
+                        chg_val = p_val - ref_val
+                        pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
+                        return {
+                            "val": f"{int(p_val):,}",
+                            "change": f"{chg_val:+.0f} 點",
+                            "change_num": round(chg_val, 1),
+                            "pct": round(pct_val, 2),
+                            "raw_close": p_val
+                        }
+    except Exception:
+        pass
+
+    # 管道 4：TAIFEX 官方 MIS API
     for m_type in ["1", "0"]:
         try:
             url_taifex = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
@@ -624,50 +677,23 @@ def fetch_twse_mis_taiex():
 
 
 def force_refresh_all_macro_data():
-    """刷新全市場 14 項指標 (100% 直抓真實數據，連線失敗即顯示連線失敗)"""
+    """刷新全市場 14 項指標"""
     st.cache_data.clear()
     new_cache = {}
 
-    # 1. 台股加權
     new_cache["台股加權"] = fetch_twse_mis_taiex() or fetch_symbol_bulletproof("^TWII")
-
-    # 2. 台指期夜盤
     new_cache["台指期夜盤"] = fetch_taifex_futures_night_bulletproof()
-
-    # 3. 日經 225 N225
     new_cache["日經 225 N225"] = fetch_symbol_bulletproof("^N225")
-
-    # 4. 費城半導體 SOX
     new_cache["費城半導體 SOX"] = fetch_symbol_bulletproof("^SOX")
-
-    # 5. 美債 10Y 殖利率
     new_cache["美債 10Y 殖利率"] = fetch_symbol_bulletproof("^TNX", is_yield=True)
-
-    # 6. 恐慌指數 VIX
     new_cache["恐慌指數 VIX"] = fetch_symbol_bulletproof("^VIX")
-
-    # 7. 道瓊工業 DJI
     new_cache["道瓊工業 DJI"] = fetch_symbol_bulletproof("^DJI")
-
-    # 8. 那斯達克 NASDAQ
     new_cache["那斯達克 NASDAQ"] = fetch_symbol_bulletproof("^IXIC")
-
-    # 9. 標普 500 S&P500
     new_cache["標普 500 S&P500"] = fetch_symbol_bulletproof("^GSPC")
-
-    # 10. 羅素 2000 RUT
     new_cache["羅素 2000 RUT"] = fetch_symbol_bulletproof("^RUT")
-
-    # 11. 美聯儲 13W 短貼率
     new_cache["美聯儲 13W 短貼率"] = fetch_symbol_bulletproof("^IRX", is_yield=True)
-
-    # 12. 美元指數 DXY
     new_cache["美元指數 DXY"] = fetch_symbol_bulletproof("DX-Y.NYB")
-
-    # 13. WTI 原油
     new_cache["WTI 原油"] = fetch_symbol_bulletproof("CL=F")
-
-    # 14. 黃金現貨 Gold
     new_cache["黃金現貨 Gold"] = fetch_symbol_bulletproof("GC=F")
 
     st.session_state.macro_cache = new_cache
@@ -806,8 +832,10 @@ def clean_key(raw):
     return (
         k.replace('"', "")
         .replace("'", "")
-        .replace("\n", "")
-        .replace("\r", "")
+        .replace("
+", "")
+        .replace("
+", "")
     )
 
 
@@ -971,7 +999,8 @@ def get_stock_news(stock_id):
                     for item in news_list[:5]
                     if item.get("title")
                 ]
-                return "\n".join(titles)
+                return "
+".join(titles)
         except Exception:
             continue
     return "無重大新聞"
@@ -998,8 +1027,10 @@ def get_hot_stocks_24h_news_pack():
         tw_name = STOCK_ID_TO_NAME.get(s_id, s_id)
         n_titles = get_stock_news(s_id)
         if n_titles and n_titles != "無重大新聞":
-            news_pack.append(f"【{tw_name} ({s_id}) 最新24H焦點新聞】：\n{n_titles}")
-    return "\n".join(news_pack) if news_pack else "焦點股新聞數據：目前消息面平穩。"
+            news_pack.append(f"【{tw_name} ({s_id}) 最新24H焦點新聞】：
+{n_titles}")
+    return "
+".join(news_pack) if news_pack else "焦點股新聞數據：目前消息面平穩。"
 
 
 def get_stock_valuation_metrics(stock_id):
@@ -1045,7 +1076,9 @@ def get_peer_comparison(stock_id):
             f" {v['gross_margin']}"
         )
 
-    return f"所屬同業族群：[{g_name}]\n" + "\n".join(records)
+    return f"所屬同業族群：[{g_name}]
+" + "
+".join(records)
 
 
 @st.cache_data(ttl=120)
@@ -1590,7 +1623,6 @@ def generate_daily_picks(
     status_container,
     enable_risk_cb=True,
 ):
-    # 風控第一關：檢驗數據完整性（嚴禁數據異常時推演）
     if not macro_data or not night_fut_data or night_fut_data.get("val") == "連線失敗":
         status_container.update(
             label="🚨 總經或台指期夜盤數據連線失敗，啟動風控保護，暫停選股！",
@@ -1683,9 +1715,13 @@ def generate_daily_picks(
                 " 雙位數成長爆發，並在量縮整理後帶量突破前高之強勢飆股。"
             )
         master_prompt_str = (
-            "【啟用大師診斷模組加權】：\n"
-            + "\n".join(master_rules)
-            + "\n請結合以上大師之審核視角進行嚴格二次評分濾網篩選！\n"
+            "【啟用大師診斷模組加權】：
+"
+            + "
+".join(master_rules)
+            + "
+請結合以上大師之審核視角進行嚴格二次評分濾網篩選！
+"
         )
 
     premarket_focus_str = (
@@ -1948,7 +1984,8 @@ def ai_single_stock_analysis(
         target_p = round(real_price * 1.08, 1)
         calc_price_str = (
             f"【系統統一計算數據】：建議買進區間：{p_low}元 ~"
-            f" {p_high}元，預估進場均價中間值：{p_mid}元，波段停利目標價：{target_p}元。\n{overheat_warning_str}"
+            f" {p_high}元，預估進場均價中間值：{p_mid}元，波段停利目標價：{target_p}元。
+{overheat_warning_str}"
         )
     else:
         real_price = 100.0
@@ -2003,18 +2040,22 @@ def ai_single_stock_analysis(
     if selected_masters:
         m_list_str = "、".join(selected_masters)
         master_single_instruction = (
-            f"7. 【大師診斷模組比對報告 (已啟用：{m_list_str})】：\n"
-            "   請針對使用者勾選的大師視角，獨立給予診斷說明：\n"
+            f"7. 【大師診斷模組比對報告 (已啟用：{m_list_str})】：
+"
+            "   請針對使用者勾選的大師視角，獨立給予診斷說明：
+"
         )
         if "杜金龍(股市老牌大師)" in selected_masters:
             master_single_instruction += (
                 "   - 【杜金龍大師觀點】：剖析本益比位階、拉回幅度是否達到 7-11%"
-                " 黃金甜蜜區，以及 20MA 月線扣抵與支撐性，給予大師評分與佈局建議。\n"
+                " 黃金甜蜜區，以及 20MA 月線扣抵與支撐性，給予大師評分與佈局建議。
+"
             )
         if "宇帆隊長" in selected_masters:
             master_single_instruction += (
                 "   - 【宇帆隊長觀點】：從 Top-Down"
-                " 產業題材能見度、三大法人/投信籌碼鎖碼續航力與月營收爆發力進行深度診斷，評估是否屬於主力極度青睞之波段黑馬。\n"
+                " 產業題材能見度、三大法人/投信籌碼鎖碼續航力與月營收爆發力進行深度診斷，評估是否屬於主力極度青睞之波段黑馬。
+"
             )
 
     if capital_mode == "既有持股 (已套牢/持有中)":
@@ -2025,30 +2066,42 @@ def ai_single_stock_analysis(
         )
         unrealized_pct = round(((real_price - cost_price) / cost_price) * 100, 2)
         position_context = (
-            "【使用者既有持股狀態】：持有狀態為『既有持股處置』。\n"
-            f"- 歷史買進成本價：{cost_price} 元 / 當前最新現價：{real_price} 元\n"
+            "【使用者既有持股狀態】：持有狀態為『既有持股處置』。
+"
+            f"- 歷史買進成本價：{cost_price} 元 / 當前最新現價：{real_price} 元
+"
             f"- 當前帳面未實現損益：{unrealized_pct}%"
         )
         mode_instruction = (
-            "=== 第一部分：【既有持股處置與停損/解套脫手指令】 ===\n"
-            "1. 【核心脫手賣點與解套目標試算】：\n"
+            "=== 第一部分：【既有持股處置與停損/解套脫手指令】 ===
+"
+            "1. 【核心脫手賣點與解套目標試算】：
+"
             f"   * 當前買進成本價：{cost_price} 元 | 當前市場現價：{real_price} 元"
-            f" (未實現損益: {unrealized_pct}%)\n"
+            f" (未實現損益: {unrealized_pct}%)
+"
             "   *"
             " 建議逢高減碼 /"
             " 反彈解套脫手目標價：[AI依據上方壓力位與20MA算出的目標價，例如：XX.X"
-            " 元]\n"
+            " 元]
+"
             "   *"
             " 建議關鍵防守 /"
-            " 停損換股價位：[AI依據下方支撐位算出的停損價，例如：XX.X 元]\n"
+            " 停損換股價位：[AI依據下方支撐位算出的停損價，例如：XX.X 元]
+"
             "   *"
             " 脫手時機與處置建議：[例如：若反彈至 XX 元遇到 20MA"
-            " 壓力建議先解套減碼 50%，若跌破 XX 元則需果斷停損換股]\n"
-            "2. 【持股風報比與轉折勝率評估】：\n"
-            "   * 止跌反彈勝率評估：[例如：76% 止跌反彈勝率 (簡要說明依據)]\n"
-            "   * 風險/報酬比 (R/R Ratio) 試算：[比值及建倉建議]\n"
+            " 壓力建議先解套減碼 50%，若跌破 XX 元則需果斷停損換股]
+"
+            "2. 【持股風報比與轉折勝率評估】：
+"
+            "   * 止跌反彈勝率評估：[例如：76% 止跌反彈勝率 (簡要說明依據)]
+"
+            "   * 風險/報酬比 (R/R Ratio) 試算：[比值及建倉建議]
+"
             "3."
-            " 【既有持股操盤指引】：（明確針對目前套牢狀況，給予具體的『分批解套』或『破位停損』時間點與價格指令，無贅詞無重複）。\n"
+            " 【既有持股操盤指引】：（明確針對目前套牢狀況，給予具體的『分批解套』或『破位停損』時間點與價格指令，無贅詞無重複）。
+"
         )
     else:
         capital_str = (
@@ -2060,101 +2113,172 @@ def ai_single_stock_analysis(
             f"【使用者既有持股狀態】：全新佈局 (預計建立部位金額: {capital_str})"
         )
         mode_instruction = (
-            "=== 第一部分：【實戰操盤指令與風報比試算】 ===\n"
+            "=== 第一部分：【實戰操盤指令與風報比試算】 ===
+"
             "【嚴格價格約束鐵則】：第一項『建議進場買進區間』必須【完全照抄並顯示】下面給予的精準數字，絕不可自行依據"
-            " 20MA 或其他均線改寫！\n1. 【核心買賣點與預估獲利試算】：\n   *"
+            " 20MA 或其他均線改寫！
+1. 【核心買賣點與預估獲利試算】：
+   *"
             " 建議進場買進區間："
             + f"{p_low} 元 ~ {p_high} 元"
             + " (預估進場均價中間值: "
             + f"{p_mid} 元"
-            + ")\n   * 波段停利脫手賣出目標價："
+            + ")
+   * 波段停利脫手賣出目標價："
             + f"{target_p} 元"
-            + "\n   * 預計潛在獲利：每股 +"
+            + "
+   * 預計潛在獲利：每股 +"
             + f"{round(target_p - p_mid, 2)}"
             + " 元 (預估獲利空間：+"
             + f"{round((target_p - p_mid)/p_mid*100, 2)}"
-            + "%)\n2. 【多空勝率優勢與風報比評估】：\n   * 多空勝率評估：[AI填入%數]"
-            " 勝率優勢 (※請簡要補充1文句說明勝率評估依據※)\n   * 防守停損價：[AI依據技術支撐算出停損價，如"
+            + "%)
+2. 【多空勝率優勢與風報比評估】：
+   * 多空勝率評估：[AI填入%數]"
+            " 勝率優勢 (※請簡要補充1文句說明勝率評估依據※)
+   * 防守停損價：[AI依據技術支撐算出停損價，如"
             " XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%，設於 20MA"
-            " 月線上方極近處作為關鍵防守線)\n   * 風報比 (R/R Ratio)：[AI計算"
+            " 月線上方極近處作為關鍵防守線)
+   * 風報比 (R/R Ratio)：[AI計算"
             " 潛在獲利/潛在風險 比值，如 X.XX : 1] (高於 2.0:1"
-            " 門檻，具備建立全新部位之價值)\n3. 【極簡操盤實戰指引】：\n   *"
-            " 進場部署：請鎖定建議買進區間分批掛單，若成交量未放大，切勿開高追價，建議於區間下限逢低吸納。\n"
+            " 門檻，具備建立全新部位之價值)
+3. 【極簡操盤實戰指引】：
+   *"
+            " 進場部署：請鎖定建議買進區間分批掛單，若成交量未放大，切勿開高追價，建議於區間下限逢低吸納。
+"
             "   *"
             " 開盤警示：若跳空低開（低於前日收盤）視為弱勢取消進場；若開盤跳空開高 >"
-            " +2.0%，切勿追高，等待股價回落至區間內再建立部位。\n   *"
-            " 停利執行：盤中衝高觸及或超越目標價，必須即時執行動態停利落袋為安。\n   *"
-            " 預估波段持有天數：5 ~ 10 個交易日。\n"
+            " +2.0%，切勿追高，等待股價回落至區間內再建立部位。
+   *"
+            " 停利執行：盤中衝高觸及或超越目標價，必須即時執行動態停利落袋為安。
+   *"
+            " 預估波段持有天數：5 ~ 10 個交易日。
+"
         )
 
     prompt = (
         "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期："
         + str(target_date_str)
-        + "。\n【輸出規範與無贅詞鐵則】：\n1."
-        " 嚴格遵守精簡扼要、不失重點、無重複、無贅詞之格式輸出！\n2."
-        " 嚴禁出現『恭喜取得第一手即時盤面數據』、『我是華爾街資深...』、『以下為針對...』等開場贅詞招呼語！直接輸出標題！\n3."
-        " 第一部分【實戰操盤指令與風報比試算】中，不可重複印出預估進場均價、波段目標價或綜合推薦星等；多空勝率評估必須附帶簡要依據；防守停損價與風報比單獨成列。\n4."
-        " 所有分析必須 100% 依據以下給出的系統真實數據與即時情報進行深度邏輯推演！\n\n分析標的："
+        + "。
+【輸出規範與無贅詞鐵則】：
+1."
+        " 嚴格遵守精簡扼要、不失重點、無重複、無贅詞之格式輸出！
+2."
+        " 嚴禁出現『恭喜取得第一手即時盤面數據』、『我是華爾街資深...』、『以下為針對...』等開場贅詞招呼語！直接輸出標題！
+3."
+        " 第一部分【實戰操盤指令與風報比試算】中，不可重複印出預估進場均價、波段目標價或綜合推薦星等；多空勝率評估必須附帶簡要依據；防守停損價與風報比單獨成列。
+4."
+        " 所有分析必須 100% 依據以下給出的系統真實數據與即時情報進行深度邏輯推演！
+
+分析標的："
         + str(display_name)
         + "，"
         + price_info_str
-        + "。\n"
+        + "。
+"
         + position_context
-        + "\n"
+        + "
+"
         + calc_price_str
-        + "\n"
+        + "
+"
         + premarket_context
-        + "\n"
+        + "
+"
         + warning_prompt_context
-        + "\n\n【基本面估值與同業競爭者對比】：\n- 本益比 (P/E):"
+        + "
+
+【基本面估值與同業競爭者對比】：
+- 本益比 (P/E):"
         f" {val_metrics['pe']} | 股淨比 (P/B): {val_metrics['pb']} |"
-        f" 最新毛利率: {val_metrics['gross_margin']}\n- {peer_str}\n\n【市場最新新聞輿論與獲利預估】：\n"
+        f" 最新毛利率: {val_metrics['gross_margin']}
+- {peer_str}
+
+【市場最新新聞輿論與獲利預估】：
+"
         + news_titles
-        + "\n\n【基本面最新營收趨勢 (落後指標)】：\n"
+        + "
+
+【基本面最新營收趨勢 (落後指標)】：
+"
         + rev_str
-        + "\n\n【近期三大法人籌碼細節 (領先/同步指標)】：\n"
+        + "
+
+【近期三大法人籌碼細節 (領先/同步指標)】：
+"
         + chip_str
-        + "\n\n【技術面量價、雙均線與進階指標數據】：\n- "
+        + "
+
+【技術面量價、雙均線與進階指標數據】：
+- "
         + kd_str
-        + "\n- "
+        + "
+- "
         + ma_str
-        + "\n- "
+        + "
+- "
         + vol_str
-        + "\n- "
+        + "
+- "
         + pattern_str
-        + "\n- 進階指標現況："
+        + "
+- 進階指標現況："
         + adv_tech_str
-        + "\n\n請輸出繁體中文詳細報告，格式如下：\n\n🤖 Gemini AI 全維度詳細分析報告 ("
+        + "
+
+請輸出繁體中文詳細報告，格式如下：
+
+🤖 Gemini AI 全維度詳細分析報告 ("
         + str(display_name)
-        + ")\n\n"
+        + ")
+
+"
         + mode_instruction
-        + "\n=== 第二部分：【全維度詳細分析報告內文】 ===\n1."
+        + "
+=== 第二部分：【全維度詳細分析報告內文】 ===
+1."
         " 全球宏觀與美股大勢：條列解析美股四大指數(道瓊/標普500/那斯達克/羅素2000)、美聯儲利率趨勢、費半、VIX與資金流向（Risk-On"
-        " / Risk-Off 狀態）。\n2. 基本面價值評估、長線前瞻估值與催化劑日曆：\n  "
+        " / Risk-Off 狀態）。
+2. 基本面價值評估、長線前瞻估值與催化劑日曆：
+  "
         " - 追蹤分析法說會與基本面優秀趨勢：評估近 3~5 年"
-        " [EPS/毛利率/營益率/ROE/ROA] 及自由現金流 (FCF) 之 QoQ/YoY 成長軌跡。\n "
+        " [EPS/毛利率/營益率/ROE/ROA] 及自由現金流 (FCF) 之 QoQ/YoY 成長軌跡。
+ "
         "  - 長線 2 年基本面與動態估值推算：給予未來 2 年預估 EPS、YoY，並結合動態"
-        " P/E (對未來成長性評分) 計算目標價 (TP = 預估EPS * 動態PE)。\n   - 12"
+        " P/E (對未來成長性評分) 計算目標價 (TP = 預估EPS * 動態PE)。
+   - 12"
         " 個月前瞻領先指標：以資本支出 (CapEx) 與合約負債 (未交付訂單)"
-        " 進行前瞻推算。\n   - 關鍵催化劑時間軸 (Catalysts)：參照 FED CPI"
+        " 進行前瞻推算。
+   - 關鍵催化劑時間軸 (Catalysts)：參照 FED CPI"
         " 既定行事曆、產業世界展覽、產品發表、FDA"
         " 審查、法說會關鍵展望、財報公告與法人報告數據合理性 (營收/毛利率)"
-        " 評估。\n3."
+        " 評估。
+3."
         " 重大新聞、關鍵產業技術與獲利背離診斷：結合公司核心產業技術與專利壁壘，檢視"
-        " 24 小時重大新聞，診斷市場輿論與法人獲利預估之背離狀況。\n4."
-        " 三大法人籌碼流向、股本結構與月營收連動分析：\n  "
-        " - 評估股本增減資歷史、拆分紀錄與股本規模影響。\n   -"
+        " 24 小時重大新聞，診斷市場輿論與法人獲利預估之背離狀況。
+4."
+        " 三大法人籌碼流向、股本結構與月營收連動分析：
+  "
+        " - 評估股本增減資歷史、拆分紀錄與股本規模影響。
+   -"
         " 分析三大法人/投信連續買賣超天數、週數、累積張數，並推估法人長期平均布局成本與月營收"
-        " MoM/YoY 之連動強度。\n5."
-        " 5MA/20MA月線格局、美股戰術指標與三期均線矩陣診斷：\n   - 美股四大指數"
-        " (道瓊/標普500/那斯達克/羅素2000) 及費半即時戰術結構評估。\n   -"
+        " MoM/YoY 之連動強度。
+5."
+        " 5MA/20MA月線格局、美股戰術指標與三期均線矩陣診斷：
+   - 美股四大指數"
+        " (道瓊/標普500/那斯達克/羅素2000) 及費半即時戰術結構評估。
+   -"
         " 長(200MA)/中(55MA)/短(20MA) 三條移動平均線結構與對應乖離率 (BIAS)"
         " 判斷：多頭格局 (20MA > 55MA > 200MA) 或空頭/修正格局 (200MA > 55MA >"
-        " 20MA)。\n6. 各項進階技術性指標綜合圖表解說：\n   - 布林通道 (Bollinger"
+        " 20MA)。
+6. 各項進階技術性指標綜合圖表解說：
+   - 布林通道 (Bollinger"
         " Bands)：解讀通道口「擴張」 (強勢攻擊) 與「緊縮/擠壓」 (變盤前兆)"
-        " 之實戰意義與上/中/下軌型態。\n   - KD 指標 & RSI(14)：解析高低檔交叉、高檔鈍化、超買超賣與背離訊號之延伸含意。\n   - MACD"
+        " 之實戰意義與上/中/下軌型態。
+   - KD 指辦 & RSI(14)：解析高低檔交叉、高檔鈍化、超買超賣與背離訊號之延伸含意。
+   - MACD"
         " 動能柱與軌道變化：解析 DIF/MACD"
-        " 零軸穿梭、雙線軌道變化與柱狀體縮放所代表的多空控盤力道。\n"
+        " 零軸穿梭、雙線軌道變化與柱狀體縮放所代表的多空控盤力道。
+"
         + master_single_instruction
     )
     return call_gemini_with_retry(prompt)
@@ -2287,7 +2411,8 @@ if st.sidebar.button(
             st.sidebar.error(f"個股預測失敗: {e}")
 
 st.sidebar.info(
-    f"💡 **最新情報摘要**：\n{st.session_state.premarket_summary}"
+    f"💡 **最新情報摘要**：
+{st.session_state.premarket_summary}"
 )
 
 st.sidebar.dataframe(
@@ -2677,8 +2802,12 @@ if macro_data:
     if is_danger:
         st.error(
             "🚨 **【AI 市場風控熔斷機制啟動】全球市場與台股 Risk-Off"
-            " 避險情緒高漲，今日不宜進行任何多頭買進操作！**\n\n"
-            f"**觸發原因**：{' | '.join(danger_reasons)}\n\n"
+            " 避險情緒高漲，今日不宜進行任何多頭買進操作！**
+
+"
+            f"**觸發原因**：{' | '.join(danger_reasons)}
+
+"
             "**操盤紀律建議**：大盤系統性風險偏高，強行選股勝率極低！建議保持 100%"
             " 現金，或對既有持股執行反彈減碼保護。"
         )
@@ -2687,13 +2816,17 @@ if stock_id and str(stock_id).strip() != "":
     warn_check = check_stock_warning_status(stock_id)
     if warn_check["status"] == "DISPOSITION":
         st.error(
-            f"{warn_check['msg']}\n\n🚨 **【13:00"
+            f"{warn_check['msg']}
+
+🚨 **【13:00"
             " 尾盤定型操盤紀律】**：處置股流動性嚴重受阻，請務必等到下午 1:00"
             " 尾盤確認未出現無量下殺且未破防守位再考慮分批買進，切勿在早盤開高時盲目追高掛單！"
         )
     elif warn_check["status"] == "ATTENTION":
         st.warning(
-            f"{warn_check['msg']}\n\n⚠️ **【13:00"
+            f"{warn_check['msg']}
+
+⚠️ **【13:00"
             " 尾盤定型操盤紀律】**：注意股短線波動極劇烈，早盤極易出現當沖洗盤與開高走低陷阱，請務必於下午"
             " 1:00 尾盤定型時，確認股價穩在建議進場區間且並未爆量跳水方可掛單！"
         )
@@ -2714,7 +2847,8 @@ if stock_id and str(stock_id).strip() != "":
         c4.metric(
             "20日線 (月線)",
             kd_info["20MA"],
-            delta=f"{kd_info['bias_20ma']:+}%\n(乖離)",
+            delta=f"{kd_info['bias_20ma']:+}%
+(乖離)",
         )
         c5.metric("KD & 均線型態", kd_info["signal"])
 
@@ -2898,7 +3032,7 @@ if btn_analyze_stock:
             )
         else:
             sp_text = (
-                "🤖 AI 結合美股四大指數與情報檢析【實戰操盤買賣點/風報比試算】..."
+                "🤖 AI 結合美股四大指數與情報檢析【實戰操盤買賣點/风報比試算】..."
             )
 
         with st.spinner(sp_text):
