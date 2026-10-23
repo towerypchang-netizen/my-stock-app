@@ -546,10 +546,10 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """台指期夜盤強健抓取：期交所 OpenData 檔直連 ➔ 期交所 MIS API ➔ Yahoo 全域 API 備援"""
+    """台指期夜盤強健抓取：期交所 OpenData 檔直連 ➔ 期交所 MIS API ➔ Yahoo 全域 API (WTX=F) 備援"""
     ts = int(time.time() * 1000)
 
-    # 管道 1：期交所 OpenData 官方每日行情檔直連 (絕不封鎖雲端 IP)
+    # 管道 1：期交所 OpenData 官方每日行情檔直連
     try:
         url_openapi = "https://openapi.taifex.com.tw/v1/DailyFuturesQuotes"
         resp = requests.get(url_openapi, headers=HTTP_HEADERS, timeout=3.5)
@@ -576,7 +576,7 @@ def fetch_taifex_futures_night_bulletproof():
     except Exception:
         pass
 
-    # 管道 2：期交所 MIS 即時 Quote API
+    # 管道 2：期交所 MIS 即時 Quote API (涵蓋夜盤 MarketType 1/0)
     for m_type in ["1", "0"]:
         try:
             url_mis = f"https://mis.taifex.com.tw/futures/api/getQuoteList?_={ts}"
@@ -586,26 +586,32 @@ def fetch_taifex_futures_night_bulletproof():
                 quotes = resp.json().get("rtData", {}).get("QuoteList", [])
                 for q in quotes:
                     symbol = q.get("SymbolID", "")
-                    if symbol.startswith("TX") and not symbol.startswith("TXO"):
+                    if ("TX" in symbol or symbol.startswith("TX")) and not symbol.startswith("TXO"):
                         p_str = q.get("CLastPrice") or q.get("CRefPrice")
                         ref_str = q.get("CRefPrice")
-                        if p_str and ref_str and str(p_str).strip() != "-":
+                        if p_str and ref_str and str(p_str).strip() not in ["-", ""]:
                             p_val = float(p_str)
                             ref_val = float(ref_str)
                             chg_val = p_val - ref_val
                             pct_val = (chg_val / ref_val) * 100 if ref_val > 0 else 0.0
-                            return {
-                                "val": f"{int(p_val):,}",
-                                "change": f"{chg_val:+.0f} 點",
-                                "change_num": round(chg_val, 1),
-                                "pct": round(pct_val, 2),
-                                "raw_close": p_val
-                            }
+                            if p_val > 0:
+                                return {
+                                    "val": f"{int(p_val):,}",
+                                    "change": f"{chg_val:+.0f} 點",
+                                    "change_num": round(chg_val, 1),
+                                    "pct": round(pct_val, 2),
+                                    "raw_close": p_val
+                                }
         except Exception:
             pass
 
-    # 管道 3：Yahoo 國際版多端點嘗試
-    for sym in ["WTX%26", "WTX-N%26", "%5ETW%26"]:
+    # 管道 3：Yahoo 全域台指期專屬近月期貨 API (修正無效轉義符號 %26，採用標準代碼)
+    for sym in ["WTX=F", "WTX-N.TW", "WTX.TW"]:
+        encoded_sym = sym.replace("=", "%3D")
+        res_quote = fetch_yahoo_api_quote(encoded_sym, is_points=True)
+        if res_quote and res_quote.get("raw_close", 0) > 0:
+            return res_quote
+
         try:
             url_global = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=5d"
             resp = requests.get(url_global, headers=HTTP_HEADERS, timeout=3.5)
