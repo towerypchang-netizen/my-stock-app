@@ -546,7 +546,7 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """台指期夜盤強健抓取：期交所 OpenData ➔ 期交所 MIS API ➔ Yahoo 奇摩網頁 Scraping ➔ Yahoo Chart API"""
+    """台指期夜盤強健抓取：期交所 OpenData ➔ 期交所 MIS API ➔ Yahoo 奇摩網頁 Scraping ➔ Yahoo Chart API (嚴禁混入台股大盤^TWII)"""
     ts = int(time.time() * 1000)
 
     # 管道 1：期交所 OpenData 官方每日行情檔直連
@@ -611,13 +611,11 @@ def fetch_taifex_futures_night_bulletproof():
         resp = requests.get(url_html, headers=HTTP_HEADERS, timeout=3.5)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, "html.parser")
-            # 尋找包含成交價與漲跌的元素
             price_span = soup.find("span", class_=re.compile(r"Fz\(32px\)|Fz\(36px\)|Fz\(28px\)"))
             if price_span:
                 p_text = price_span.text.replace(",", "").strip()
                 if p_text.replace(".", "").isdigit() and float(p_text) > 0:
                     p_val = float(p_text)
-                    # 尋找漲跌點數
                     change_span = soup.find("span", class_=re.compile(r"Fz\(16px\).*Fw\(b\)"))
                     chg_val = 0.0
                     if change_span:
@@ -637,15 +635,15 @@ def fetch_taifex_futures_night_bulletproof():
     except Exception:
         pass
 
-    # 管道 4：Yahoo 全域 API 嘗試 (WTX=F, ^TWII, WTX-N.TW)
-    for sym in ["WTX=F", "WTX-N.TW", "^TWII"]:
-        encoded_sym = sym.replace("^", "%5E").replace("=", "%3D")
-        res_quote = fetch_yahoo_api_quote(encoded_sym, is_points=True)
+    # 管道 4：僅針對純期貨商品代碼 (WTX=F, WTX-N.TW, TX-F.TW) 備援，嚴禁混入 ^TWII 大盤
+    for sym in ["WTX%3DF", "WTX-N.TW", "TX-F.TW"]:
+        res_quote = fetch_yahoo_api_quote(sym, is_points=True)
         if res_quote and res_quote.get("raw_close", 0) > 0:
             return res_quote
 
+        clean_sym = sym.replace("%3D", "=")
         try:
-            url_global = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=5d"
+            url_global = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_sym}?interval=1d&range=5d"
             resp = requests.get(url_global, headers=HTTP_HEADERS, timeout=3.5)
             if resp.status_code == 200:
                 meta = resp.json().get("chart", {}).get("result", [])[0].get("meta", {})
@@ -1889,66 +1887,23 @@ def generate_daily_picks(
         if len(final_results) >= 5:
             break
 
-    fallback_candidates = [
-        "1301",
-        "1303",
-        "6505",
-        "2881",
-        "2882",
-        "2330",
-        "2317",
-        "2382",
-        "2886",
-        "2002",
-        "2454",
-        "2308",
-    ]
-    for f_id in fallback_candidates:
-        if len(final_results) >= 5:
-            break
-        if any(res.get("股號") == f_id for res in final_results):
-            continue
-        valid, real_p = is_valid_stock_fast(
-            f_id, min_price, max_price, target_date_str
-        )
-        if valid and real_p is not None and not math.isnan(real_p) and real_p > 0:
-            p_low = round(real_p * 0.985, 1)
-            p_high = round(real_p * 1.005, 1)
-            target_p = round(real_p * 1.08, 1)
-            tw_name = STOCK_ID_TO_NAME.get(f_id, "強勢個股")
-            final_results.append({
-                "上漲率": "76%",
-                "族群": resolve_official_sector_name(f_id),
-                "股名": tw_name,
-                "股號": f_id,
-                "當前實價": f"{real_p:.2f}",
-                "建議進場": f"{p_low:.1f}-{p_high:.1f}",
-                "波段停利/防護提示": f"目標 {target_p:.1f} (達標即落袋)",
-                "波段期間": "5-10天",
-            })
-
-    while len(final_results) < 5:
-        p_info = get_realtime_tw_price_info("1301")
-        rp = p_info["real_price"] if p_info else 80.0
-        pl = round(rp * 0.985, 1)
-        ph = round(rp * 1.005, 1)
-        tp = round(rp * 1.08, 1)
-        final_results.append({
-            "上漲率": "75%",
-            "族群": resolve_official_sector_name("1301"),
-            "股名": "台塑",
-            "股號": "1301",
-            "當前實價": f"{rp:.2f}",
-            "建議進場": f"{pl:.1f}-{ph:.1f}",
-            "波段停利/防護提示": f"目標 {tp:.1f} (達標即落袋)",
-            "波段期間": "5-10天",
-        })
-
     status_container.update(
         label="🎉 AI 全流程思維鏈 (CoT) 深層評估與選股完畢！",
         state="complete",
         expanded=False,
     )
+
+    if not final_results:
+        return [{
+            "上漲率": "---",
+            "族群": "無符合標的",
+            "股名": "無符合篩選條件個股",
+            "股號": "NONE",
+            "當前實價": "---",
+            "建議進場": "---",
+            "波段停利/防護提示": "提示：當前市場環境或設定限制下未篩選出合格標的。",
+            "波段期間": "觀望",
+        }]
 
     df_res = pd.DataFrame(final_results)
     cols_order = [
@@ -1962,6 +1917,7 @@ def generate_daily_picks(
         "波段期間",
     ]
     return df_res[cols_order].to_dict("records")
+
 
 
 def ai_single_stock_analysis(
