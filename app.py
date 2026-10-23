@@ -488,9 +488,9 @@ def clean_key(raw):
     if not raw:
         return ""
     k = str(raw).strip()
-    return k.replace('"', "").replace("'", "").replace("
-", "").replace("
-", "")
+    return k.replace('"', '').replace("'", '').replace("
+", '').replace("
+", '')
 
 
 FINMIND_TOKEN = clean_key(st.secrets.get("FINMIND_TOKEN", os.getenv("FINMIND_TOKEN", "")))
