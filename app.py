@@ -1321,7 +1321,7 @@ def generate_daily_picks(
     return df_res[cols_order].to_dict("records")
 
 
-# 個股分析獨立模組 (解耦切離大盤選股熔斷與硬性停擺)
+# 個股分析獨立模組 (完全獨立切割：模式 A 全新建倉 vs 模式 B 既有持股處置)
 def ai_single_stock_analysis(
     macro_data,
     sector_data,
@@ -1338,7 +1338,6 @@ def ai_single_stock_analysis(
     display_name = get_stock_display_name(stock_input, stock_id)
     p_info = get_realtime_tw_price_info(stock_id)
 
-    # 備援與防幻覺例外處理 (不硬性中斷，確保產出報告)
     try:
         rev_str = get_stock_revenue_data(stock_id)
     except Exception:
@@ -1351,20 +1350,15 @@ def ai_single_stock_analysis(
 
     if p_info:
         real_price = p_info["real_price"]
-        price_info_str = f"當前真實市場成交價：{real_price} 元"
         p_low = round(real_price * 0.985, 1)
         p_high = round(real_price * 1.005, 1)
         p_mid = round((p_low + p_high) / 2, 2)
         target_p = round(real_price * 1.08, 1)
-        calc_price_str = (
-            f"【系統數據】：建議買進區間：{p_low}元 ~ {p_high}元，"
-            f"進場均價中間值：{p_mid}元，波段停利目標價：{target_p}元。"
-        )
+        gain_per_share = round(target_p - p_mid, 2)
+        gain_pct = round((gain_per_share / p_mid) * 100, 2)
     else:
         real_price = 100.0
-        price_info_str = "即時股價：參考市場現價"
-        p_low, p_high, p_mid, target_p = "---", "---", "---", "---"
-        calc_price_str = ""
+        p_low = p_high = p_mid = target_p = gain_per_share = gain_pct = 0.0
 
     chip_str = (
         chip_data.to_string(index=False)
@@ -1378,9 +1372,36 @@ def ai_single_stock_analysis(
     else:
         kd_str = ma_str = "技術數據進行中"
 
+    # 硬性切割：模式 A (準備買進) vs 模式 B (既有持股)
+    if capital_mode == "既有持股 (已套牢/持有中)":
+        cost_price = price_or_capital if price_or_capital > 0 else real_price
+        unrealized_pct = round(((real_price - cost_price) / cost_price) * 100, 2)
+        mode_section = f"""
+        一、 實戰操盤建議與既有持股處置 (Tactical Strategy for Existing Position)
+
+        1. 既有持股狀態與未實現損益對照：
+           - 歷史買進成本價：{cost_price} 元 | 當前市場現價：{real_price} 元
+           - 當前帳面未實現損益：{unrealized_pct}%
+        2. 逢高減碼 / 反彈解套脫手目標價：請依據上方 20MA 月線與壓力位計算給予明確解套目標價 (例如：XX.X 元)。
+        3. 關鍵防守 / 破位停損換股價位：請依據下方技術支撐位給予明確停損換股價 (例如：XX.X 元)。
+        4. 止跌反彈勝率評估與風報比 (RRR) 試算：評估續抱至解套目標 vs 破位停損之勝率與風險報酬比。
+        5. 既有持股處置實戰指引：給予分批解套與逢高脫手之時機說明，嚴禁出現「建議買進區間」等不相干字眼！
+        """
+    else:
+        capital_str = f"{price_or_capital:,} 元" if price_or_capital > 0 else "未限定金額"
+        mode_section = f"""
+        一、 實戰操盤建議與風報比 (Risk-Reward Ratio) 試算 (預計建立部位金額：{capital_str})
+
+        1. 建議買進區間：{p_low} 元 ～ {p_high} 元 (預估進場均價中間值：{p_mid} 元)
+        2. 波段停利脫手賣出目標價：{target_p} 元
+        3. 預計潛在獲利：每股 +{gain_per_share} 元 (預估獲利空間：+{gain_pct}%)
+        4. 防守停損價：請依據技術支撐算出精準停損價 (含潛在風險金額與 -% 幅度)。
+        5. 風報比 (RRR) 試算：請試算 (潛在獲利 / 潛在風險) 比值，並附帶多空勝率評估說明。
+        6. 新建立部位建倉策略：給予分批掛單、開盤跳空應對與預估波段持有天數指引。
+        """
+
     prompt = f"""
-    請作為頂級華爾街台股分析師，分析標的：{display_name}，{price_info_str}。
-    {calc_price_str}
+    請作為頂級華爾街台股分析師，分析標的：{display_name}，當前現價：{real_price} 元。
     【風險警示】：{warn_info['msg']}
     【基本面估值】：P/E: {val_metrics['pe']} | P/B: {val_metrics['pb']} | 毛利率: {val_metrics['gross_margin']}
     {peer_str}
@@ -1390,11 +1411,11 @@ def ai_single_stock_analysis(
     【技術面】：{kd_str} | {ma_str}
 
     請輸出繁體中文詳細個股分析報告：
-    1. 實戰操盤建議與風報比試算 (建議進場區間：{p_low} - {p_high} 元，目標價：{target_p} 元)
-    2. 全球總經與美股連動
-    3. 基本面價值評估與長線前瞻
-    4. 三大法人籌碼與月營收連動
-    5. 均線型態與進階指標診斷
+    {mode_section}
+    二、 全球總經與美股連動分析
+    三、 基本面價值評估與長線前瞻 (同業縱向比較)
+    四、 三大法人籌碼與月營收連動診斷
+    五、 均線型態與進階指標診斷
     """
     return call_gemini_with_retry(prompt)
 
