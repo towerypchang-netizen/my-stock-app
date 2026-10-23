@@ -552,19 +552,41 @@ def fetch_symbol_bulletproof(symbol, is_yield=False, is_points=False):
 
 
 def fetch_taifex_futures_night_bulletproof():
-    """台指期夜盤強健抓取：頁面原生 JSON 正則解析 ➔ TAIFEX 官方 OpenAPI ➔ Yahoo API 備援"""
+    """全球通用夜盤強健抓取：Yahoo 國際版 API ➔ 台灣 Yahoo 端點 ➔ 期交所 OpenAPI"""
     ts = int(time.time() * 1000)
 
-    # 管道 1：直接抓取網頁，利用 Regex 提取 HTML 內的原生 JSON 數據 (最精準不懼 CSS 變動)
+    # 管道 1：Yahoo Finance 國際全域 API (全球伺服器皆可直連，絕不擋 IP)
+    for sym in ["WTX%26", "%5ETW%26", "TX%3DF"]:
+        try:
+            url_global = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=5d"
+            resp = requests.get(url_global, headers=HTTP_HEADERS, timeout=3.5)
+            if resp.status_code == 200:
+                meta = resp.json().get("chart", {}).get("result", [])[0].get("meta", {})
+                p_val = meta.get("regularMarketPrice")
+                prev_val = meta.get("chartPreviousClose") or meta.get("previousClose")
+                if p_val and prev_val and float(p_val) > 0 and float(prev_val) > 0:
+                    p_val = float(p_val)
+                    prev_val = float(prev_val)
+                    chg_val = p_val - prev_val
+                    pct_val = (chg_val / prev_val) * 100
+                    return {
+                        "val": f"{int(p_val):,}",
+                        "change": f"{chg_val:+.0f} 點",
+                        "change_num": round(chg_val, 1),
+                        "pct": round(pct_val, 2),
+                        "raw_close": p_val
+                    }
+        except Exception:
+            pass
+
+    # 管道 2：Yahoo 股市網頁原生 JSON Regex 解析
     try:
         url_web = "https://tw.stock.yahoo.com/future/WTX&"
-        resp = requests.get(url_web, headers=HTTP_HEADERS, timeout=4.0)
+        resp = requests.get(url_web, headers=HTTP_HEADERS, timeout=3.5)
         if resp.status_code == 200:
             html = resp.text
-            # 尋找頁面內嵌的最新價格與漲跌幅 JSON 欄位
             p_match = re.search(r'"regularMarketPrice":\{"raw":([\d.]+)', html) or re.search(r'"price":\{"raw":([\d.]+)', html)
             c_match = re.search(r'"regularMarketChange":\{"raw":([-\d.]+)', html) or re.search(r'"change":\{"raw":([-\d.]+)', html)
-            
             if p_match:
                 p_val = float(p_match.group(1))
                 chg_val = float(c_match.group(1)) if c_match else 0.0
@@ -580,10 +602,10 @@ def fetch_taifex_futures_night_bulletproof():
     except Exception:
         pass
 
-    # 管道 2：期交所 (TAIFEX) 官方 OpenAPI 直連
+    # 管道 3：期交所 OpenAPI
     try:
         url_openapi = "https://openapi.taifex.com.tw/v1/DailyFuturesQuotes"
-        resp = requests.get(url_openapi, headers=HTTP_HEADERS, timeout=4.0)
+        resp = requests.get(url_openapi, headers=HTTP_HEADERS, timeout=3.5)
         if resp.status_code == 200:
             items = resp.json()
             for item in items:
@@ -605,12 +627,6 @@ def fetch_taifex_futures_night_bulletproof():
                         }
     except Exception:
         pass
-
-    # 管道 3：Yahoo API 備援嘗試
-    for sym_code in ["WTX%26", "%5ETW%26", "WTX-N%26"]:
-        res_y = fetch_yahoo_api_quote(sym_code, is_points=True)
-        if res_y and res_y["val"] != "連線失敗":
-            return res_y
 
     return {"val": "連線失敗", "change": "0 點", "change_num": 0.0, "pct": 0.0, "raw_close": 0.0}
 
