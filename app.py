@@ -615,8 +615,8 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
                     fmt_val = f"{p_val:.2f}%"
                     chg_str = f"{pct_val:+.2f}%"
                 elif is_points:
-                    fmt_val = f"{int(p_val):,}"
-                    chg_str = f"{chg_val:+.0f} 點"
+                    fmt_val = f"{p_val:,.2f}"
+                    chg_str = f"{chg_val:+.2f} 點"
                 elif symbol_encoded in ["%5EVIX"]:
                     fmt_val = f"{p_val:.4f}"
                     chg_str = f"{pct_val:+.2f}%"
@@ -695,7 +695,7 @@ def force_refresh_all_macro_data():
     new_cache = {}
 
     new_cache["台股加權"] = get_macro_item_with_pipeline("台股加權", twse_code="tse_t00.tw", yahoo_symbol="%5ETWII")
-    new_cache["台指期夜盤"] = get_macro_item_with_pipeline("台指期夜盤", taifex_type="TX", yahoo_symbol="%5ETW%26", is_points=True)
+    new_cache["台指期夜盤"] = get_macro_item_with_pipeline("台指期夜盤", yahoo_symbol="WTX%26", is_points=True)
     new_cache["日經 225 N225"] = get_macro_item_with_pipeline("日經 225 N225", yahoo_symbol="%5EN225")
     new_cache["費城半導體 SOX"] = get_macro_item_with_pipeline("費城半導體 SOX", yahoo_symbol="%5ESOX")
     new_cache["美債 10Y 殖利率"] = get_macro_item_with_pipeline("美債 10Y 殖利率", yahoo_symbol="%5ETNX", is_yield=True)
