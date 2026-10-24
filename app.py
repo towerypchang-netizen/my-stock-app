@@ -93,8 +93,8 @@ st.markdown(
 
     .top-macro-card [data-testid="stMetricValue"] > div,
     .top-macro-card [data-testid="stMetricValue"] {
-        font-size: 2.00rem !important;
-        font-weight: 900 !important;
+        font-size: 3.00rem !important;
+        font-weight: 1200 !important;
     }
 
     .top-macro-card [data-testid="stMetricDelta"] {
