@@ -85,19 +85,19 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    div:not([data-testid="stExpander"]) > div[data-testid="stMetricLabel"] p,
-    div:not([data-testid="stExpander"]) > div[data-testid="stMetricLabel"] {
+    .top-macro-card [data-testid="stMetricLabel"] p,
+    .top-macro-card [data-testid="stMetricLabel"] {
         font-size: 1.55rem !important;
         font-weight: 800 !important;
     }
 
-    div:not([data-testid="stExpander"]) > div[data-testid="stMetricValue"] > div,
-    div:not([data-testid="stExpander"]) > div[data-testid="stMetricValue"] {
+    .top-macro-card [data-testid="stMetricValue"] > div,
+    .top-macro-card [data-testid="stMetricValue"] {
         font-size: 2.00rem !important;
         font-weight: 900 !important;
     }
 
-    div:not([data-testid="stExpander"]) > div[data-testid="stMetricDelta"] {
+    .top-macro-card [data-testid="stMetricDelta"] {
         font-size: 0.9rem !important;
         font-weight: 600 !important;
     }
