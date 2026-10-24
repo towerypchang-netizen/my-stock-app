@@ -644,7 +644,7 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
                     chg_str = f"{chg_val:+.2f} 點"
                 elif symbol_encoded in ["%5EVIX"]:
                     fmt_val = f"{p_val:.4f}"
-                    chg_str = f"{pct_val:+.2f}%"
+                    chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
                 else:
                     fmt_val = f"{p_val:,.2f}"
                     chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
@@ -713,13 +713,13 @@ def get_macro_item_with_pipeline(name, twse_code=None, taifex_type=None, yahoo_s
             return res
 
     if yahoo_symbol:
-        res = fetch_yahoo_api_quote(yahoo_symbol, is_yield=is_yield, is_points=is_points)
+        res = fetch_yahoo_api_quote(yahoo_symbol, is_yield=is_yield, is_points=is_points, is_dxy=is_dxy)
         if res:
             return res
 
     if yahoo_symbol:
         sym_clean = yahoo_symbol.replace("%5E", "^").replace("%26", "&")
-        res = fetch_yfinance_fallback(sym_clean, is_yield=is_yield)
+        res = fetch_yfinance_fallback(sym_clean, is_yield=is_yield, is_points=is_points)
         if res:
             return res
 
