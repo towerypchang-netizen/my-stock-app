@@ -696,7 +696,7 @@ def fetch_yfinance_fallback(symbol, is_yield=False, is_points=False):
     return None
 
 
-def get_macro_item_with_pipeline(name, twse_code=None, taifex_type=None, yahoo_symbol=None, is_yield=False, is_points=False):
+def get_macro_item_with_pipeline(name, twse_code=None, taifex_type=None, yahoo_symbol=None, is_yield=False, is_points=False, is_dxy=False):
     if name == "台指期夜盤":
         res = fetch_yahoo_future_wtx()
         if res:
