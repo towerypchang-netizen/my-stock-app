@@ -448,7 +448,7 @@ DEFAULT_MACRO_CACHE = {
         "raw_close": 10779.46,
     },
     "美債 10Y 殖利率": {
-        "val": "5.09%",
+        "val": "4.9880",
         "change": "-1.17%",
         "change_num": -0.06,
         "pct": -1.17,
@@ -504,7 +504,7 @@ DEFAULT_MACRO_CACHE = {
         "raw_close": 2775.90,
     },
     "美聯儲 13W 短貼率": {
-        "val": "4.06%",
+        "val": "4.0320",
         "change": "-0.42%",
         "change_num": -0.017,
         "pct": -0.42,
@@ -637,7 +637,7 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False, is_dx
                 pct_val = (chg_val / prev_val) * 100
 
                 if is_yield:
-                    fmt_val = f"{p_val:.4f}%"
+                    fmt_val = f"{p_val:.4f}"
                     chg_str = f"{pct_val:+.2f}%"
                 elif is_points:
                     fmt_val = f"{p_val:,.2f}"
@@ -675,7 +675,7 @@ def fetch_yfinance_fallback(symbol, is_yield=False, is_points=False):
             pct_val = (chg_val / prev_val) * 100 if prev_val > 0 else 0.0
 
             if is_yield:
-                fmt_val = f"{p_val:.4f}%"
+                fmt_val = f"{p_val:.4f}"
                 chg_str = f"{pct_val:+.2f}%"
             elif is_points:
                 fmt_val = f"{p_val:,.2f}"
