@@ -621,7 +621,7 @@ def fetch_yahoo_future_wtx():
     return None
 
 
-def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
+def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False, is_dxy=False):
     ts = int(time.time() * 1000)
     url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
     try:
