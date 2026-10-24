@@ -2379,45 +2379,31 @@ st.caption(
     "限定資料來源: 台灣證券交易所 (TWSE) | 台灣期貨交易所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance"
 )
 
-st.markdown('<div class="top-macro-card">', unsafe_allow_html=True)
 card_cols = st.columns(4)
 
 with card_cols[0]:
+    st.markdown('<div class="top-macro-card">', unsafe_allow_html=True)
     item_taiex = macro_data.get("台股加權", {})
-    st.metric(
-        label="台股加權",
-        value=item_taiex.get("val", "46,041.43"),
-        delta=item_taiex.get("change", "-1.81%"),
-        delta_color="inverse",
-    )
+    st.metric(label="台股加權", value=item_taiex.get("val", "46,041.43"), delta=item_taiex.get("change", "-1.81%"), delta_color="inverse")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with card_cols[1]:
+    st.markdown('<div class="top-macro-card">', unsafe_allow_html=True)
     item_sox = macro_data.get("費城半導體 SOX", {})
-    st.metric(
-        label="費城半導體",
-        value=item_sox.get("val", "N/A"),
-        delta=item_sox.get("change", "0.00%"),
-        delta_color="inverse",
-    )
+    st.metric(label="費城半導體", value=item_sox.get("val", "N/A"), delta=item_sox.get("change", "0.00%"))
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with card_cols[2]:
-    item_10y = macro_data.get("美債 10Y 殖利率", {})
-    st.metric(
-        label="美債 10Y",
-        value=item_10y.get("val", "N/A"),
-        delta=item_10y.get("change", "0.00%"),
-        delta_color="inverse",
-    )
+    st.markdown('<div class="top-macro-card">', unsafe_allow_html=True)
+    item_tnx = macro_data.get("美債 10Y 殖利率", {})
+    st.metric(label="美債 10Y 殖利率", value=item_tnx.get("val", "N/A"), delta=item_tnx.get("change", "0.00%"))
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with card_cols[3]:
+    st.markdown('<div class="top-macro-card">', unsafe_allow_html=True)
     item_vix = macro_data.get("恐慌指數 VIX", {})
-    st.metric(
-        label="恐慌 VIX",
-        value=item_vix.get("val", "N/A"),
-        delta=item_vix.get("change", "0.00%"),
-        delta_color="inverse",
-    )
-st.markdown("</div>", unsafe_allow_html=True)
+    st.metric(label="恐慌指數 VIX", value=item_vix.get("val", "N/A"), delta=item_vix.get("change", "0.00%"))
+    st.markdown('</div>', unsafe_allow_html=True)
 
 expander_cols = st.columns(4)
 
