@@ -556,7 +556,7 @@ def fetch_twse_mis_taiex():
                     if p_val > 10000:
                         return {
                             "val": f"{p_val:,.2f}",
-                            "change": f"{pct_val:+.2f}%",
+                            "change": f"{chg_val:+.2f} 點",
                             "change_num": round(chg_val, 2),
                             "pct": round(pct_val, 2),
                             "raw_close": p_val
@@ -637,8 +637,8 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
                 pct_val = (chg_val / prev_val) * 100
 
                 if is_yield:
-                    fmt_val = f"{p_val:.2f}%"
-                    chg_str = f"{pct_val:+.2f}%"
+                    fmt_val = f"{p_val:.4f}%"
+                    chg_str = f"{chg_val:+.4f} ({pct_val:+.2f}%)"
                 elif is_points:
                     fmt_val = f"{p_val:,.2f}"
                     chg_str = f"{chg_val:+.2f} 點"
@@ -646,8 +646,8 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
                     fmt_val = f"{p_val:.4f}"
                     chg_str = f"{pct_val:+.2f}%"
                 else:
-                    fmt_val = f"{p_val:,.2f}".replace(".00", "")
-                    chg_str = f"{pct_val:+.2f}%"
+                    fmt_val = f"{p_val:,.2f}"
+                    chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
 
                 return {
                     "val": fmt_val,
@@ -661,7 +661,7 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
     return None
 
 
-def fetch_yfinance_fallback(symbol, is_yield=False):
+def fetch_yfinance_fallback(symbol, is_yield=False, is_points=False):
     try:
         ticker = yf.Ticker(symbol)
         df = ticker.history(period="5d").dropna(subset=["Close"])
@@ -672,15 +672,21 @@ def fetch_yfinance_fallback(symbol, is_yield=False):
             pct_val = (chg_val / prev_val) * 100 if prev_val > 0 else 0.0
 
             if is_yield:
-                fmt_val = f"{p_val:.2f}%"
+                fmt_val = f"{p_val:.4f}%"
+                chg_str = f"{chg_val:+.4f} ({pct_val:+.2f}%)"
+            elif is_points:
+                fmt_val = f"{p_val:,.2f}"
+                chg_str = f"{chg_val:+.2f} 點"
             elif symbol in ["^VIX"]:
                 fmt_val = f"{p_val:.4f}"
+                chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
             else:
-                fmt_val = f"{p_val:,.2f}".replace(".00", "")
+                fmt_val = f"{p_val:,.2f}"
+                chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
 
             return {
                 "val": fmt_val,
-                "change": f"{pct_val:+.2f}%",
+                "change": chg_str,  # 👈 確保 return 回傳的是格式化後的 chg_str
                 "change_num": round(chg_val, 2),
                 "pct": round(pct_val, 2),
                 "raw_close": p_val
