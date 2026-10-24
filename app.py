@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# 🎨 CSS 注入 (精準控制各分區字型與樣式，獨立不連動)
+# 🎨 CSS 注入
 # ---------------------------------------------------------
 st.markdown(
     """
@@ -85,7 +85,6 @@ st.markdown(
         color: #52c41a !important;
     }
 
-    /* A. 上方 4 大指標 (標題與字型大小不變) */
     .top-macro-card [data-testid="stMetricLabel"] p,
     .top-macro-card [data-testid="stMetricLabel"] {
         font-size: 1.05rem !important;
@@ -103,16 +102,15 @@ st.markdown(
         font-weight: 600 !important;
     }
 
-    /* B. 下方 4 個抽屜：標題與漲跌大小不變，但指標數值調小至與標題相同大小 (0.85rem) */
     [data-testid="stExpander"] [data-testid="stMetricLabel"] p,
     [data-testid="stExpander"] [data-testid="stMetricLabel"] {
-        font-size: 0.85rem !important;
-        font-weight: 600 !important;
+        font-size: 0.78rem !important;
+        font-weight: 500 !important;
     }
 
     [data-testid="stExpander"] [data-testid="stMetricValue"] > div,
     [data-testid="stExpander"] [data-testid="stMetricValue"] {
-        font-size: 0.85rem !important; /* 調小至與標題相同大小 */
+        font-size: 1.0m !important;
         font-weight: 600 !important;
     }
 
@@ -121,18 +119,10 @@ st.markdown(
         font-weight: 500 !important;
     }
 
-    /* 個股看板獨立 CSS (不與總經區塊連動)：數值與狀態敘述調小至與標題相同大小 (0.95rem) */
-    .stock-dashboard-card [data-testid="stMetricLabel"] p,
-    .stock-dashboard-card [data-testid="stMetricLabel"] {
-        font-size: 0.95rem !important;
-        font-weight: 600 !important;
-        color: #8b949e !important;
-    }
-
-    .stock-dashboard-card [data-testid="stMetricValue"] > div,
-    .stock-dashboard-card [data-testid="stMetricValue"] {
-        font-size: 0.95rem !important; /* 調小至與標題相同大小 */
-        font-weight: 600 !important;
+    /* 統一技術指標看板 Metric 數值與型態文字的大小 */
+    [data-testid="stMetricValue"] > div {
+        font-size: 1.55rem !important;
+        font-weight: 800 !important;
     }
 
     html, body, [class*="css"] { font-size: 15px; }
@@ -442,37 +432,34 @@ HTTP_HEADERS = {
     )
 }
 
-# ---------------------------------------------------------
-# 📊 全球總經 14 項指數預設快取與精準格式修正
-# ---------------------------------------------------------
 DEFAULT_MACRO_CACHE = {
     "台股加權": {
         "val": "46,041.43",
-        "change": "-846.34 點",  # 比率改為升跌點數
+        "change": "-1.81%",
         "change_num": -846.34,
         "pct": -1.81,
         "raw_close": 46041.43,
     },
     "費城半導體 SOX": {
         "val": "11,505.56",
-        "change": "+222.10 點", # 比率改為升跌點數
+        "change": "+1.97%",
         "change_num": 222.10,
         "pct": 1.97,
         "raw_close": 11505.56,
     },
     "美債 10Y 殖利率": {
-        "val": "4.9880%",        # 修正進位，精準呈現與網站相同之格式
-        "change": "+0.0350 (+0.71%)",
-        "change_num": 0.0350,
-        "pct": 0.71,
-        "raw_close": 4.9880,
+        "val": "5.09%",
+        "change": "-1.17%",
+        "change_num": -0.06,
+        "pct": -1.17,
+        "raw_close": 5.09,
     },
     "恐慌指數 VIX": {
-        "val": "19.4500",
-        "change": "+0.42 (+2.21%)",
-        "change_num": 0.42,
-        "pct": 2.21,
-        "raw_close": 19.4500,
+        "val": "16.6800",
+        "change": "-3.64%",
+        "change_num": -0.63,
+        "pct": -3.64,
+        "raw_close": 16.68,
     },
     "台指期夜盤": {
         "val": "45,654.00",
@@ -482,67 +469,67 @@ DEFAULT_MACRO_CACHE = {
         "raw_close": 45654.0,
     },
     "日經 225 N225": {
-        "val": "62,693.15",
-        "change": "-214.30 點", # 比率改為升跌點數
-        "change_num": -214.30,
-        "pct": -0.34,
-        "raw_close": 62693.15,
+        "val": "62,907.84",
+        "change": "-2.65%",
+        "change_num": -1713.40,
+        "pct": -2.65,
+        "raw_close": 62907.84,
     },
     "道瓊工業 DJI": {
-        "val": "52,215.16",
-        "change": "-652.82 點", # 比率改為升跌點數
-        "change_num": -652.82,
-        "pct": -1.23,
-        "raw_close": 52215.16,
+        "val": "52,856.09",
+        "change": "+0.69%",
+        "change_num": 362.10,
+        "pct": 0.69,
+        "raw_close": 52856.09,
     },
     "那斯達克 NASDAQ": {
-        "val": "25,955.10",
-        "change": "-54.60 點",  # 比率改為升跌點數
-        "change_num": -54.60,
-        "pct": -0.21,
-        "raw_close": 25955.10,
+        "val": "26,702.86",
+        "change": "+1.05%",
+        "change_num": 277.30,
+        "pct": 1.05,
+        "raw_close": 26702.86,
     },
     "標普 500 S&P500": {
-        "val": "7,623.68",
-        "change": "-39.75 點",  # 比率改為升跌點數
-        "change_num": -39.75,
-        "pct": -0.52,
-        "raw_close": 7623.68,
+        "val": "7,757.17",
+        "change": "+0.58%",
+        "change_num": 44.70,
+        "pct": 0.58,
+        "raw_close": 7757.17,
     },
     "羅素 2000 RUT": {
-        "val": "2,775.90",
-        "change": "-8.08 點",   # 比率改為升跌點數
-        "change_num": -8.08,
-        "pct": -0.29,
-        "raw_close": 2775.90,
+        "val": "2,781.02",
+        "change": "+0.27%",
+        "change_num": 7.50,
+        "pct": 0.27,
+        "raw_close": 2781.02,
     },
     "美聯儲 13W 短貼率": {
-        "val": "4.0320%",       # 修正顯示方式，改為與網站相同之數字格式
-        "change": "+0.0100 (+0.25%)",
-        "change_num": 0.0100,
-        "pct": 0.25,
-        "raw_close": 4.0320,
+        "val": "4.06%",
+        "change": "-0.42%",
+        "change_num": -0.017,
+        "pct": -0.42,
+        "raw_close": 4.06,
     },
     "美元指數 DXY": {
-        "val": "101.75",
-        "change": "-0.06 (-0.06%)", # 修正漲跌比率顯示
-        "change_num": -0.06,
-        "pct": -0.06,
-        "raw_close": 101.75,
+        "val": "101.64",
+        "change": "-0.14%",
+        "change_num": -0.14,
+        "pct": -0.14,
+        "raw_close": 101.64,
     },
     "WTI 原油": {
-        "val": "103.44",
-        "change": "+3.96 (+3.99%)",
-        "change_num": 3.96,
-        "pct": 3.99,
-        "raw_close": 103.44,
+        "val": "98.44",
+        "change": "+0.45%",
+        "change_num": 0.44,
+        "pct": 0.45,
+        "raw_close": 98.44,
     },
     "黃金現貨 Gold": {
-        "val": "4,010.00",
-        "change": "-50.30 (-1.24%)",
-        "change_num": -50.30,
-        "pct": -1.24,
-        "raw_close": 4010.00,
+        "val": "4,070.02",
+        "change": "-1.34%",
+        "change_num": -55.48,
+        "pct": -1.34,
+        "raw_close": 4070.02,
     },
 }
 
@@ -569,7 +556,7 @@ def fetch_twse_mis_taiex():
                     if p_val > 10000:
                         return {
                             "val": f"{p_val:,.2f}",
-                            "change": f"{chg_val:+.2f} 點", # 升跌點數
+                            "change": f"{pct_val:+.2f}%",
                             "change_num": round(chg_val, 2),
                             "pct": round(pct_val, 2),
                             "raw_close": p_val
@@ -634,7 +621,7 @@ def fetch_yahoo_future_wtx():
     return None
 
 
-def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False, is_dxy=False):
+def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False):
     ts = int(time.time() * 1000)
     url = f"https://tw.stock.yahoo.com/v1/finance/price?symbol={symbol_encoded}&_t={ts}"
     try:
@@ -650,20 +637,17 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False, is_dx
                 pct_val = (chg_val / prev_val) * 100
 
                 if is_yield:
-                    fmt_val = f"{p_val:.4f}%" # 美債/貼率 網站 4 位格式
-                    chg_str = f"{chg_val:+.4f} ({pct_val:+.2f}%)"
-                elif is_dxy:
-                    fmt_val = f"{p_val:.2f}"
-                    chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
+                    fmt_val = f"{p_val:.2f}%"
+                    chg_str = f"{pct_val:+.2f}%"
                 elif is_points:
                     fmt_val = f"{p_val:,.2f}"
                     chg_str = f"{chg_val:+.2f} 點"
                 elif symbol_encoded in ["%5EVIX"]:
                     fmt_val = f"{p_val:.4f}"
-                    chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
+                    chg_str = f"{pct_val:+.2f}%"
                 else:
-                    fmt_val = f"{p_val:,.2f}"
-                    chg_str = f"{chg_val:+.2f} 點"
+                    fmt_val = f"{p_val:,.2f}".replace(".00", "")
+                    chg_str = f"{pct_val:+.2f}%"
 
                 return {
                     "val": fmt_val,
@@ -677,7 +661,7 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False, is_dx
     return None
 
 
-def fetch_yfinance_fallback(symbol, is_yield=False, is_points=False):
+def fetch_yfinance_fallback(symbol, is_yield=False):
     try:
         ticker = yf.Ticker(symbol)
         df = ticker.history(period="5d").dropna(subset=["Close"])
@@ -688,18 +672,15 @@ def fetch_yfinance_fallback(symbol, is_yield=False, is_points=False):
             pct_val = (chg_val / prev_val) * 100 if prev_val > 0 else 0.0
 
             if is_yield:
-                fmt_val = f"{p_val:.4f}%"
-                chg_str = f"{chg_val:+.4f} ({pct_val:+.2f}%)"
-            elif is_points:
-                fmt_val = f"{p_val:,.2f}"
-                chg_str = f"{chg_val:+.2f} 點"
+                fmt_val = f"{p_val:.2f}%"
+            elif symbol in ["^VIX"]:
+                fmt_val = f"{p_val:.4f}"
             else:
-                fmt_val = f"{p_val:,.2f}"
-                chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
+                fmt_val = f"{p_val:,.2f}".replace(".00", "")
 
             return {
                 "val": fmt_val,
-                "change": chg_str,
+                "change": f"{pct_val:+.2f}%",
                 "change_num": round(chg_val, 2),
                 "pct": round(pct_val, 2),
                 "raw_close": p_val
@@ -709,7 +690,7 @@ def fetch_yfinance_fallback(symbol, is_yield=False, is_points=False):
     return None
 
 
-def get_macro_item_with_pipeline(name, twse_code=None, taifex_type=None, yahoo_symbol=None, is_yield=False, is_points=False, is_dxy=False):
+def get_macro_item_with_pipeline(name, twse_code=None, taifex_type=None, yahoo_symbol=None, is_yield=False, is_points=False):
     if name == "台指期夜盤":
         res = fetch_yahoo_future_wtx()
         if res:
@@ -726,13 +707,13 @@ def get_macro_item_with_pipeline(name, twse_code=None, taifex_type=None, yahoo_s
             return res
 
     if yahoo_symbol:
-        res = fetch_yahoo_api_quote(yahoo_symbol, is_yield=is_yield, is_points=is_points, is_dxy=is_dxy)
+        res = fetch_yahoo_api_quote(yahoo_symbol, is_yield=is_yield, is_points=is_points)
         if res:
             return res
 
     if yahoo_symbol:
         sym_clean = yahoo_symbol.replace("%5E", "^").replace("%26", "&")
-        res = fetch_yfinance_fallback(sym_clean, is_yield=is_yield, is_points=is_points)
+        res = fetch_yfinance_fallback(sym_clean, is_yield=is_yield)
         if res:
             return res
 
@@ -743,18 +724,18 @@ def force_refresh_all_macro_data():
     st.cache_data.clear()
     new_cache = {}
 
-    new_cache["台股加權"] = get_macro_item_with_pipeline("台股加權", twse_code="tse_t00.tw", yahoo_symbol="%5ETWII", is_points=True)
+    new_cache["台股加權"] = get_macro_item_with_pipeline("台股加權", twse_code="tse_t00.tw", yahoo_symbol="%5ETWII")
     new_cache["台指期夜盤"] = get_macro_item_with_pipeline("台指期夜盤", taifex_type="TX", yahoo_symbol="WTX%26", is_points=True)
-    new_cache["日經 225 N225"] = get_macro_item_with_pipeline("日經 225 N225", yahoo_symbol="%5EN225", is_points=True)
-    new_cache["費城半導體 SOX"] = get_macro_item_with_pipeline("費城半導體 SOX", yahoo_symbol="%5ESOX", is_points=True)
+    new_cache["日經 225 N225"] = get_macro_item_with_pipeline("日經 225 N225", yahoo_symbol="%5EN225")
+    new_cache["費城半導體 SOX"] = get_macro_item_with_pipeline("費城半導體 SOX", yahoo_symbol="%5ESOX")
     new_cache["美債 10Y 殖利率"] = get_macro_item_with_pipeline("美債 10Y 殖利率", yahoo_symbol="%5ETNX", is_yield=True)
     new_cache["恐慌指數 VIX"] = get_macro_item_with_pipeline("恐慌指數 VIX", yahoo_symbol="%5EVIX")
-    new_cache["道瓊工業 DJI"] = get_macro_item_with_pipeline("道瓊工業 DJI", yahoo_symbol="%5EDJI", is_points=True)
-    new_cache["那斯達克 NASDAQ"] = get_macro_item_with_pipeline("那斯達克 NASDAQ", yahoo_symbol="%5EIXIC", is_points=True)
-    new_cache["標普 500 S&P500"] = get_macro_item_with_pipeline("標普 500 S&P500", yahoo_symbol="%5EGSPC", is_points=True)
-    new_cache["羅素 2000 RUT"] = get_macro_item_with_pipeline("羅素 2000 RUT", yahoo_symbol="%5ERUT", is_points=True)
+    new_cache["道瓊工業 DJI"] = get_macro_item_with_pipeline("道瓊工業 DJI", yahoo_symbol="%5EDJI")
+    new_cache["那斯達克 NASDAQ"] = get_macro_item_with_pipeline("那斯達克 NASDAQ", yahoo_symbol="%5EIXIC")
+    new_cache["標普 500 S&P500"] = get_macro_item_with_pipeline("標普 500 S&P500", yahoo_symbol="%5EGSPC")
+    new_cache["羅素 2000 RUT"] = get_macro_item_with_pipeline("羅素 2000 RUT", yahoo_symbol="%5ERUT")
     new_cache["美聯儲 13W 短貼率"] = get_macro_item_with_pipeline("美聯儲 13W 短貼率", yahoo_symbol="%5EIRX", is_yield=True)
-    new_cache["美元指數 DXY"] = get_macro_item_with_pipeline("美元指數 DXY", yahoo_symbol="DX-Y.NYB", is_dxy=True)
+    new_cache["美元指數 DXY"] = get_macro_item_with_pipeline("美元指數 DXY", yahoo_symbol="DX-Y.NYB")
     new_cache["WTI 原油"] = get_macro_item_with_pipeline("WTI 原油", yahoo_symbol="CL%3DF")
     new_cache["黃金現貨 Gold"] = get_macro_item_with_pipeline("黃金現貨 Gold", yahoo_symbol="GC%3DF")
 
@@ -894,10 +875,8 @@ def clean_key(raw):
     return (
         k.replace('"', "")
         .replace("'", "")
-        .replace("
-", "")
-        .replace("
-", "")
+        .replace("\n", "")
+        .replace("\r", "")
     )
 
 
@@ -1061,8 +1040,7 @@ def get_stock_news(stock_id):
                     for item in news_list[:5]
                     if item.get("title")
                 ]
-                return "
-".join(titles)
+                return "\n".join(titles)
         except Exception:
             continue
     return "無重大新聞"
@@ -1089,10 +1067,8 @@ def get_hot_stocks_24h_news_pack():
         tw_name = STOCK_ID_TO_NAME.get(s_id, s_id)
         n_titles = get_stock_news(s_id)
         if n_titles and n_titles != "無重大新聞":
-            news_pack.append(f"【{tw_name} ({s_id}) 最新24H焦點新聞】：
-{n_titles}")
-    return "
-".join(news_pack) if news_pack else "焦點股新聞數據：目前消息面平穩。"
+            news_pack.append(f"【{tw_name} ({s_id}) 最新24H焦點新聞】：\n{n_titles}")
+    return "\n".join(news_pack) if news_pack else "焦點股新聞數據：目前消息面平穩。"
 
 
 def get_stock_valuation_metrics(stock_id):
@@ -1138,9 +1114,7 @@ def get_peer_comparison(stock_id):
             f" {v['gross_margin']}"
         )
 
-    return f"所屬同業族群：[{g_name}]
-" + "
-".join(records)
+    return f"所屬同業族群：[{g_name}]\n" + "\n".join(records)
 
 
 @st.cache_data(ttl=300)
@@ -1763,13 +1737,9 @@ def generate_daily_picks(
                 " 雙位數成長爆發，並在量縮整理後帶量突破前高之強勢飆股。"
             )
         master_prompt_str = (
-            "【啟用大師診斷模組加權】：
-"
-            + "
-".join(master_rules)
-            + "
-請結合以上大師之審核視角進行嚴格二次評分濾網篩選！
-"
+            "【啟用大師診斷模組加權】：\n"
+            + "\n".join(master_rules)
+            + "\n請結合以上大師之審核視角進行嚴格二次評分濾網篩選！\n"
         )
 
     premarket_focus_str = (
@@ -2032,8 +2002,7 @@ def ai_single_stock_analysis(
         target_p = round(real_price * 1.08, 2)
         calc_price_str = (
             f"【系統統一計算數據】：建議買進區間：{p_low:.2f}元 ~"
-            f" {p_high:.2f}元，預估進場均價中間值：{p_mid:.2f}元，波段停利目標價：{target_p:.2f}元。
-{overheat_warning_str}"
+            f" {p_high:.2f}元，預估進場均價中間值：{p_mid:.2f}元，波段停利目標價：{target_p:.2f}元。\n{overheat_warning_str}"
         )
     else:
         real_price = 100.0
@@ -2088,22 +2057,18 @@ def ai_single_stock_analysis(
     if selected_masters:
         m_list_str = "、".join(selected_masters)
         master_single_instruction = (
-            f"7. 【大師診斷模組比對報告 (已啟用：{m_list_str})】：
-"
-            "   請針對使用者勾選的大師視角，獨立給予診斷說明：
-"
+            f"7. 【大師診斷模組比對報告 (已啟用：{m_list_str})】：\n"
+            "   請針對使用者勾選的大師視角，獨立給予診斷說明：\n"
         )
         if "杜金龍(股市老牌大師)" in selected_masters:
             master_single_instruction += (
                 "   - 【杜金龍大師觀點】：剖析本益比位階、拉回幅度是否達到 7-11%"
-                " 黃金甜蜜區，以及 20MA 月線扣抵與支撐性，給予大師評分與佈局建議。
-"
+                " 黃金甜蜜區，以及 20MA 月線扣抵與支撐性，給予大師評分與佈局建議。\n"
             )
         if "宇帆隊長" in selected_masters:
             master_single_instruction += (
                 "   - 【宇帆隊長觀點】：從 Top-Down"
-                " 產業題材能見度、三大法人/投信籌碼鎖碼續航力與月營收爆發力進行深度診斷，評估是否屬於主力極度青睞之波段黑馬。
-"
+                " 產業題材能見度、三大法人/投信籌碼鎖碼續航力與月營收爆發力進行深度診斷，評估是否屬於主力極度青睞之波段黑馬。\n"
             )
 
     if capital_mode == "既有持股 (已套牢/持有中)":
@@ -2114,39 +2079,24 @@ def ai_single_stock_analysis(
         )
         unrealized_pct = round(((real_price - cost_price) / cost_price) * 100, 2)
         position_context = (
-            "【使用者既有持股狀態】：持有狀態為『既有持股處置』。
-"
-            f"- 歷史買進成本價：{cost_price:.2f} 元 / 當前最新現價：{real_price:.2f} 元
-"
+            "【使用者既有持股狀態】：持有狀態為『既有持股處置』。\n"
+            f"- 歷史買進成本價：{cost_price:.2f} 元 / 當前最新現價：{real_price:.2f} 元\n"
             f"- 當前帳面未實現損益：{unrealized_pct:+.2f}%"
         )
         mode_instruction = (
-            "=== 第一部分：【既有持股處置與解套脫手指令】 ===
-"
-            "1. 【既有持股狀態與未實現損益對照】：
-"
-            f"   * 歷史買進成本價：{cost_price:.2f} 元 | 當前市場現價：{real_price:.2f} 元
-"
-            f"   * 當前帳面未實現損益：{unrealized_pct:+.2f}%
-"
-            "2. 【逢高減碼 / 反彈解套脫手目標價】：
-"
-            "   * 第一解套解壓點 (保本與小盈平倉)：[AI依據上方壓力與5MA計算目標價，例如：XX.XX 元]
-"
-            "   * 第二反彈減碼目標價 (月線主壓力位)：[AI依據20MA壓力位計算，例如：XX.XX 元]
-"
-            "3. 【關鍵防守 / 破位停損換股價位】：
-"
-            "   * 建議關鍵防守停損價：[AI依據下方支撐位計算停損價，例如：XX.XX 元] (跌破需果斷執行離場換股)
-"
-            "4. 【止跌反彈勝率與風報比 (RRR) 評估】：
-"
-            "   * 止跌反彈勝率：[例如：76% 止跌反彈勝率 (簡要說明依據)]
-"
-            "   * 風報比 (R/R Ratio) 試算：[比值及處置建議]
-"
-            "5. 【既有持股操盤指引】：（明確針對目前套牢或持有狀況，給予具體的『分批解套』或『破位停損』時間點與價格指令，無贅詞無重複）。
-"
+            "=== 第一部分：【既有持股處置與解套脫手指令】 ===\n"
+            "1. 【既有持股狀態與未實現損益對照】：\n"
+            f"   * 歷史買進成本價：{cost_price:.2f} 元 | 當前市場現價：{real_price:.2f} 元\n"
+            f"   * 當前帳面未實現損益：{unrealized_pct:+.2f}%\n"
+            "2. 【逢高減碼 / 反彈解套脫手目標價】：\n"
+            "   * 第一解套解壓點 (保本與小盈平倉)：[AI依據上方壓力與5MA計算目標價，例如：XX.XX 元]\n"
+            "   * 第二反彈減碼目標價 (月線主壓力位)：[AI依據20MA壓力位計算，例如：XX.XX 元]\n"
+            "3. 【關鍵防守 / 破位停損換股價位】：\n"
+            "   * 建議關鍵防守停損價：[AI依據下方支撐位計算停損價，例如：XX.XX 元] (跌破需果斷執行離場換股)\n"
+            "4. 【止跌反彈勝率與風報比 (RRR) 評估】：\n"
+            "   * 止跌反彈勝率：[例如：76% 止跌反彈勝率 (簡要說明依據)]\n"
+            "   * 風報比 (R/R Ratio) 試算：[比值及處置建議]\n"
+            "5. 【既有持股操盤指引】：（明確針對目前套牢或持有狀況，給予具體的『分批解套』或『破位停損』時間點與價格指令，無贅詞無重複）。\n"
         )
     else:
         capital_str = (
@@ -2158,129 +2108,69 @@ def ai_single_stock_analysis(
             f"【使用者既有持股狀態】：全新佈局 (預計建立部位金額: {capital_str})"
         )
         mode_instruction = (
-            "=== 第一部分：【實戰操盤指令與風報比試算】 ===
-"
-            "【嚴格價格約束鐵則】：所有金額欄位必須精準顯示至小數點後 2 位！
-"
-            "1. 【核心買賣點與預估獲利試算】：
-"
-            f"   * 建議買進區間：{p_low:.2f} 元 ~ {p_high:.2f} 元 (預估進場均價中間值: {p_mid:.2f} 元)
-"
-            f"   * 波段停利脫手賣出目標價：{target_p:.2f} 元
-"
-            f"   * 預計潛在獲利：每股 +{round(target_p - p_mid, 2):.2f} 元 (預估獲利空間：+{round((target_p - p_mid)/p_mid*100, 2):.2f}%)
-"
-            "2. 【多空勝率優勢與風報比評估】：
-"
-            "   * 多空勝率評估：[AI填入%數] 勝率優勢 (※請簡要補充1文句說明勝率評估依據※)
-"
-            "   * 防守停損價：[AI依據技術支撐算出停損價，如 XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%)
-"
-            "   * 風報比 (R/R Ratio)：[AI計算 潛在獲利/潛在風險 比值，如 X.XX : 1]
-"
-            "3. 【極簡操盤實戰指引】：
-"
-            "   * 進場部署：請鎖定建議買進區間分批掛單，若成交量未放大，切勿開高追價。
-"
-            "   * 開盤警示：若跳空低開視為弱勢取消進場；若開盤跳空開高 > +2.0%，等待股價回落至區間內再建立部位。
-"
-            "   * 停利執行：盤中衝高觸及或超越目標價，即時執行動態停利落袋為安。
-"
-            "   * 預估波段持有天數：5 ~ 10 個交易日。
-"
+            "=== 第一部分：【實戰操盤指令與風報比試算】 ===\n"
+            "【嚴格價格約束鐵則】：所有金額欄位必須精準顯示至小數點後 2 位！\n"
+            "1. 【核心買賣點與預估獲利試算】：\n"
+            f"   * 建議買進區間：{p_low:.2f} 元 ~ {p_high:.2f} 元 (預估進場均價中間值: {p_mid:.2f} 元)\n"
+            f"   * 波段停利脫手賣出目標價：{target_p:.2f} 元\n"
+            f"   * 預計潛在獲利：每股 +{round(target_p - p_mid, 2):.2f} 元 (預估獲利空間：+{round((target_p - p_mid)/p_mid*100, 2):.2f}%)\n"
+            "2. 【多空勝率優勢與風報比評估】：\n"
+            "   * 多空勝率評估：[AI填入%數] 勝率優勢 (※請簡要補充1文句說明勝率評估依據※)\n"
+            "   * 防守停損價：[AI依據技術支撐算出停損價，如 XX.XX 元] (潛在風險：-XX.XX 元 / -XX.XX%)\n"
+            "   * 風報比 (R/R Ratio)：[AI計算 潛在獲利/潛在風險 比值，如 X.XX : 1]\n"
+            "3. 【極簡操盤實戰指引】：\n"
+            "   * 進場部署：請鎖定建議買進區間分批掛單，若成交量未放大，切勿開高追價。\n"
+            "   * 開盤警示：若跳空低開視為弱勢取消進場；若開盤跳空開高 > +2.0%，等待股價回落至區間內再建立部位。\n"
+            "   * 停利執行：盤中衝高觸及或超越目標價，即時執行動態停利落袋為安。\n"
+            "   * 預估波段持有天數：5 ~ 10 個交易日。\n"
         )
 
     prompt = (
         "請作為頂級華爾街資深 Top-Down (自上而下) 總經與台股操盤手分析師。基準日期："
         + str(target_date_str)
-        + "。
-【輸出規範與無贅詞鐵則】：
-1."
-        " 嚴格遵守精簡扼要、不失重點、無重複、無贅詞之格式輸出！報告內所有價格欄位均需顯示至小數點後 2 位！
-2."
-        " 嚴禁出現『恭喜取得第一手即時盤面數據』、『我是華爾街資深...』等開場贅詞招呼語！直接輸出標題！
-3."
-        " 第一部分中，不可重複印出預估進場均價或綜合推薦星等；多空勝率評估必須附帶簡要依據。
-4."
-        " 所有分析必須 100% 依據以下給出的系統真實數據與即時情報進行深度邏輯推演！
-
-分析標的："
+        + "。\n【輸出規範與無贅詞鐵則】：\n1."
+        " 嚴格遵守精簡扼要、不失重點、無重複、無贅詞之格式輸出！報告內所有價格欄位均需顯示至小數點後 2 位！\n2."
+        " 嚴禁出現『恭喜取得第一手即時盤面數據』、『我是華爾街資深...』等開場贅詞招呼語！直接輸出標題！\n3."
+        " 第一部分中，不可重複印出預估進場均價或綜合推薦星等；多空勝率評估必須附帶簡要依據。\n4."
+        " 所有分析必須 100% 依據以下給出的系統真實數據與即時情報進行深度邏輯推演！\n\n分析標的："
         + str(display_name)
         + "，"
         + price_info_str
-        + "。
-"
+        + "。\n"
         + position_context
-        + "
-"
+        + "\n"
         + calc_price_str
-        + "
-"
+        + "\n"
         + premarket_context
-        + "
-"
+        + "\n"
         + warning_prompt_context
-        + "
-
-【基本面估值與同業競爭者對比】：
-- 本益比 (P/E):"
+        + "\n\n【基本面估值與同業競爭者對比】：\n- 本益比 (P/E):"
         f" {val_metrics['pe']} | 股淨比 (P/B): {val_metrics['pb']} |"
-        f" 最新毛利率: {val_metrics['gross_margin']}
-- {peer_str}
-
-【市場最新新聞輿論與獲利預估】：
-"
+        f" 最新毛利率: {val_metrics['gross_margin']}\n- {peer_str}\n\n【市場最新新聞輿論與獲利預估】：\n"
         + news_titles
-        + "
-
-【基本面最新營收趨勢 (落後指標)】：
-"
+        + "\n\n【基本面最新營收趨勢 (落後指標)】：\n"
         + rev_str
-        + "
-
-【近期三大法人籌碼細節 (領先/同步指標)】：
-"
+        + "\n\n【近期三大法人籌碼細節 (領先/同步指標)】：\n"
         + chip_str
-        + "
-
-【技術面量價、雙均線與進階指標數據】：
-- "
+        + "\n\n【技術面量價、雙均線與進階指標數據】：\n- "
         + kd_str
-        + "
-- "
+        + "\n- "
         + ma_str
-        + "
-- "
+        + "\n- "
         + vol_str
-        + "
-- "
+        + "\n- "
         + pattern_str
-        + "
-- 進階指標現況："
+        + "\n- 進階指標現況："
         + adv_tech_str
-        + "
-
-請輸出繁體中文詳細報告，格式如下：
-
-🤖 Gemini AI 全維度詳細分析報告 ("
+        + "\n\n請輸出繁體中文詳細報告，格式如下：\n\n🤖 Gemini AI 全維度詳細分析報告 ("
         + str(display_name)
-        + ")
-
-"
+        + ")\n\n"
         + mode_instruction
-        + "
-=== 第二部分：【全維度詳細分析報告內文】 ===
-1."
-        " 全球宏觀與美股大勢：條列解析美股四大指數(道瓊/標普500/那斯達克/羅素2000)、美聯儲利率趨勢、費半、VIX與資金流向。
-2. 基本面價值評估與前瞻估值：追蹤分析近 3~5 年成長軌跡、未來 2 年預估 EPS 與目標價。
-3."
-        " 重大新聞與獲利背離診斷：檢視 24 小時重大新聞，診斷市場輿論與法人獲利預估之背離狀況。
-4."
-        " 三大法人籌碼流向與月營收連動分析：分析三大法人/投信買賣超與月營收 MoM/YoY 之連動強度。
-5."
-        " 5MA/20MA月線格局與均線矩陣診斷：多頭或空頭/修正格局判斷。
-6. 各項進階技術性指標綜合圖表解說：布林通道、KD 指標 & RSI(14)、MACD 動能柱。
-"
+        + "\n=== 第二部分：【全維度詳細分析報告內文】 ===\n1."
+        " 全球宏觀與美股大勢：條列解析美股四大指數(道瓊/標普500/那斯達克/羅素2000)、美聯儲利率趨勢、費半、VIX與資金流向。\n2. 基本面價值評估與前瞻估值：追蹤分析近 3~5 年成長軌跡、未來 2 年預估 EPS 與目標價。\n3."
+        " 重大新聞與獲利背離診斷：檢視 24 小時重大新聞，診斷市場輿論與法人獲利預估之背離狀況。\n4."
+        " 三大法人籌碼流向與月營收連動分析：分析三大法人/投信買賣超與月營收 MoM/YoY 之連動強度。\n5."
+        " 5MA/20MA月線格局與均線矩陣診斷：多頭或空頭/修正格局判斷。\n6. 各項進階技術性指標綜合圖表解說：布林通道、KD 指標 & RSI(14)、MACD 動能柱。\n"
         + master_single_instruction
     )
     return call_gemini_with_retry(prompt)
@@ -2417,8 +2307,7 @@ if st.sidebar.button(
             st.sidebar.error(f"個股預測失敗: {e}")
 
 st.sidebar.info(
-    f"💡 **最新情報摘要**：
-{st.session_state.premarket_summary}"
+    f"💡 **最新情報摘要**：\n{st.session_state.premarket_summary}"
 )
 
 st.sidebar.dataframe(
@@ -2481,7 +2370,6 @@ st.caption(
     "限定資料來源: 台灣證券交易所 (TWSE) | 台灣期貨交易所 (TAIFEX) | 公開資訊觀測站 (MOPS) | Yahoo Finance"
 )
 
-# A. 上方 4 大指標 (標題與字型大小不變)
 st.markdown('<div class="top-macro-card">', unsafe_allow_html=True)
 card_cols = st.columns(4)
 
@@ -2490,7 +2378,7 @@ with card_cols[0]:
     st.metric(
         label="台股加權",
         value=item_taiex.get("val", "46,041.43"),
-        delta=item_taiex.get("change", "-846.34 點"),
+        delta=item_taiex.get("change", "-1.81%"),
         delta_color="inverse",
     )
 
@@ -2499,7 +2387,7 @@ with card_cols[1]:
     st.metric(
         label="費城半導體",
         value=item_sox.get("val", "N/A"),
-        delta=item_sox.get("change", "0.00 點"),
+        delta=item_sox.get("change", "0.00%"),
         delta_color="inverse",
     )
 
@@ -2508,7 +2396,7 @@ with card_cols[2]:
     st.metric(
         label="美債 10Y",
         value=item_10y.get("val", "N/A"),
-        delta=item_10y.get("change", "+0.0000 (+0.00%)"),
+        delta=item_10y.get("change", "0.00%"),
         delta_color="inverse",
     )
 
@@ -2517,12 +2405,11 @@ with card_cols[3]:
     st.metric(
         label="恐慌 VIX",
         value=item_vix.get("val", "N/A"),
-        delta=item_vix.get("change", "+0.00 (+0.00%)"),
+        delta=item_vix.get("change", "0.00%"),
         delta_color="inverse",
     )
 st.markdown("</div>", unsafe_allow_html=True)
 
-# B. 下方 4 個抽屜型類別 (內部數值調小至與標題同大小 0.85rem)
 expander_cols = st.columns(4)
 
 with expander_cols[0]:
@@ -2540,27 +2427,27 @@ with expander_cols[0]:
             item_nikkei = macro_data.get("日經 225 N225", {})
             st.metric(
                 label="日經 225",
-                value=item_nikkei.get("val", "62,693.15"),
-                delta=item_nikkei.get("change", "-214.30 點"),
+                value=item_nikkei.get("val", "62,907.84"),
+                delta=item_nikkei.get("change", "-2.65%"),
                 delta_color="inverse",
             )
 
 with expander_cols[1]:
-    with st.expander("🇺🇸 美股四大指數", expanded=True):
+    with st.expander("🇺🇸 美股四大指數"):
         col_u1, col_u2 = st.columns(2)
         with col_u1:
             item_dji = macro_data.get("道瓊工業 DJI", {})
             st.metric(
                 label="道瓊 DJI",
                 value=item_dji.get("val", "N/A"),
-                delta=item_dji.get("change", "0.00 點"),
+                delta=item_dji.get("change", "0.00%"),
                 delta_color="inverse",
             )
             item_sp = macro_data.get("標普 500 S&P500", {})
             st.metric(
                 label="標普 500",
                 value=item_sp.get("val", "N/A"),
-                delta=item_sp.get("change", "0.00 點"),
+                delta=item_sp.get("change", "0.00%"),
                 delta_color="inverse",
             )
         with col_u2:
@@ -2568,26 +2455,26 @@ with expander_cols[1]:
             st.metric(
                 label="那斯達克",
                 value=item_nas.get("val", "N/A"),
-                delta=item_nas.get("change", "0.00 點"),
+                delta=item_nas.get("change", "0.00%"),
                 delta_color="inverse",
             )
             item_rut = macro_data.get("羅素 2000 RUT", {})
             st.metric(
                 label="羅素 2000",
                 value=item_rut.get("val", "N/A"),
-                delta=item_rut.get("change", "0.00 點"),
+                delta=item_rut.get("change", "0.00%"),
                 delta_color="inverse",
             )
 
 with expander_cols[2]:
-    with st.expander("🏦 國際美元利率", expanded=True):
+    with st.expander("🏦 國際美元利率"):
         col_r1, col_r2 = st.columns(2)
         with col_r1:
             item_irx = macro_data.get("美聯儲 13W 短貼率", {})
             st.metric(
                 label="美聯儲 13W",
                 value=item_irx.get("val", "N/A"),
-                delta=item_irx.get("change", "+0.0000 (+0.00%)"),
+                delta=item_irx.get("change", "0.00%"),
                 delta_color="inverse",
             )
         with col_r2:
@@ -2595,19 +2482,19 @@ with expander_cols[2]:
             st.metric(
                 label="美元 DXY",
                 value=item_dxy.get("val", "N/A"),
-                delta=item_dxy.get("change", "-0.00 (-0.00%)"),
+                delta=item_dxy.get("change", "0.00%"),
                 delta_color="inverse",
             )
 
 with expander_cols[3]:
-    with st.expander("🛡️ 避險商品指標", expanded=True):
+    with st.expander("🛡️ 避險商品指標"):
         col_h1, col_h2 = st.columns(2)
         with col_h1:
             item_wti = macro_data.get("WTI 原油", {})
             st.metric(
                 label="WTI 原油",
                 value=item_wti.get("val", "N/A"),
-                delta=item_wti.get("change", "+0.00 (+0.00%)"),
+                delta=item_wti.get("change", "0.00%"),
                 delta_color="inverse",
             )
         with col_h2:
@@ -2615,7 +2502,7 @@ with expander_cols[3]:
             st.metric(
                 label="黃金 Gold",
                 value=item_gold.get("val", "N/A"),
-                delta=item_gold.get("change", "-0.00 (-0.00%)"),
+                delta=item_gold.get("change", "0.00%"),
                 delta_color="inverse",
             )
 
@@ -2808,12 +2695,8 @@ is_danger, danger_reasons = check_market_risk_regime(
 if is_danger:
     st.error(
         "🚨 **【AI 市場風控熔斷機制啟動】全球市場與台股 Risk-Off"
-        " 避險情緒高漲，今日不宜進行任何多頭買進操作！**
-
-"
-        f"**觸發原因**：{' | '.join(danger_reasons)}
-
-"
+        " 避險情緒高漲，今日不宜進行任何多頭買進操作！**\n\n"
+        f"**觸發原因**：{' | '.join(danger_reasons)}\n\n"
         "**操盤紀律建議**：大盤系統性風險偏高，強行選股勝率極低！建議保持 100%"
         " 現金，或對既有持股執行反彈減碼保護。"
     )
@@ -2822,47 +2705,37 @@ if stock_id and str(stock_id).strip() != "":
     warn_check = check_stock_warning_status(stock_id)
     if warn_check["status"] == "DISPOSITION":
         st.error(
-            f"{warn_check['msg']}
-
-🚨 **【13:00"
+            f"{warn_check['msg']}\n\n🚨 **【13:00"
             " 尾盤定型操盤紀律】**：處置股流動性嚴重受阻，請務必等到下午 1:00"
             " 尾盤確認未出現無量下殺且未破防守位再考慮分批買進，切勿在早盤開高時盲目追高掛單！"
         )
     elif warn_check["status"] == "ATTENTION":
         st.warning(
-            f"{warn_check['msg']}
-
-⚠️ **【13:00"
+            f"{warn_check['msg']}\n\n⚠️ **【13:00"
             " 尾盤定型操盤紀律】**：注意股短線波動極劇烈，早盤極易出現當沖洗盤與開高走低陷阱，請務必於下午"
             " 1:00 尾盤定型時，確認股價穩在建議進場區間且並未爆量跳水方可掛單！"
         )
 
-# 右側下方個股看板標題
 st.subheader(
     f"🔍 個股 ({display_title}) 三大法人籌碼與進階技術指標綜合分析看板"
 )
 
-# 獨立 CSS 區塊控制：數值與狀態敘述（如：中性觀望）調小至與標題相同大小 (0.95rem)，且更正標題名稱為「KD值&RSI(14日)」
-st.markdown('<div class="stock-dashboard-card">', unsafe_allow_html=True)
 if stock_id and str(stock_id).strip() != "":
     chip_df = get_stock_chip(stock_id, target_date_str)
     kd_df, kd_info = calculate_kd(stock_id, period_type=period_type)
 
     if isinstance(kd_info, dict):
-        c1, c2, c3, c4, c5 = st.columns([1, 1.2, 1.2, 1.2, 1.8])
+        c1, c2, c3, c4, c5 = st.columns([1, 1, 1.2, 1.2, 2.0])
         c1.metric(f"{period_type} K / D 值", f"{kd_info['K']} / {kd_info['D']}")
-        c2.metric("KD值&RSI(14日)", str(kd_info.get("RSI", "N/A"))) # 更正為 KD值&RSI(14日)
+        c2.metric("RSI (14日)", kd_info.get("RSI", "N/A"))
         c3.metric("5日均線 (5MA)", f"{kd_info['5MA']:.2f}")
         c4.metric(
             "20日線 (月線)",
             f"{kd_info['20MA']:.2f}",
-            delta=f"{kd_info['bias_20ma']:+}
-(乖離)",
+            delta=f"{kd_info['bias_20ma']:+}\n(乖離)",
         )
         c5.metric("KD & 均線型態", kd_info["signal"])
-st.markdown('</div>', unsafe_allow_html=True)
 
-if stock_id and str(stock_id).strip() != "":
     tab_chip, tab_kd = st.tabs(["📊 三大法人籌碼 (張)", "📈 進階技術指標"])
 
     with tab_chip:
