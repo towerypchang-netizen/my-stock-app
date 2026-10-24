@@ -110,7 +110,7 @@ st.markdown(
 
     [data-testid="stExpander"] [data-testid="stMetricValue"] > div,
     [data-testid="stExpander"] [data-testid="stMetricValue"] {
-        font-size: 0.85m !important;
+        font-size: 0.85rem !important;
         font-weight: 600 !important;
     }
 
