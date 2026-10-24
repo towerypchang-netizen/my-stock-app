@@ -638,16 +638,19 @@ def fetch_yahoo_api_quote(symbol_encoded, is_yield=False, is_points=False, is_dx
 
                 if is_yield:
                     fmt_val = f"{p_val:.4f}%"
-                    chg_str = f"{chg_val:+.4f} ({pct_val:+.2f}%)"
+                    chg_str = f"{pct_val:+.2f}%"
                 elif is_points:
                     fmt_val = f"{p_val:,.2f}"
                     chg_str = f"{chg_val:+.2f} 點"
+                elif is_dxy:
+                    fmt_val = f"{p_val:.2f}"
+                    chg_str = f"{pct_val:+.2f}%"
                 elif symbol_encoded in ["%5EVIX"]:
                     fmt_val = f"{p_val:.4f}"
-                    chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
+                    chg_str = f"{pct_val:+.2f}%"
                 else:
                     fmt_val = f"{p_val:,.2f}"
-                    chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
+                    chg_str = f"{pct_val:+.2f}%"
 
                 return {
                     "val": fmt_val,
@@ -673,16 +676,16 @@ def fetch_yfinance_fallback(symbol, is_yield=False, is_points=False):
 
             if is_yield:
                 fmt_val = f"{p_val:.4f}%"
-                chg_str = f"{chg_val:+.4f} ({pct_val:+.2f}%)"
+                chg_str = f"{pct_val:+.2f}%"
             elif is_points:
                 fmt_val = f"{p_val:,.2f}"
                 chg_str = f"{chg_val:+.2f} 點"
             elif symbol in ["^VIX"]:
                 fmt_val = f"{p_val:.4f}"
-                chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
+                chg_str = f"{pct_val:+.2f}%"
             else:
                 fmt_val = f"{p_val:,.2f}"
-                chg_str = f"{chg_val:+.2f} ({pct_val:+.2f}%)"
+                chg_str = f"{pct_val:+.2f}%"
 
             return {
                 "val": fmt_val,
