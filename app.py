@@ -1360,6 +1360,7 @@ def get_macro_history_trends_normalized(days=30):
 
     ticker_history_map = {
         "台股加權": "^TWII",
+        "台指期夜盤": "WTX=F",
         "費城半導體 SOX": "^SOX",
         "道瓊工業 DJI": "^DJI",
         "標普 500 S&P500": "^GSPC",
